@@ -245,101 +245,43 @@ export async function getWalletSageFeesDetailed(
   let sageFees24h = 0;
   let unknownOperations = 0;
 
-  // Enhanced Operation pattern mapping with SAGE-specific instruction names
+  // Enhanced Operation pattern mapping with official SAGE IDL instruction names
   const OP_MAP: { [key: string]: string } = {
-    // SAGE-specific instruction patterns from program analysis
-    'initializeFleet': 'CreateFleet',
-    'ixFleetStateHandler': 'FleetStateChange', 
-    'FleetStateHandler': 'FleetStateChange',
-    'ixDockedToLoadingBay': 'Dock',
+    // Official SAGE instruction names from IDL
+    'createFleet': 'CreateFleet',
+    'fleetStateHandler': 'FleetState',
+    'idleToLoadingBay': 'Dock',
+    'loadingBayToIdle': 'Undock',
+    'startMiningAsteroid': 'StartMining',
+    'stopMiningAsteroid': 'StopMining',
+    'startSubwarp': 'StartSubwarp',
+    'stopSubwarp': 'StopSubwarp',
+    'scanForSurveyDataUnits': 'ScanSDU',
+    'depositCargoToFleet': 'LoadCargo',
+    'withdrawCargoFromFleet': 'UnloadCargo',
+    'warpToCoordinate': 'Warp',
+    'warpLane': 'WarpLane',
+    'respawnToLoadingBay': 'Respawn',
+    'idleToRespawn': 'ToRespawn',
+    'mineAsteroidToRespawn': 'Mining->Respawn',
+    'subwarpToRespawn': 'Subwarp->Respawn',
+    
+    // Cargo and trading operations
+    'transferCargoWithinFleet': 'TransferCargo',
+    'depositCargoToGame': 'DepositCargo',
+    'withdrawCargoFromGame': 'WithdrawCargo',
+    
+    // Legacy/alternative patterns for backwards compatibility
+    'ixFleetStateHandler': 'FleetState',
+    'FleetStateHandler': 'FleetState',
     'IdleToLoadingBay': 'Dock',
-    'ixUndockFromLoadingBay': 'Undock',
     'LoadingBayToIdle': 'Undock',
-    'ixStartMining': 'StartMining',
     'StartMiningAsteroid': 'StartMining',
-    'ixStopMining': 'StopMining',
     'StopMiningAsteroid': 'StopMining',
-    'ixStartSubwarp': 'StartSubwarp',
     'StartSubwarp': 'StartSubwarp',
-    'ixStopSubwarp': 'EndSubwarp',
-    'ixScanForSurveyDataUnits': 'StartScan',
-    'ixStopScanForSurveyDataUnits': 'StopScan',
-    'ixDepositCargoToFleet': 'LoadCargo',
     'DepositCargoToFleet': 'LoadCargo',
-    'ixWithdrawCargoFromFleet': 'UnloadCargo',
     'WithdrawCargoFromFleet': 'UnloadCargo',
-    'ixRefuelShip': 'Refuel',
-    'ixRearmShip': 'Rearm',
-    'ixTransfer': 'Transfer',
-    'ixMovement': 'Move',
-    'ixWarpToCoordinate': 'Warp',
-    'WarpToCoordinate': 'Warp',
-    'IncrementPoints': 'Points',
-    'ConsumeCargo': 'ConsumeFuel',
-    
-    // Alternative naming patterns
-    'StartSubwarpMovement': 'StartSubwarp',
-    'BeginSubwarp': 'StartSubwarp',
-    'CompleteSubwarp': 'EndSubwarp',
-    'ExitSubwarp': 'EndSubwarp',
-    'EndSubwarp': 'EndSubwarp',
-    
-    // Movement and warp
-    'Warp': 'Warp',
-    'StartWarp': 'Warp',
-    'MoveShip': 'Move',
-    'Movement': 'Move',
-    
-    // Docking operations
-    'Dock': 'Dock',
-    'DockToStarbase': 'Dock',
-    'Undock': 'Undock',
-    'UndockFromStarbase': 'Undock',
-    
-    // Scanning operations
-    'StartScan': 'StartScan',
-    'Scan': 'StartScan',
-    'BeginScan': 'StartScan',
-    'ScanForSurveyDataUnits': 'StartScan',
-    'StopScan': 'StopScan',
-    'EndScan': 'StopScan',
-    
-    // Mining operations  
-    'StartMining': 'StartMining',
-    'BeginMining': 'StartMining',
-    'MineAsteroid': 'StartMining',
-    'StopMining': 'StopMining',
-    'EndMining': 'StopMining',
-    'MiningStart': 'StartMining',
-    'MiningStop': 'StopMining',
-    'StopMineAsteroid': 'StopMining',
-    
-    // Resource operations
-    'Refuel': 'Refuel',
-    'LoadFuel': 'Refuel',
-    'Rearm': 'Rearm',
-    'LoadAmmo': 'Rearm',
-    'LoadCargo': 'LoadCargo',
-    'UnloadCargo': 'UnloadCargo',
-    'DepositCargo': 'LoadCargo',
-    'WithdrawCargo': 'UnloadCargo',
-    
-    // Fleet operations
-    'CreateFleet': 'CreateFleet',
-    'DisbandFleet': 'DisbandFleet',
-    'AddShipToFleet': 'AddShip',
-    'RemoveShipFromFleet': 'RemoveShip',
-    
-    // Combat operations
-    'AttackPlayer': 'Attack',
-    'Attack': 'Attack',
-    'Escape': 'Escape',
-    
-    // Economic operations
-    'Trade': 'Trade',
-    'Market': 'Market',
-    'Craft': 'Craft',
-    'Build': 'Build'
+    'WarpToCoordinate': 'Warp'
   };
 
   for (const tx of recent24h) {
@@ -527,11 +469,29 @@ export async function getWalletSageFeesDetailed(
       }
     }
     
+    // Group related operations (start/stop pairs and logistics)
+    let groupedOperation = operation;
+    
+    // Debug: show original operation for first few transactions
+    if (recent24h.indexOf(tx) < 5) {
+      console.log(`  DEBUG: Original operation='${operation}', will group to='${groupedOperation}'`);
+    }
+    
+    if (operation === 'StartSubwarp' || operation === 'StopSubwarp' || operation === 'EndSubwarp') {
+      groupedOperation = 'Subwarp';
+    } else if (operation === 'StartMining' || operation === 'StopMining') {
+      groupedOperation = 'Mining';
+    } else if (operation === 'StartScan' || operation === 'StopScan') {
+      groupedOperation = 'Scan';
+    } else if (operation === 'Dock' || operation === 'Undock' || operation === 'LoadCargo' || operation === 'UnloadCargo') {
+      groupedOperation = 'Cargo/Dock';
+    }
+    
     // Enhanced debug logging to understand account patterns
     const isFirstFewTx = recent24h.indexOf(tx) < 10;
     
     if (isFirstFewTx || involvedFleet) {
-      console.log(`TX ${tx.signature.substring(0, 8)}: operation=${operation} (${foundMethod}), accounts=${tx.accountKeys?.length || 0}, fleet=${involvedFleetName || 'NONE'}, strategy=${matchStrategy}`);
+      console.log(`TX ${tx.signature.substring(0, 8)}: operation=${groupedOperation} (${foundMethod}), accounts=${tx.accountKeys?.length || 0}, fleet=${involvedFleetName || 'NONE'}, strategy=${matchStrategy}`);
       
       if (isFirstFewTx && tx.accountKeys) {
         console.log('  Full account list:', tx.accountKeys.map(a => a.substring(0, 8) + '...'));
@@ -550,12 +510,12 @@ export async function getWalletSageFeesDetailed(
         console.log('    Instructions:', tx.instructions?.slice(0, 3));
       }
     }
-
-    // Update global operation stats
-    if (!feesByOperation[operation]) {
-      feesByOperation[operation] = { count: 0, totalFee: 0, avgFee: 0 };
+    
+    // Update global operation stats with grouped operations
+    if (!feesByOperation[groupedOperation]) {
+      feesByOperation[groupedOperation] = { count: 0, totalFee: 0, avgFee: 0 };
     }
-    const opEntry = feesByOperation[operation];
+    const opEntry = feesByOperation[groupedOperation];
     opEntry.count++;
     opEntry.totalFee += tx.fee;
     opEntry.avgFee = opEntry.totalFee / opEntry.count;
@@ -568,10 +528,10 @@ export async function getWalletSageFeesDetailed(
     }
     const fleetEntry = feesByFleet[fleetKey];
     fleetEntry.totalFee += tx.fee;
-    if (!fleetEntry.operations[operation]) {
-      fleetEntry.operations[operation] = { count: 0, totalFee: 0, avgFee: 0, percentageOfFleet: 0 };
+    if (!fleetEntry.operations[groupedOperation]) {
+      fleetEntry.operations[groupedOperation] = { count: 0, totalFee: 0, avgFee: 0, percentageOfFleet: 0 };
     }
-    const fleetOp = fleetEntry.operations[operation];
+    const fleetOp = fleetEntry.operations[groupedOperation];
     fleetOp.count++;
     fleetOp.totalFee += tx.fee;
     fleetOp.avgFee = fleetOp.totalFee / fleetOp.count;
