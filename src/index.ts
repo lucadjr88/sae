@@ -125,7 +125,7 @@ app.post('/api/wallet-sage-fees', async (req, res) => {
 
 // Detailed 24h SAGE fees with fleet breakdown
 app.post('/api/wallet-sage-fees-detailed', async (req, res) => {
-  const { walletPubkey, fleetAccounts, fleetNames, hours } = req.body;
+  const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, hours } = req.body;
   if (!walletPubkey) {
     return res.status(400).json({ error: 'walletPubkey required' });
   }
@@ -136,6 +136,7 @@ app.post('/api/wallet-sage-fees-detailed', async (req, res) => {
       walletPubkey,
       fleetAccounts || [],
       fleetNames || {},  // This maps to fleetAccountNames parameter
+      fleetRentalStatus || {},  // Pass rental status
       hours || 24
     );
     res.json(result);

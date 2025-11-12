@@ -42,6 +42,7 @@ async function analyzeFees() {
     // Collect all fleet-related accounts
     const allFleetAccounts = [];
     const fleetNames = {};
+    const fleetRentalStatus = {}; // Track which fleets are rented
     
     fleets.forEach(f => {
       // Main accounts
@@ -59,6 +60,13 @@ async function analyzeFees() {
       if (f.data.fuelTank) fleetNames[f.data.fuelTank] = f.callsign;
       if (f.data.ammoBank) fleetNames[f.data.ammoBank] = f.callsign;
       if (f.data.cargoHold) fleetNames[f.data.cargoHold] = f.callsign;
+      
+      // Map rental status
+      fleetRentalStatus[f.data.fleetShips] = f.isRented || false;
+      fleetRentalStatus[f.key] = f.isRented || false;
+      if (f.data.fuelTank) fleetRentalStatus[f.data.fuelTank] = f.isRented || false;
+      if (f.data.ammoBank) fleetRentalStatus[f.data.ammoBank] = f.isRented || false;
+      if (f.data.cargoHold) fleetRentalStatus[f.data.cargoHold] = f.isRented || false;
     });
     
     const uniqueFleetAccounts = [...new Set(allFleetAccounts)];
@@ -73,6 +81,7 @@ async function analyzeFees() {
         walletPubkey, 
         fleetAccounts: uniqueFleetAccounts,
         fleetNames: fleetNames,
+        fleetRentalStatus: fleetRentalStatus, // Send rental status
         hours: 24 
       })
     });
@@ -208,7 +217,25 @@ function displayResults(data, fleetNames) {
 
 function createFleetList(data, fleetNames) {
   const fleetListDiv = document.getElementById('fleetList');
+  
+  // List of category names to exclude from Fleet Breakdown
+  const categories = [
+    'Crafting Operations',
+    'Starbase Operations',
+    'Configuration',
+    'Cargo Management',
+    'Crew Management',
+    'Survey & Discovery',
+    'Player Profile',
+    'Fleet Rentals',
+    'Universe Management',
+    'Game Management',
+    'Other Operations'
+  ];
+  
+  // Filter out categories, keep only actual fleets
   const sortedFleets = Object.entries(data.feesByFleet)
+    .filter(([fleetAccount, fleetData]) => !categories.includes(fleetAccount))
     .sort((a, b) => b[1].totalFee - a[1].totalFee);
   
   let html = '';
@@ -219,14 +246,10 @@ function createFleetList(data, fleetNames) {
     html += `
       <div class="fleet-item" onclick="toggleFleet('${fleetId}')">
         <div class="fleet-header">
-          <table>
-            <tr>
-              <td>${fleetName}</td>
-              <td>${fleetData.totalOperations} ops</td>
-              <td>${(fleetData.feePercentage * 100).toFixed(1)}%</td>
-              <td>${(fleetData.totalFee / 1e9).toFixed(6)} SOL</td>
-            </tr>
-          </table>
+          <div class="fleet-name">${fleetName}</div>
+          <div class="fleet-ops">${fleetData.totalOperations} ops</div>
+          <div class="fleet-pct">${(fleetData.feePercentage * 100).toFixed(1)}%</div>
+          <div class="fleet-sol">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</div>
         </div>
         <div class="fleet-details" id="${fleetId}">
           <table class="fleet-ops-table">

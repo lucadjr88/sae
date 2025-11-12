@@ -120,52 +120,43 @@ h1 {
 }
 
 .fleet-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 12px;
   padding: 8px 12px;
   align-items: center;
   border-bottom: 1px solid transparent;
-}
-
-.fleet-header table {
-  width: 100%;
-  border-collapse: collapse;
-  background: transparent;
-  border: none;
-  margin: 0;
   font-size: 11px;
 }
 
-.fleet-header td {
-  padding: 0 4px;
-  border: none;
-}
-
-.fleet-header td:nth-child(1) {
+.fleet-header .fleet-name {
   font-weight: 500;
   color: #e0e6ed;
   font-family: 'Roboto Mono', monospace;
 }
 
-.fleet-header td:nth-child(2) {
+.fleet-header .fleet-ops {
   text-align: right;
   color: #7a8ba0;
   white-space: nowrap;
   font-size: 10px;
+  min-width: 60px;
 }
 
-.fleet-header td:nth-child(3) {
+.fleet-header .fleet-pct {
   text-align: right;
   color: #7a8ba0;
   white-space: nowrap;
-  min-width: 40px;
+  min-width: 50px;
 }
 
-.fleet-header td:nth-child(4) {
+.fleet-header .fleet-sol {
   text-align: right;
   color: #34d399;
   font-weight: 500;
   font-family: 'Roboto Mono', monospace;
   white-space: nowrap;
+  min-width: 100px;
 }
 
 .fleet-details {

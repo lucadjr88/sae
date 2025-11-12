@@ -184,6 +184,7 @@ export async function getWalletSageFeesDetailed(
   walletPubkey: string,
   fleetAccounts: string[],
   fleetAccountNames: { [account: string]: string } = {},
+  fleetRentalStatus: { [account: string]: boolean } = {},
   hours: number = 24
 ): Promise<{
   walletAddress: string;
@@ -191,7 +192,7 @@ export async function getWalletSageFeesDetailed(
   totalFees24h: number;
   sageFees24h: number;
   transactionCount24h: number;
-  feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; totalOperations: number; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number } } } };
+  feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; totalOperations: number; isRented?: boolean; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number } } } };
   feesByOperation: { [operation: string]: { count: number; totalFee: number; avgFee: number } };
   transactions: TransactionInfo[];
   unknownOperations: number;
@@ -239,11 +240,14 @@ export async function getWalletSageFeesDetailed(
   });
 
   // Analyze by fleet and operation
-  const feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; totalOperations: number; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number } } } } = {};
+  const feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; totalOperations: number; isRented?: boolean; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number } } } } = {};
   const feesByOperation: { [operation: string]: { count: number; totalFee: number; avgFee: number } } = {};
   let totalFees24h = 0;
   let sageFees24h = 0;
   let unknownOperations = 0;
+  
+  // Track which fleets have rental operations
+  const rentedFleets = new Set<string>();
 
   // Complete SAGE instruction mapping from official IDL (SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE)
   // Source: https://github.com/staratlasmeta/star-atlas-decoders
@@ -537,37 +541,37 @@ export async function getWalletSageFeesDetailed(
     if (!involvedFleet) {
       // Categorize by operation type instead of using "General"
       if (operation.includes('Craft') || operation.includes('craft')) {
-        involvedFleetName = '🏭 Crafting Operations';
+        involvedFleetName = 'Crafting Operations';
         matchStrategy = 'category_craft';
       } else if (operation.includes('Starbase') || operation.includes('starbase')) {
-        involvedFleetName = '🏛️ Starbase Operations';
+        involvedFleetName = 'Starbase Operations';
         matchStrategy = 'category_starbase';
       } else if (operation.includes('Register') || operation.includes('Deregister') || operation.includes('Update')) {
-        involvedFleetName = '⚙️ Configuration';
+        involvedFleetName = 'Configuration';
         matchStrategy = 'category_config';
       } else if (operation.includes('Cargo') || operation.includes('cargo')) {
-        involvedFleetName = '📦 Cargo Management';
+        involvedFleetName = 'Cargo Management';
         matchStrategy = 'category_cargo';
       } else if (operation.includes('Crew') || operation.includes('crew')) {
-        involvedFleetName = '👥 Crew Management';
+        involvedFleetName = 'Crew Management';
         matchStrategy = 'category_crew';
       } else if (operation.includes('SDU') || operation.includes('Survey')) {
-        involvedFleetName = '🔍 Survey & Discovery';
+        involvedFleetName = 'Survey & Discovery';
         matchStrategy = 'category_survey';
       } else if (operation.includes('Profile') || operation.includes('Progression') || operation.includes('Points')) {
-        involvedFleetName = '👤 Player Profile';
+        involvedFleetName = 'Player Profile';
         matchStrategy = 'category_profile';
       } else if (operation.includes('Rental') || operation.includes('rental')) {
-        involvedFleetName = '🔑 Fleet Rentals';
+        involvedFleetName = 'Fleet Rentals';
         matchStrategy = 'category_rental';
       } else if (operation.includes('Sector') || operation.includes('Planet') || operation.includes('Star')) {
-        involvedFleetName = '🌌 Universe Management';
+        involvedFleetName = 'Universe Management';
         matchStrategy = 'category_universe';
       } else if (operation.includes('Game') || operation.includes('game')) {
-        involvedFleetName = '🎮 Game Management';
+        involvedFleetName = 'Game Management';
         matchStrategy = 'category_game';
       } else {
-        involvedFleetName = '🔧 Other Operations';
+        involvedFleetName = 'Other Operations';
         matchStrategy = 'category_other';
       }
     }
@@ -623,12 +627,41 @@ export async function getWalletSageFeesDetailed(
     opEntry.count++;
     opEntry.totalFee += tx.fee;
     opEntry.avgFee = opEntry.totalFee / opEntry.count;
+    
+    // Track rental operations - mark fleets with rental ops as rented
+    if (operation.includes('Rental') || operation.toLowerCase().includes('rental') || 
+        operation === 'AddRental' || operation === 'ChangeRental') {
+      if (involvedFleet) {
+        rentedFleets.add(involvedFleet);
+      }
+      // Also check all accounts in the transaction for fleet matches
+      if (tx.accountKeys) {
+        for (const fleet of specificFleetAccounts) {
+          if (tx.accountKeys.includes(fleet)) {
+            rentedFleets.add(fleet);
+            console.log(`[RENTAL] Marked fleet as rented: ${fleet.substring(0, 8)}... (operation: ${operation})`);
+          }
+        }
+      }
+    }
 
     // Update fleet stats using fleet NAME to avoid duplicates
     const fleetKey = involvedFleetName || 'NONE';
     
     if (!feesByFleet[fleetKey]) {
-      feesByFleet[fleetKey] = { totalFee: 0, feePercentage: 0, totalOperations: 0, operations: {} };
+      // Initialize fleet entry with rental status if available
+      let isRented = involvedFleet && fleetRentalStatus[involvedFleet] ? fleetRentalStatus[involvedFleet] : false;
+      // Override with rental operation detection
+      if (involvedFleet && rentedFleets.has(involvedFleet)) {
+        isRented = true;
+      }
+      feesByFleet[fleetKey] = { 
+        totalFee: 0, 
+        feePercentage: 0, 
+        totalOperations: 0, 
+        isRented: isRented,
+        operations: {} 
+      };
     }
     const fleetEntry = feesByFleet[fleetKey];
     fleetEntry.totalFee += tx.fee;
