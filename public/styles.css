@@ -175,6 +175,12 @@ h1 {
 }
 
 .fleet-header .rented-name {
+  color: #fbbf24 !important;
+  font-weight: 800;
+}
+
+/* Fallback: if container is marked rented but name span wasn't, tint the name */
+.fleet-item.rented-fleet .fleet-header .fleet-name {
   color: #fbbf24;
   font-weight: 700;
 }

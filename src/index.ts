@@ -22,7 +22,12 @@ app.use(express.urlencoded({ extended: true }));
 // Config
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'https://mainnet.helius-rpc.com/?api-key=746b2d69-ddf7-4f2a-8a81-ff88b195679a';
 const RPC_WEBSOCKET = process.env.RPC_WEBSOCKET || 'wss://rpc.helius.xyz/?api-key=746b2d69-ddf7-4f2a-8a81-ff88b195679a';
-const WALLET_PATH = process.env.WALLET_PATH || 'D:\\sa\\star-atlas-cookbook\\id.json';
+const WALLET_PATH = process.env.WALLET_PATH || path.join(__dirname, '../id.json');
+
+console.log('🚀 SA Explorer Server Configuration:');
+console.log('   RPC Endpoint:', RPC_ENDPOINT.replace(/api-key=[^&]+/, 'api-key=***'));
+console.log('   Wallet Path:', WALLET_PATH);
+console.log('   Port:', PORT);
 
 // Homepage
 app.get('/', (req, res) => {
@@ -63,7 +68,9 @@ app.post('/api/fleets', async (req, res) => {
     const result = await getFleets(RPC_ENDPOINT, RPC_WEBSOCKET, WALLET_PATH, profileId);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ /api/fleets error:', err.message);
+    console.error('Stack:', err.stack);
+    res.status(500).json({ error: err.message, details: err.stack });
   }
 });
 
@@ -141,10 +148,13 @@ app.post('/api/wallet-sage-fees-detailed', async (req, res) => {
     );
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ /api/wallet-sage-fees-detailed error:', err.message);
+    console.error('Stack:', err.stack);
+    res.status(500).json({ error: err.message, details: err.stack });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Star Atlas Server running on http://localhost:${PORT}`);
+  console.log(`\n✅ SA Explorer running on http://localhost:${PORT}`);
+  console.log(`   Access from network: http://staratlasexplorer.duckdns.org:${PORT}\n`);
 });

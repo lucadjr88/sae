@@ -1,12 +1,29 @@
 import { Keypair } from "@solana/web3.js";
 import fs from 'fs';
+import path from 'path';
 
 /**
- * Loads a Keypair from a file
+ * Loads a Keypair from a file, or generates a temporary one if the file doesn't exist
  * @param walletPath - the path to the wallet file
  * @returns the Keypair
  */
 export function loadKeypair(walletPath: string): Keypair {
-    const secretKey = JSON.parse(fs.readFileSync(walletPath, 'utf8'));
-    return Keypair.fromSecretKey(Uint8Array.from(secretKey));
+    // If wallet path doesn't exist, generate a temporary keypair
+    // This allows the server to run in read-only mode without requiring a wallet file
+    if (!fs.existsSync(walletPath)) {
+        console.warn(`⚠️  Wallet file not found: ${walletPath}`);
+        console.warn('⚠️  Generating temporary keypair (read-only mode)');
+        return Keypair.generate();
+    }
+    
+    try {
+        const secretKey = JSON.parse(fs.readFileSync(walletPath, 'utf8'));
+        const keypair = Keypair.fromSecretKey(Uint8Array.from(secretKey));
+        console.log(`✅ Loaded wallet: ${keypair.publicKey.toBase58()}`);
+        return keypair;
+    } catch (error: any) {
+        console.error(`❌ Error loading wallet from ${walletPath}:`, error.message);
+        console.warn('⚠️  Generating temporary keypair (read-only mode)');
+        return Keypair.generate();
+    }
 }

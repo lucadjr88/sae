@@ -34,7 +34,7 @@ async function analyzeFees() {
     }
     
     const walletPubkey = fleetsData.walletAuthority;
-    const fleets = fleetsData.fleets;
+  const fleets = fleetsData.fleets;
     
     console.log('Derived wallet:', walletPubkey);
     console.log('Fleets found:', fleets.length);
@@ -42,7 +42,8 @@ async function analyzeFees() {
     // Collect all fleet-related accounts
     const allFleetAccounts = [];
     const fleetNames = {};
-    const fleetRentalStatus = {}; // Track which fleets are rented
+  const fleetRentalStatus = {}; // Track which fleets are rented
+  const rentedFleetAccounts = new Set(); // Track any account pubkey belonging to a rented fleet
     
     fleets.forEach(f => {
       // Main accounts
@@ -61,13 +62,32 @@ async function analyzeFees() {
       if (f.data.ammoBank) fleetNames[f.data.ammoBank] = f.callsign;
       if (f.data.cargoHold) fleetNames[f.data.cargoHold] = f.callsign;
       
-      // Map rental status
-      fleetRentalStatus[f.data.fleetShips] = f.isRented || false;
-      fleetRentalStatus[f.key] = f.isRented || false;
-      if (f.data.fuelTank) fleetRentalStatus[f.data.fuelTank] = f.isRented || false;
-      if (f.data.ammoBank) fleetRentalStatus[f.data.ammoBank] = f.isRented || false;
-      if (f.data.cargoHold) fleetRentalStatus[f.data.cargoHold] = f.isRented || false;
+      // Map rental status (initially from backend flag if present)
+      const initialRented = !!f.isRented;
+      fleetRentalStatus[f.data.fleetShips] = initialRented;
+      fleetRentalStatus[f.key] = initialRented;
+      if (f.data.fuelTank) fleetRentalStatus[f.data.fuelTank] = initialRented;
+      if (f.data.ammoBank) fleetRentalStatus[f.data.ammoBank] = initialRented;
+      if (f.data.cargoHold) fleetRentalStatus[f.data.cargoHold] = initialRented;
     });
+
+    // Robust client-side rental detection based on profiles (fallback if backend didn't tag)
+    const profileLc = profileId.toString();
+    fleets.forEach(f => {
+      const owning = (f.data.owningProfile || '').toString();
+      const sub = (f.data.subProfile || '').toString();
+      const isRentedHeuristic = (sub === profileLc) || (owning && owning !== profileLc);
+      if (isRentedHeuristic) {
+        fleetRentalStatus[f.data.fleetShips] = true;
+        fleetRentalStatus[f.key] = true;
+        if (f.data.fuelTank) fleetRentalStatus[f.data.fuelTank] = true;
+        if (f.data.ammoBank) fleetRentalStatus[f.data.ammoBank] = true;
+        if (f.data.cargoHold) fleetRentalStatus[f.data.cargoHold] = true;
+      }
+    });
+
+    // Build quick-lookup sets
+    Object.entries(fleetRentalStatus).forEach(([k, v]) => { if (v) rentedFleetAccounts.add(k); });
     
     const uniqueFleetAccounts = [...new Set(allFleetAccounts)];
     console.log('Fleet accounts collected:', uniqueFleetAccounts.length);
@@ -96,11 +116,13 @@ async function analyzeFees() {
     
     // Collect rented fleet names from fleet list (fallback if backend didn't tag)
     const rentedFleetNames = new Set(
-      fleets.filter(f => f.isRented).map(f => f.callsign)
+      fleets
+        .filter(f => fleetRentalStatus[f.key] || fleetRentalStatus[f.data.fleetShips])
+        .map(f => f.callsign)
     );
 
-  // Display results
-  displayResults(data, fleetNames, rentedFleetNames);
+    // Display results
+    displayResults(data, fleetNames, rentedFleetNames, rentedFleetAccounts);
     
   } catch (error) {
     console.error('Analysis error:', error);
@@ -111,7 +133,7 @@ async function analyzeFees() {
   }
 }
 
-function displayResults(data, fleetNames, rentedFleetNames = new Set()) {
+function displayResults(data, fleetNames, rentedFleetNames = new Set(), rentedFleetAccounts = new Set()) {
   console.log('Displaying results...');
   const resultsDiv = document.getElementById('results');
   
@@ -198,7 +220,7 @@ function displayResults(data, fleetNames, rentedFleetNames = new Set()) {
   resultsDiv.innerHTML = html;
   
   // Create fleet list with fold/unfold
-  createFleetList(data, fleetNames, rentedFleetNames);
+  createFleetList(data, fleetNames, rentedFleetNames, rentedFleetAccounts);
   
   // Draw pie charts
   drawPieChart('fleetChart', 'fleetLegend', sortedFleets.map(([name, data], index) => ({
@@ -220,7 +242,7 @@ function displayResults(data, fleetNames, rentedFleetNames = new Set()) {
   console.log('Results displayed successfully');
 }
 
-function createFleetList(data, fleetNames, rentedFleetNames = new Set()) {
+function createFleetList(data, fleetNames, rentedFleetNames = new Set(), rentedFleetAccounts = new Set()) {
   const fleetListDiv = document.getElementById('fleetList');
   // Normalize rented fleet names for case-insensitive matching
   const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
@@ -257,14 +279,21 @@ function createFleetList(data, fleetNames, rentedFleetNames = new Set()) {
   sortedFleets.forEach(([fleetAccount, fleetData]) => {
     const fleetName = fleetNames[fleetAccount] || fleetAccount;
     const fleetId = 'fleet-' + fleetAccount.substring(0, 8);
-    const isRented = !!(fleetData.isRented || rentedLc.has((fleetName || '').toString().toLowerCase()));
+    const isRented = !!(
+      fleetData.isRented ||
+      rentedLc.has((fleetName || '').toString().toLowerCase()) ||
+      rentedFleetAccounts.has(fleetAccount)
+    );
     const rentalBadge = isRented ? '<span class="rental-badge">RENTED</span>' : '';
     const nameClass = isRented ? 'fleet-name rented-name' : 'fleet-name';
+    const nameInner = isRented
+      ? `<span class="rented-name" style="color:#fbbf24;font-weight:800">${fleetName}</span>`
+      : `${fleetName}`;
     
     html += `
       <div class="fleet-item ${isRented ? 'rented-fleet' : ''}" onclick="toggleFleet('${fleetId}')">
         <div class="fleet-header">
-          <div class="${nameClass}">${fleetName} ${rentalBadge}</div>
+          <div class="${nameClass}">${nameInner} ${rentalBadge}</div>
           <div class="fleet-ops">${fleetData.totalOperations} ops</div>
           <div class="fleet-pct">${(fleetData.feePercentage * 100).toFixed(1)}%</div>
           <div class="fleet-sol">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</div>
