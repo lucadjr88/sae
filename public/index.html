@@ -204,8 +204,23 @@
       resultsDiv.innerHTML = '<div class="loading">Processing transaction data...</div>';
 
       try {
-        // Get wallet from config (hardcoded for now)
-        const walletPubkey = '7sZFMdaGCATXsJuWfj19ExnLt9P7RVm4Bykmvz2Jrh5x';
+        // Get profile to derive wallet
+        const profileResponse = await fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileId })
+        });
+        
+        if (!profileResponse.ok) {
+          throw new Error('Failed to fetch profile');
+        }
+        
+        const profileData = await profileResponse.json();
+        if (!profileData || !profileData.authority) {
+          throw new Error('Could not derive wallet from profile');
+        }
+        
+        const walletPubkey = profileData.authority;
         
         // Get fleets
         const fleetsResponse = await fetch('/api/fleets', {

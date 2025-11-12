@@ -12,20 +12,37 @@ export async function getPlayerProfile(rpcEndpoint: string, rpcWebsocket: string
   const wallet = loadKeypair(walletPath);
   const provider = newAnchorProvider(connection, wallet);
 
+  const program = new Program(PLAYER_PROFILE_IDL as any, PLAYER_PROFILE_PROGRAM_ID, provider);
+  const profilePubkey = new PublicKey(profileId);
+
   try {
-    console.log('Using profile ID directly:', profileId);
+    console.log('Fetching player profile:', profileId);
     
-    // Return mock profile with the correct structure for our use case
-    // We'll get the wallet authority from the fleets API instead
-    return [{
-      _key: profileId,
-      authority: null, // Will be populated by examining fleet ownership
-      // Add other required fields as needed
-    }];
+    // Read the player profile account data directly
+    const profileAccount = await program.account.playerProfile.fetch(profilePubkey);
+    
+    console.log('Profile data:', profileAccount);
+    
+    // Extract the authority (wallet) from the profile
+    const authority = (profileAccount as any).authKeyIndex?.key?.toString() || 
+                     (profileAccount as any).authKey?.toString() ||
+                     (profileAccount as any).authority?.toString();
+    
+    if (!authority) {
+      throw new Error('Could not find wallet authority in profile');
+    }
+    
+    console.log('Derived wallet authority:', authority);
+    
+    return {
+      profileId: profileId,
+      authority: authority,
+      profileData: profileAccount
+    };
     
   } catch (error) {
-    console.error('Error with profile:', error);
+    console.error('Error fetching profile:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`No player profile found: ${errorMessage}`);
+    throw new Error(`Failed to fetch player profile: ${errorMessage}`);
   }
 }
