@@ -3,9 +3,9 @@ const { Connection, PublicKey } = require('@solana/web3.js');
 const RPC_ENDPOINT = 'https://mainnet.helius-rpc.com/?api-key=746b2d69-ddf7-4f2a-8a81-ff88b195679a';
 const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
 
-async function checkSpecificFleet(fleetPubkey) {
+async function checkSpecificFleet(fleetPubkey, playerProfile) {
   const connection = new Connection(RPC_ENDPOINT, 'confirmed');
-  const profilePubkey = new PublicKey('AAozfxCznAp5WNMFYd5medXuTh3MKM3u3LXBufhc1nhi');
+  const profilePubkey = new PublicKey(playerProfile);
   
   console.log('Checking fleet:', fleetPubkey);
   console.log('Your profile:', profilePubkey.toString());
@@ -42,9 +42,9 @@ async function checkSpecificFleet(fleetPubkey) {
   }
 }
 
-async function findRentedFleets() {
+async function findRentedFleets(playerProfile) {
   const connection = new Connection(RPC_ENDPOINT, 'confirmed');
-  const profilePubkey = new PublicKey('AAozfxCznAp5WNMFYd5medXuTh3MKM3u3LXBufhc1nhi');
+  const profilePubkey = new PublicKey(playerProfile);
 
   console.log('='.repeat(80));
   console.log('CHECKING YOUR 3 BORROWED FLEETS');
@@ -52,13 +52,13 @@ async function findRentedFleets() {
   console.log('');
   
   // Check all 3 borrowed fleets
-  await checkSpecificFleet('GNofosk53LVzcAz51f7p1XWPkpBnv1bGybNJeUrciZfE'); // Atlantic Cod Fleet
+  await checkSpecificFleet('GNofosk53LVzcAz51f7p1XWPkpBnv1bGybNJeUrciZfE', playerProfile); // Atlantic Cod Fleet
   console.log('-'.repeat(80));
   console.log('');
-  await checkSpecificFleet('Bf4frq5oyagGBNH621SA6ShMoLeCnd3iEWXw7zTAwp2z'); // Donkey Fleet
+  await checkSpecificFleet('Bf4frq5oyagGBNH621SA6ShMoLeCnd3iEWXw7zTAwp2z', playerProfile); // Donkey Fleet
   console.log('-'.repeat(80));
   console.log('');
-  await checkSpecificFleet('Ex9BtiHnu2fjznTyDY5xwR11dW54Hy6j9NpGfU4AhREU'); // mining Fleet
+  await checkSpecificFleet('Ex9BtiHnu2fjznTyDY5xwR11dW54Hy6j9NpGfU4AhREU', playerProfile); // mining Fleet
   console.log('='.repeat(80));
   console.log('');
   
@@ -106,4 +106,12 @@ async function findRentedFleets() {
   }
 }
 
-findRentedFleets();
+// Usage: node test-rental-fleet.cjs <PROFILE_ID>
+const playerProfile = process.argv[2];
+if (!playerProfile) {
+  console.error('❌ Error: Please provide a Player Profile ID');
+  console.error('Usage: node test-rental-fleet.cjs <PROFILE_ID>');
+  process.exit(1);
+}
+
+findRentedFleets(playerProfile);

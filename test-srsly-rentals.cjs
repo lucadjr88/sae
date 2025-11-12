@@ -3,8 +3,8 @@ const { Connection, PublicKey } = require('@solana/web3.js');
 const RPC_ENDPOINT = 'https://mainnet.helius-rpc.com/?api-key=746b2d69-ddf7-4f2a-8a81-ff88b195679a';
 const SRSLY_PROGRAM_ID = 'SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT';
 
-// User context
-const PLAYER_PROFILE = 'AAozfxCznAp5WNMFYd5medXuTh3MKM3u3LXBufhc1nhi';
+// User context - pass as command line argument: node test-srsly-rentals.cjs <PROFILE_ID>
+const PLAYER_PROFILE = process.argv[2] || '';
 const BORROWED_FLEETS = [
   'GNofosk53LVzcAz51f7p1XWPkpBnv1bGybNJeUrciZfE', // Atlantic Cod Fleet
   'Bf4frq5oyagGBNH621SA6ShMoLeCnd3iEWXw7zTAwp2z', // Donkey Fleet

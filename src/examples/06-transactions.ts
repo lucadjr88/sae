@@ -209,7 +209,6 @@ export async function getWalletSageFeesDetailed(
   const excludeAccounts = [
     'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE', // SAGE Program
     'GAMEzqJehF8yAnKiTARUuhZMvLvkZVAsCVri5vSfemLr', // Game Program  
-    'AAozfxCznAp5WNMFYd5medXuTh3MKM3u3LXBufhc1nhi', // Player Profile
     '11111111111111111111111111111111', // System Program
     'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // Token Program
   ];
