@@ -1,18 +1,26 @@
 import { Router, Request, Response } from 'express';
+import { PublicKey } from '@solana/web3.js';
+import SageServices from '../utils/sageServices';
 
 const router = Router();
+const sageServices = SageServices.getInstance();
 
 // Get SAGE game information
 router.get('/game', async (req: Request, res: Response) => {
   try {
-    // Placeholder for SAGE game data
+    const gameData = await sageServices.getGameData();
+    
     res.json({
-      message: 'SAGE game data endpoint',
-      status: 'Coming soon - SAGE SDK integration'
+      gameData,
+      timestamp: new Date().toISOString(),
+      status: 'success'
     });
   } catch (error) {
     console.error('Error fetching SAGE game data:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Error fetching game data',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
@@ -20,16 +28,21 @@ router.get('/game', async (req: Request, res: Response) => {
 router.get('/profile/:address', async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
+    const playerPubKey = new PublicKey(address);
     
-    // Placeholder for SAGE player profile
+    const profile = await sageServices.getPlayerProfile(playerPubKey);
+    
     res.json({
-      address,
-      message: 'Player profile endpoint',
-      status: 'Coming soon - SAGE SDK integration'
+      profile,
+      timestamp: new Date().toISOString(),
+      status: 'success'
     });
   } catch (error) {
     console.error('Error fetching player profile:', error);
-    res.status(400).json({ error: 'Invalid address or network error' });
+    res.status(400).json({ 
+      error: 'Invalid address or network error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
@@ -37,16 +50,23 @@ router.get('/profile/:address', async (req: Request, res: Response) => {
 router.get('/fleets/:address', async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
+    const playerPubKey = new PublicKey(address);
     
-    // Placeholder for SAGE fleets data
+    const fleets = await sageServices.getPlayerFleets(playerPubKey);
+    
     res.json({
       address,
-      message: 'Fleets data endpoint',
-      status: 'Coming soon - SAGE SDK integration'
+      fleets,
+      count: fleets.length,
+      timestamp: new Date().toISOString(),
+      status: 'success'
     });
   } catch (error) {
     console.error('Error fetching fleets data:', error);
-    res.status(400).json({ error: 'Invalid address or network error' });
+    res.status(400).json({ 
+      error: 'Invalid address or network error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

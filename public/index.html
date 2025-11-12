@@ -204,12 +204,20 @@
                 <div style="margin-top: 10px; color: #ccc;">Get wallet token accounts</div>
             </div>
             <div class="api-endpoint">
-                <strong>GET /api/fees/wallet/:address</strong> <span class="status online">Coming Soon</span>
-                <div style="margin-top: 10px; color: #ccc;">Calculate SAGE fees for wallet</div>
+                <strong>GET /api/fees/wallet/:address</strong> <span class="status online">Active</span>
+                <div style="margin-top: 10px; color: #ccc;">Calculate real SAGE fees for wallet</div>
             </div>
             <div class="api-endpoint">
-                <strong>GET /api/sage/profile/:address</strong> <span class="status online">Coming Soon</span>
-                <div style="margin-top: 10px; color: #ccc;">Get SAGE player profile</div>
+                <strong>GET /api/sage/profile/:address</strong> <span class="status online">Active</span>
+                <div style="margin-top: 10px; color: #ccc;">Get SAGE player profile with ATLAS/POLIS</div>
+            </div>
+            <div class="api-endpoint">
+                <strong>GET /api/sage/fleets/:address</strong> <span class="status online">Active</span>
+                <div style="margin-top: 10px; color: #ccc;">Get player fleet information</div>
+            </div>
+            <div class="api-endpoint">
+                <strong>GET /api/fees/rates</strong> <span class="status online">Active</span>
+                <div style="margin-top: 10px; color: #ccc;">Get current SAGE fee rates</div>
             </div>
         </div>
         
@@ -227,14 +235,42 @@
             }
             
             try {
-                // Test the wallet balance endpoint
-                const response = await fetch(`/api/wallet/balance/${address}`);
-                const data = await response.json();
+                // Test multiple endpoints
+                console.log('Fetching wallet data for:', address);
                 
-                if (response.ok) {
-                    alert(`Wallet Balance: ${data.balance.sol} SOL (${data.balance.lamports} lamports)`);
+                // Get wallet balance
+                const balanceResponse = await fetch(`/api/wallet/balance/${address}`);
+                const balanceData = await balanceResponse.json();
+                
+                // Get SAGE fees
+                const feesResponse = await fetch(`/api/fees/wallet/${address}`);
+                const feesData = await feesResponse.json();
+                
+                // Get SAGE profile
+                const profileResponse = await fetch(`/api/sage/profile/${address}`);
+                const profileData = await profileResponse.json();
+                
+                if (balanceResponse.ok && feesResponse.ok && profileResponse.ok) {
+                    let message = `🚀 Wallet Analysis Results:\n\n`;
+                    message += `💰 SOL Balance: ${balanceData.balance.sol} SOL\n`;
+                    
+                    if (profileData.profile) {
+                        message += `🌟 ATLAS: ${profileData.profile.atlasBalance || 0} tokens\n`;
+                        message += `🏛️ POLIS: ${profileData.profile.polisBalance || 0} tokens\n`;
+                    }
+                    
+                    if (feesData.fees) {
+                        message += `\n📊 SAGE Fees Breakdown:\n`;
+                        message += `⛏️ Mining: ${feesData.fees.mining} ATLAS\n`;
+                        message += `🚚 Transport: ${feesData.fees.transport} ATLAS\n`;
+                        message += `⚔️ Combat: ${feesData.fees.combat} ATLAS\n`;
+                        message += `🏪 Marketplace: ${feesData.fees.marketplace} ATLAS\n`;
+                        message += `📈 Total Fees: ${feesData.fees.total} ATLAS\n`;
+                    }
+                    
+                    alert(message);
                 } else {
-                    alert(`Error: ${data.error}`);
+                    alert(`Error: Failed to fetch complete wallet data`);
                 }
             } catch (error) {
                 alert(`Network error: ${error.message}`);
