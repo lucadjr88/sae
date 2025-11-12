@@ -1,43 +1,41 @@
-import { AnchorProvider, Program, Wallet } from '@project-serum/anchor';
-import { Connection, Keypair, PublicKey } from '@solana/web3.js';
+import { AnchorProvider, Wallet } from "@project-serum/anchor";
+import { Commitment, Connection, Keypair } from "@solana/web3.js";
 
-// Create connection
-export const connection = new Connection(
-  process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
-  'confirmed'
-);
+const confirmTransactionInitialTimeout = 60000;
 
-// Create a dummy keypair for read-only operations
-const dummyKeypair = Keypair.generate();
+const providerOptions = {
+    preflightCommitment: 'confirmed' as Commitment,
+    commitment: 'confirmed' as Commitment,
+};
 
-// Create a simple wallet implementation
-class SimpleWallet implements Wallet {
-  constructor(public payer: Keypair) {}
-
-  async signTransaction(tx: any) {
-    tx.partialSign(this.payer);
-    return tx;
-  }
-
-  async signAllTransactions(txs: any[]) {
-    return txs.map((t) => {
-      t.partialSign(this.payer);
-      return t;
+/**
+ * Creates a new Connection to the Solana blockchain
+ * @param rpcEndpoint - the uri for an rpc endpoint
+ * @param rpcWebsocket - the uri for an rpc websocket
+ * @returns the Connection
+ */
+export function newConnection(rpcEndpoint: string, rpcWebsocket: string): Connection {
+    const connection = new Connection(rpcEndpoint, {
+        commitment: providerOptions.commitment,
+        confirmTransactionInitialTimeout,
+        wsEndpoint: rpcWebsocket,
     });
-  }
 
-  get publicKey() {
-    return this.payer.publicKey;
-  }
+    return connection;
 }
 
-const wallet = new SimpleWallet(dummyKeypair);
+/**
+ * Creates a new Anchor Client for the Solana programs
+ * @param connection - the Solana connection
+ * @param wallet - the provider wallet
+ * @returns the AnchorProvider
+ */
+export function newAnchorProvider(connection: Connection, wallet: Keypair): AnchorProvider {
+    const provider = new AnchorProvider(
+        connection,
+        new Wallet(wallet),
+        AnchorProvider.defaultOptions(),
+    );
 
-// Create provider
-export const provider = new AnchorProvider(
-  connection,
-  wallet,
-  AnchorProvider.defaultOptions()
-);
-
-export { wallet };
+    return provider;
+}
