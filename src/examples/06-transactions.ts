@@ -40,7 +40,10 @@ export async function getAccountTransactions(
   const transactions: TransactionInfo[] = [];
   
   for (const sig of signatures) {
-    const tx = await connection.getParsedTransaction(sig.signature, { maxSupportedTransactionVersion: 0 });
+    const tx = await connection.getParsedTransaction(sig.signature, { 
+      maxSupportedTransactionVersion: 0,
+      commitment: 'confirmed'
+    });
     if (!tx) continue;
 
     const programIds = tx.transaction.message.instructions
@@ -50,9 +53,24 @@ export async function getAccountTransactions(
     const instructions: string[] = [];
     const logMessages: string[] = tx.meta?.logMessages || [];
 
+    // Enhanced log parsing to extract ALL instructions
     logMessages.forEach(log => {
+      // Match "Program SAGE2HAw... invoke [N]" and "Instruction: InstructionName"
+      const invokeMatch = log.match(/Program ([A-Za-z0-9]{32,44}) invoke \[(\d+)\]/);
       const ixMatch = log.match(/Instruction: (\w+)/);
-      if (ixMatch) instructions.push(ixMatch[1]);
+      
+      if (ixMatch) {
+        instructions.push(ixMatch[1]);
+      }
+      
+      // Also capture any SAGE-specific instruction patterns from logs
+      if (log.includes('SAGE') || log.includes('sage')) {
+        // Extract instruction data from SAGE logs
+        const sageIxMatch = log.match(/ix([A-Z][a-zA-Z]+)/);
+        if (sageIxMatch) {
+          instructions.push(sageIxMatch[1]);
+        }
+      }
     });
 
     const accountKeys = tx.transaction.message.accountKeys.map(k => k.pubkey.toString());
@@ -232,25 +250,35 @@ export async function getWalletSageFeesDetailed(
     // SAGE-specific instruction patterns from program analysis
     'initializeFleet': 'CreateFleet',
     'ixFleetStateHandler': 'FleetStateChange', 
+    'FleetStateHandler': 'FleetStateChange',
     'ixDockedToLoadingBay': 'Dock',
+    'IdleToLoadingBay': 'Dock',
     'ixUndockFromLoadingBay': 'Undock',
+    'LoadingBayToIdle': 'Undock',
     'ixStartMining': 'StartMining',
+    'StartMiningAsteroid': 'StartMining',
     'ixStopMining': 'StopMining',
-    'ixStartSubwarp': 'StartSubwarp', 
+    'StopMiningAsteroid': 'StopMining',
+    'ixStartSubwarp': 'StartSubwarp',
+    'StartSubwarp': 'StartSubwarp',
     'ixStopSubwarp': 'EndSubwarp',
     'ixScanForSurveyDataUnits': 'StartScan',
     'ixStopScanForSurveyDataUnits': 'StopScan',
     'ixDepositCargoToFleet': 'LoadCargo',
+    'DepositCargoToFleet': 'LoadCargo',
     'ixWithdrawCargoFromFleet': 'UnloadCargo',
+    'WithdrawCargoFromFleet': 'UnloadCargo',
     'ixRefuelShip': 'Refuel',
     'ixRearmShip': 'Rearm',
     'ixTransfer': 'Transfer',
     'ixMovement': 'Move',
     'ixWarpToCoordinate': 'Warp',
+    'WarpToCoordinate': 'Warp',
+    'IncrementPoints': 'Points',
+    'ConsumeCargo': 'ConsumeFuel',
     
     // Alternative naming patterns
     'StartSubwarpMovement': 'StartSubwarp',
-    'StartSubwarp': 'StartSubwarp',
     'BeginSubwarp': 'StartSubwarp',
     'CompleteSubwarp': 'EndSubwarp',
     'ExitSubwarp': 'EndSubwarp',

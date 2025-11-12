@@ -596,11 +596,12 @@
       let legendHtml = '';
       data.forEach((item, index) => {
         const percentage = ((item.value / total) * 100).toFixed(1);
+        const solValue = (item.value / 1e9).toFixed(6);
         legendHtml += `
           <div class="legend-item">
             <div class="legend-color" style="background: ${item.color}"></div>
             <div class="legend-label">${item.label}</div>
-            <div class="legend-value">${percentage}%</div>
+            <div class="legend-value">${solValue} SOL (${percentage}%)</div>
           </div>
         `;
       });
