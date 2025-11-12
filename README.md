@@ -1,37 +1,38 @@
-# SAE Star Atlas Explorer
+# SA Explorer - Star Atlas Fleet Fees Analyzer
 
-A web-based explorer for Star Atlas wallet sage fees and blockchain interactions.
+A web-based explorer for analyzing Star Atlas SAGE fleet fees and operations.
 
 ## 🚀 Features
 
-- **Wallet Analysis**: Analyze Solana wallets and their Star Atlas holdings
-- **SAGE Fees**: Calculate and track SAGE fees for various activities
+- **Fleet Analysis**: Analyze all fleets (owned and rented) for your profile
+- **24h SAGE Fees**: Calculate and track SAGE fees with detailed breakdown by fleet and operation
+- **Rental Detection**: Automatic detection and highlighting of rented fleets via SRSLY program
 - **Real-time Data**: Access live blockchain data and transaction history
-- **REST API**: Comprehensive API for developers
-- **Modern Interface**: Clean, responsive web interface
+- **Visual Reports**: Pie charts and detailed breakdowns of fees by fleet and operation type
+- **Modern Interface**: Clean, responsive dark-themed interface
 
 ## 🛠️ Tech Stack
 
 - **Backend**: Node.js, Express.js, TypeScript
-- **Blockchain**: Solana Web3.js, Star Atlas SDK
-- **Frontend**: HTML5, CSS3, JavaScript (vanilla)
+- **Blockchain**: Solana Web3.js, Star Atlas SAGE SDK
+- **Frontend**: Vanilla JavaScript, HTML5, CSS3
 - **Development**: tsx for development, TypeScript compilation
 
 ## 📦 Dependencies
 
 ### Core Dependencies
-- `@staratlas/sage` - Star Atlas game SDK
+- `@staratlas/sage` - Star Atlas SAGE game SDK
+- `@staratlas/data-source` - Data source utilities
+- `@staratlas/player-profile` - Player profile management
 - `@solana/web3.js` - Solana blockchain interaction
 - `@project-serum/anchor` - Solana program framework
 - `express` - Web server framework
-- `cors` - Cross-origin resource sharing
-- `dotenv` - Environment variable management
 
 ### Development Dependencies
 - `typescript` - Type safety and development
 - `tsx` - TypeScript execution for development
 - `@types/express` - Express TypeScript definitions
-- `eslint` - Code linting
+- `@types/node` - Node.js TypeScript definitions
 
 ## 🚀 Quick Start
 
@@ -41,10 +42,9 @@ A web-based explorer for Star Atlas wallet sage fees and blockchain interactions
 
 ### Installation
 
-1. **Clone the repository**:
+1. **Navigate to project**:
    ```bash
-   git clone <repository-url>
-   cd SA\ Explorer
+   cd "d:\sa\SA Explorer"
    ```
 
 2. **Install dependencies**:
@@ -52,15 +52,14 @@ A web-based explorer for Star Atlas wallet sage fees and blockchain interactions
    npm install
    ```
 
-3. **Set up environment variables**:
+3. **Build the project**:
    ```bash
-   cp .env.example .env
+   npm run build
    ```
-   Edit `.env` file with your configuration.
 
-4. **Start development server**:
+4. **Start server**:
    ```bash
-   npm run dev
+   npm start
    ```
 
 5. **Open in browser**:
@@ -69,64 +68,64 @@ A web-based explorer for Star Atlas wallet sage fees and blockchain interactions
 ### Available Scripts
 
 - `npm run dev` - Start development server with hot reload
-- `npm run build` - Build for production
-- `npm start` - Start production server
-- `npm run clean` - Clean build directory
+- `npm run build` - Build TypeScript to JavaScript
+- `npm start` - Start production server (requires build first)
 
 ## 📚 API Endpoints
 
-### Wallet Endpoints
-- `GET /api/wallet/balance/:address` - Get wallet SOL balance
-- `GET /api/wallet/tokens/:address` - Get wallet token accounts
+### Profile & Fleet Endpoints
+- `POST /api/profile` - Get player profile information
+  - Body: `{ "profileId": "AAozfx..." }`
+  
+- `POST /api/fleets` - Get all fleets (owned + rented via SRSLY)
+  - Body: `{ "profileId": "AAozfx..." }`
 
-### SAGE Endpoints  
-- `GET /api/sage/game` - Get SAGE game information
-- `GET /api/sage/profile/:address` - Get player profile
-- `GET /api/sage/fleets/:address` - Get fleets information
+### Fee Analysis Endpoints
+- `POST /api/wallet-sage-fees-detailed` - Get detailed 24h SAGE fee analysis
+  - Body: `{ "walletPubkey": "...", "fleetAccounts": [...], "fleetNames": {...}, "fleetRentalStatus": {...}, "hours": 24 }`
 
-### Fees Endpoints
-- `GET /api/fees/wallet/:address` - Calculate SAGE fees for wallet
-- `GET /api/fees/history/:address` - Get fee history
-- `GET /api/fees/rates` - Get current fee rates
-
-### Utility Endpoints
-- `GET /health` - Server health check
+### Game Data Endpoints
+- `GET /api/game` - Get SAGE game information
+- `POST /api/planets` - Get planets at coordinates
+  - Body: `{ "x": 0, "y": 0 }`
 
 ## 📁 Project Structure
 
 ```
-SAE Star Atlas Explorer/
-├── .github/
-│   └── copilot-instructions.md
+SA Explorer/
 ├── public/
-│   └── index.html
+│   ├── index.html         # Main UI
+│   ├── app.js            # Frontend logic
+│   └── styles.css        # UI styles
 ├── src/
-│   ├── index.ts
-│   └── routes/
-│       ├── wallet.ts
-│       ├── sage.ts
-│       └── fees.ts
-├── dist/              # Compiled JavaScript (generated)
+│   ├── index.ts          # Express server & routes
+│   ├── examples/
+│   │   ├── 01-game.ts            # Game data fetching
+│   │   ├── 02-profile.ts         # Player profile
+│   │   ├── 03-fleets.ts          # Fleet discovery (owned + SRSLY rentals)
+│   │   ├── 04-planets.ts         # Planet data
+│   │   ├── 05-compose-fleet.ts   # Fleet composition
+│   │   └── 06-transactions.ts    # Transaction & fee analysis
+│   └── utils/
+│       ├── anchor-setup.ts       # Anchor/Solana connection
+│       └── wallet-setup.ts       # Wallet utilities
+├── dist/              # Compiled JavaScript (generated by tsc)
 ├── package.json
 ├── tsconfig.json
-├── .env.example
-├── .gitignore
 └── README.md
 ```
 
 ## 🔧 Configuration
 
-### Environment Variables
+### Environment Variables (Optional)
 
-Copy `.env.example` to `.env` and configure:
+The project uses hardcoded defaults but you can override via environment:
 
 ```env
-SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 PORT=3000
-SAGE_PROGRAM_ID=SAGEaQ6yoNaWH1EAqiANWMdKZgLYVo1yMJ1z7JGRRFr
-ATLAS_MINT=ATLASXmbPQxBUYbVuYw6ppwNZ6dn5JKLQEXGXY94DFZ
-POLIS_MINT=poLisWXnNRwC6oBu1vHiuKQzFjGL4XDSu4g9qjz9qVk
-NODE_ENV=development
+RPC_ENDPOINT=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+RPC_WEBSOCKET=wss://rpc.helius.xyz/?api-key=YOUR_KEY
+WALLET_PATH=D:\sa\star-atlas-cookbook\id.json
 ```
 
 ## 🧪 Development
@@ -137,7 +136,7 @@ NODE_ENV=development
 npm run dev
 ```
 
-The server will start with hot reload enabled. Any changes to TypeScript files will automatically restart the server.
+The server will start with hot reload enabled at `http://localhost:3000`.
 
 ### Building for Production
 
@@ -146,58 +145,44 @@ npm run build
 npm start
 ```
 
-### Code Style
+## 🎨 UI Features
 
-The project uses ESLint for code linting. Run:
+### Fleet Breakdown
+- **Rented Fleets**: Automatically highlighted with:
+  - Yellow bold fleet name
+  - "RENTED" badge
+  - Purple left border
+  - Sorted to top of list
+  
+### Charts
+- **Fees by Fleet (Top 5)**: Pie chart showing top 5 fleets by fee
+- **Fees by Operation (Top 5)**: Pie chart showing top 5 operation types
 
-```bash
-npm run lint
-```
+### Operations Tracked
+- Mining, Cargo/Dock, Subwarp, ScanSDU
+- Crafting, Starbase operations
+- Fleet management, Player profile operations
+- Rental operations (AddRental, ChangeRental, etc.)
 
-## 🗂️ Version Control & Backup Strategy
+## 🔍 Rental Detection
 
-### Git Workflow
-- **main/master branch**: Production-ready code
-- **develop branch**: Integration branch for features
-- **feature branches**: Individual feature development
+The app uses multiple strategies to detect rented fleets:
+1. **SRSLY Program Scan**: Scans SRSLY rental program accounts for fleet references
+2. **SAGE SubProfile Check**: Checks fleet.subProfile field
+3. **Transaction History**: Analyzes recent wallet transactions
 
-### Backup Recommendations
-1. **Remote Repository**: Push to GitHub/GitLab regularly
-2. **Local Backups**: Regular commits with descriptive messages
-3. **Environment Backup**: Keep `.env.example` updated
-4. **Database Backup**: If using persistent storage, backup regularly
-
-### Git Best Practices
-```bash
-# Regular commits
-git add .
-git commit -m "feat: add wallet balance endpoint"
-
-# Push to remote
-git push origin main
-
-# Create feature branches
-git checkout -b feature/sage-fees-calculation
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+Rented fleets are visually distinguished in the UI for easy identification.
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
 
 ## 🙏 Acknowledgments
 
-- Star Atlas team for the awesome SDK
+- Star Atlas team for the SAGE SDK
 - Solana Foundation for the blockchain infrastructure
-- Community contributors and testers
+- SRSLY program for fleet rentals
 
 ---
 
-**SAE Star Atlas Explorer** - Built with ❤️ for the Star Atlas community
+**SA Explorer** - Analyze your Star Atlas fleet operations and fees

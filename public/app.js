@@ -94,8 +94,13 @@ async function analyzeFees() {
     
     console.log('Analysis complete. Transactions:', data.transactionCount24h);
     
-    // Display results
-    displayResults(data, fleetNames);
+    // Collect rented fleet names from fleet list (fallback if backend didn't tag)
+    const rentedFleetNames = new Set(
+      fleets.filter(f => f.isRented).map(f => f.callsign)
+    );
+
+  // Display results
+  displayResults(data, fleetNames, rentedFleetNames);
     
   } catch (error) {
     console.error('Analysis error:', error);
@@ -106,7 +111,7 @@ async function analyzeFees() {
   }
 }
 
-function displayResults(data, fleetNames) {
+function displayResults(data, fleetNames, rentedFleetNames = new Set()) {
   console.log('Displaying results...');
   const resultsDiv = document.getElementById('results');
   
@@ -156,7 +161,7 @@ function displayResults(data, fleetNames) {
       </div>
     </div>
 
-    <h2 class="section-title">Fleet Breakdown</h2>
+  <h2 class="section-title">Fleet Breakdown <span class="legend-rented"><span class="legend-dot"></span> RENTED</span></h2>
     <div id="fleetList"></div>
 
     <h2 class="section-title">Operations Summary</h2>
@@ -193,7 +198,7 @@ function displayResults(data, fleetNames) {
   resultsDiv.innerHTML = html;
   
   // Create fleet list with fold/unfold
-  createFleetList(data, fleetNames);
+  createFleetList(data, fleetNames, rentedFleetNames);
   
   // Draw pie charts
   drawPieChart('fleetChart', 'fleetLegend', sortedFleets.map(([name, data], index) => ({
@@ -215,8 +220,10 @@ function displayResults(data, fleetNames) {
   console.log('Results displayed successfully');
 }
 
-function createFleetList(data, fleetNames) {
+function createFleetList(data, fleetNames, rentedFleetNames = new Set()) {
   const fleetListDiv = document.getElementById('fleetList');
+  // Normalize rented fleet names for case-insensitive matching
+  const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
   
   // List of category names to exclude from Fleet Breakdown
   const categories = [
@@ -236,17 +243,28 @@ function createFleetList(data, fleetNames) {
   // Filter out categories, keep only actual fleets
   const sortedFleets = Object.entries(data.feesByFleet)
     .filter(([fleetAccount, fleetData]) => !categories.includes(fleetAccount))
-    .sort((a, b) => b[1].totalFee - a[1].totalFee);
+    .sort((a, b) => {
+      const aRented = !!(a[1].isRented || rentedLc.has((fleetNames[a[0]] || a[0] || '').toString().toLowerCase()));
+      const bRented = !!(b[1].isRented || rentedLc.has((fleetNames[b[0]] || b[0] || '').toString().toLowerCase()));
+      // Rented fleets first
+      if (aRented && !bRented) return -1;
+      if (!aRented && bRented) return 1;
+      // Then by total fee
+      return b[1].totalFee - a[1].totalFee;
+    });
   
   let html = '';
   sortedFleets.forEach(([fleetAccount, fleetData]) => {
     const fleetName = fleetNames[fleetAccount] || fleetAccount;
     const fleetId = 'fleet-' + fleetAccount.substring(0, 8);
+    const isRented = !!(fleetData.isRented || rentedLc.has((fleetName || '').toString().toLowerCase()));
+    const rentalBadge = isRented ? '<span class="rental-badge">RENTED</span>' : '';
+    const nameClass = isRented ? 'fleet-name rented-name' : 'fleet-name';
     
     html += `
-      <div class="fleet-item" onclick="toggleFleet('${fleetId}')">
+      <div class="fleet-item ${isRented ? 'rented-fleet' : ''}" onclick="toggleFleet('${fleetId}')">
         <div class="fleet-header">
-          <div class="fleet-name">${fleetName}</div>
+          <div class="${nameClass}">${fleetName} ${rentalBadge}</div>
           <div class="fleet-ops">${fleetData.totalOperations} ops</div>
           <div class="fleet-pct">${(fleetData.feePercentage * 100).toFixed(1)}%</div>
           <div class="fleet-sol">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</div>

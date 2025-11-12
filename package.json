@@ -1,7 +1,7 @@
 {
-  "name": "staratlas-server",
+  "name": "sa-explorer",
   "version": "1.0.0",
-  "description": "Server unificato per esempi Star Atlas SAGE",
+  "description": "SA Explorer - Star Atlas Fleet Fees Analyzer",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {

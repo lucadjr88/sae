@@ -119,6 +119,45 @@ h1 {
   background: #16182280;
 }
 
+.fleet-item.rented-fleet {
+  background: #171322;
+  border-color: #2f2547;
+  box-shadow: inset 4px 0 0 #a78bfa;
+}
+
+.fleet-item.rented-fleet:hover {
+  background: #201a33;
+}
+
+.rental-badge {
+  display: inline-block;
+  background: #e879f9;
+  color: #0b0e1a;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}
+
+.legend-rented {
+  font-size: 10px;
+  color: #a78bfa;
+  margin-left: 8px;
+  font-weight: 600;
+}
+.legend-rented .legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #a78bfa;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 .fleet-header {
   display: grid;
   grid-template-columns: 1fr auto auto auto;
@@ -133,6 +172,11 @@ h1 {
   font-weight: 500;
   color: #e0e6ed;
   font-family: 'Roboto Mono', monospace;
+}
+
+.fleet-header .rented-name {
+  color: #fbbf24;
+  font-weight: 700;
 }
 
 .fleet-header .fleet-ops {
