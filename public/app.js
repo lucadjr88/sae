@@ -303,7 +303,8 @@ function drawPieChart(canvasId, legendId, data) {
       <div class="legend-item">
         <div class="legend-color" style="background: ${item.color}"></div>
         <div class="legend-label">${item.label}${countText}</div>
-        <div class="legend-value">${solValue} SOL (${percentage}%)</div>
+        <div class="legend-value">${solValue} SOL</div>
+        <div class="legend-percentage">${percentage}%</div>
       </div>
     `;
   });

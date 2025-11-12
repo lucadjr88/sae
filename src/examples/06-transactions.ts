@@ -191,7 +191,7 @@ export async function getWalletSageFeesDetailed(
   totalFees24h: number;
   sageFees24h: number;
   transactionCount24h: number;
-  feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number } } } };
+  feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; totalOperations: number; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number } } } };
   feesByOperation: { [operation: string]: { count: number; totalFee: number; avgFee: number } };
   transactions: TransactionInfo[];
   unknownOperations: number;
@@ -239,7 +239,7 @@ export async function getWalletSageFeesDetailed(
   });
 
   // Analyze by fleet and operation
-  const feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number } } } } = {};
+  const feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; totalOperations: number; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number } } } } = {};
   const feesByOperation: { [operation: string]: { count: number; totalFee: number; avgFee: number } } = {};
   let totalFees24h = 0;
   let sageFees24h = 0;
@@ -524,7 +524,7 @@ export async function getWalletSageFeesDetailed(
     const fleetKey = involvedFleetName || 'NONE';
     
     if (!feesByFleet[fleetKey]) {
-      feesByFleet[fleetKey] = { totalFee: 0, feePercentage: 0, operations: {} };
+      feesByFleet[fleetKey] = { totalFee: 0, feePercentage: 0, totalOperations: 0, operations: {} };
     }
     const fleetEntry = feesByFleet[fleetKey];
     fleetEntry.totalFee += tx.fee;
@@ -540,6 +540,8 @@ export async function getWalletSageFeesDetailed(
   // Compute percentages per fleet & per operation
   Object.values(feesByFleet).forEach(fleetEntry => {
     fleetEntry.feePercentage = fleetEntry.totalFee / (sageFees24h || 1);
+    // Calculate total operations for this fleet
+    fleetEntry.totalOperations = Object.values(fleetEntry.operations).reduce((sum: number, op: any) => sum + op.count, 0);
     Object.values(fleetEntry.operations).forEach(op => {
       op.percentageOfFleet = op.totalFee / (fleetEntry.totalFee || 1);
     });
