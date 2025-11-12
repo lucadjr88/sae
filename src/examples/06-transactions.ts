@@ -245,59 +245,154 @@ export async function getWalletSageFeesDetailed(
   let sageFees24h = 0;
   let unknownOperations = 0;
 
-  // Enhanced Operation pattern mapping with official SAGE IDL instruction names
+  // Complete SAGE instruction mapping from official IDL (SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE)
+  // Source: https://github.com/staratlasmeta/star-atlas-decoders
   const OP_MAP: { [key: string]: string } = {
-    // Official SAGE instruction names from IDL
+    // Fleet Movement & State
     'createFleet': 'CreateFleet',
-    'fleetStateHandler': 'FleetState',
+    'disbandFleet': 'DisbandFleet',
+    'forceDisbandFleet': 'ForceDisbandFleet',
+    'disbandedFleetToEscrow': 'DisbandedFleetToEscrow',
+    'closeDisbandedFleet': 'CloseDisbandedFleet',
     'idleToLoadingBay': 'Dock',
     'loadingBayToIdle': 'Undock',
-    'startMiningAsteroid': 'StartMining',
-    'stopMiningAsteroid': 'StopMining',
+    'idleToRespawn': 'IdleToRespawn',
+    'loadingBayToRespawn': 'LoadingBayToRespawn',
+    'respawnToLoadingBay': 'Respawn',
+    'mineAsteroidToRespawn': 'MineToRespawn',
+    
+    // Warp & Movement
     'startSubwarp': 'StartSubwarp',
     'stopSubwarp': 'StopSubwarp',
+    'warpToCoordinate': 'WarpToCoord',
+    'warpLane': 'WarpLane',
+    'planetExitWarp': 'PlanetExitWarp',
+    
+    // Mining
+    'startMiningAsteroid': 'StartMining',
+    'stopMiningAsteroid': 'StopMining',
+    
+    // Scanning
     'scanForSurveyDataUnits': 'ScanSDU',
+    'dropExpiredSurveyDataUnits': 'DropExpiredSDU',
+    
+    // Fleet Cargo Operations
     'depositCargoToFleet': 'LoadCargo',
     'withdrawCargoFromFleet': 'UnloadCargo',
-    'warpToCoordinate': 'Warp',
-    'warpLane': 'WarpLane',
-    'respawnToLoadingBay': 'Respawn',
-    'idleToRespawn': 'ToRespawn',
-    'mineAsteroidToRespawn': 'Mining->Respawn',
-    'subwarpToRespawn': 'Subwarp->Respawn',
+    'transferCargoWithinFleet': 'TransferCargoFleet',
     
-    // Cargo and trading operations
-    'transferCargoWithinFleet': 'TransferCargo',
-    'depositCargoToGame': 'DepositCargo',
-    'withdrawCargoFromGame': 'WithdrawCargo',
+    // Game Cargo Operations  
+    'depositCargoToGame': 'DepositCargoGame',
+    'withdrawCargoFromGame': 'WithdrawCargoGame',
     
-    // Crafting operations (IMPORTANT: These were missing!)
-    'craftingStartProcess': 'CraftStart',
-    'craftingClaimOutput': 'CraftClaim',
-    'craftingProcess': 'Crafting',
-    'startCrafting': 'CraftStart',
+    // Starbase Cargo Operations
+    'transferCargoAtStarbase': 'TransferCargoStarbase',
+    'createCargoPod': 'CreateCargoPod',
+    'removeCargoPod': 'RemoveCargoPod',
+    
+    // Fleet Management
+    'addShipToFleet': 'AddShip',
+    'addShipEscrowToFleet': 'AddShipEscrow',
+    'removeShipEscrow': 'RemoveShipEscrow',
+    'updateShipEscrow': 'UpdateShipEscrow',
+    'updateShipInFleet': 'UpdateShipInFleet',
+    'loadFleetCrew': 'LoadCrew',
+    'unloadFleetCrew': 'UnloadCrew',
+    'rearmFleet': 'Rearm',
+    'refuelFleet': 'Refuel',
+    
+    // Crafting
+    'createCraftingProcess': 'CraftStart',
+    'startCraftingProcess': 'CraftStart',
+    'stopCraftingProcess': 'CraftStop',
+    'cancelCraftingProcess': 'CraftCancel',
+    'closeCraftingProcess': 'CraftClose',
     'claimCraftingOutputs': 'CraftClaim',
-    'registerCraftingRecipe': 'RegisterRecipe',
+    'claimCraftingNonConsumables': 'CraftClaimNonCons',
+    'depositCraftingIngredient': 'CraftDeposit',
+    'withdrawCraftingIngredient': 'CraftWithdraw',
+    'burnCraftingConsumables': 'CraftBurn',
     
-    // Starbase operations
-    'starbaseCreateCargoPod': 'CreateCargoPod',
-    'starbaseCloseCargoPod': 'CloseCargoPod',
-    'starbaseDepositToCargoP': 'DepositToPod',
-    'starbaseWithdrawFromCar': 'WithdrawFromPod',
+    // Starbase Crafting
+    'createStarbaseCraftingProcess': 'StarbaseCraftStart',
+    'closeStarbaseCraftingProcess': 'StarbaseCraftClose',
+    'closeResourceCraftingProcess': 'ResourceCraftClose',
     
-    // Resource and token operations
-    'depositTokensToGame': 'DepositTokens',
-    'withdrawTokensFromGame': 'WithdrawTokens',
-    'transferTokens': 'TransferTokens',
+    // Starbase Operations
+    'startStarbaseUpgrade': 'StarbaseUpgradeStart',
+    'completeStarbaseUpgrade': 'StarbaseUpgradeComplete',
+    'submitStarbaseUpgradeResource': 'StarbaseUpgradeSubmit',
+    'depositStarbaseUpkeepResource': 'StarbaseUpkeepDeposit',
+    'registerStarbase': 'RegisterStarbase',
+    'registerStarbasePlayer': 'RegisterStarbasePlayer',
+    'deregisterStarbase': 'DeregisterStarbase',
+    'updateStarbase': 'UpdateStarbase',
     
-    // Legacy/alternative patterns for backwards compatibility
-    'ixFleetStateHandler': 'FleetState',
-    'FleetStateHandler': 'FleetState',
-    'IdleToLoadingBay': 'Dock',
-    'LoadingBayToIdle': 'Undock',
-    'StartMiningAsteroid': 'StartMining',
-    'StopMiningAsteroid': 'StopMining',
-    'StartSubwarp': 'StartSubwarp',
+    // Crew
+    'addCrewToGame': 'AddCrew',
+    'removeCrewFromGame': 'RemoveCrew',
+    'closePlayerCrewRecord': 'CloseCrewRecord',
+    'registerSageCrewConfig': 'RegisterCrewConfig',
+    'devAddCrewToGame': 'DevAddCrew',
+    
+    // Sector & Discovery
+    'discoverSector': 'DiscoverSector',
+    'registerSector': 'RegisterSector',
+    'updateSector': 'UpdateSector',
+    'addConnection': 'AddConnection',
+    'removeConnection': 'RemoveConnection',
+    
+    // Resources & Mining Items
+    'registerMineItem': 'RegisterMineItem',
+    'deregisterMineItem': 'DeregisterMineItem',
+    'updateMineItem': 'UpdateMineItem',
+    'registerResource': 'RegisterResource',
+    'deregisterResource': 'DeregisterResource',
+    'updateResource': 'UpdateResource',
+    
+    // Ships
+    'registerShip': 'RegisterShip',
+    'setNextShip': 'SetNextShip',
+    'invalidateShip': 'InvalidateShip',
+    
+    // Planets & Stars
+    'registerPlanet': 'RegisterPlanet',
+    'updatePlanet': 'UpdatePlanet',
+    'registerStar': 'RegisterStar',
+    'updateStar': 'UpdateStar',
+    
+    // Game Management
+    'initGame': 'InitGame',
+    'initGameState': 'InitGameState',
+    'manageGame': 'ManageGame',
+    'updateGame': 'UpdateGame',
+    'updateGameState': 'UpdateGameState',
+    
+    // Player Profile
+    'registerSagePlayerProfile': 'RegisterProfile',
+    
+    // Progression
+    'registerProgressionConfig': 'RegisterProgression',
+    'deregisterProgressionConfig': 'DeregisterProgression',
+    'updateProgressionConfig': 'UpdateProgression',
+    'registerSagePointsModifier': 'RegisterPointsModifier',
+    
+    // Survey Data Units
+    'registerSurveyDataUnitTracker': 'RegisterSDUTracker',
+    'deregisterSurveyDataUnitTracker': 'DeregisterSDUTracker',
+    'updateSurveyDataUnitTracker': 'UpdateSDUTracker',
+    
+    // Rental
+    'addRental': 'AddRental',
+    'changeRental': 'ChangeRental',
+    'invalidateRental': 'InvalidateRental',
+    'enableSubProfileInvalidator': 'EnableSubProfileInvalidator',
+    
+    // Certificates
+    'registerCertificate': 'RegisterCertificate',
+    
+    // Dev Tools
+    'devDepositCargoToGame': 'DevDepositCargo',
     'DepositCargoToFleet': 'LoadCargo',
     'WithdrawCargoFromFleet': 'UnloadCargo',
     'WarpToCoordinate': 'Warp',
@@ -419,8 +514,15 @@ export async function getWalletSageFeesDetailed(
     let involvedFleetName: string | undefined = undefined;
     let matchStrategy = 'none';
     
-    if (tx.accountKeys && tx.accountKeys.length > 0) {
-      // Strategy 1: Direct fleet account match
+    // Determine if this is a fleet-related operation
+    const isFleetOperation = [
+      'CreateFleet', 'DisbandFleet', 'Dock', 'Undock', 'StartMining', 'StopMining',
+      'StartSubwarp', 'StopSubwarp', 'WarpToCoord', 'WarpLane', 'LoadCargo', 'UnloadCargo',
+      'ScanSDU', 'Refuel', 'Rearm', 'AddShip', 'LoadCrew', 'UnloadCrew', 'Respawn'
+    ].includes(operation);
+    
+    if (tx.accountKeys && tx.accountKeys.length > 0 && isFleetOperation) {
+      // Strategy 1: Direct fleet account match for fleet operations
       for (const fleet of specificFleetAccounts) {
         if (tx.accountKeys.includes(fleet)) {
           involvedFleet = fleet;
@@ -431,10 +533,43 @@ export async function getWalletSageFeesDetailed(
       }
     }
     
-    // Strategy 2: For non-fleet operations (Craft, etc.), assign to "General" category
+    // Strategy 2: For non-fleet operations, categorize by operation type
     if (!involvedFleet) {
-      involvedFleetName = 'General';
-      matchStrategy = 'general';
+      // Categorize by operation type instead of using "General"
+      if (operation.includes('Craft') || operation.includes('craft')) {
+        involvedFleetName = '🏭 Crafting Operations';
+        matchStrategy = 'category_craft';
+      } else if (operation.includes('Starbase') || operation.includes('starbase')) {
+        involvedFleetName = '🏛️ Starbase Operations';
+        matchStrategy = 'category_starbase';
+      } else if (operation.includes('Register') || operation.includes('Deregister') || operation.includes('Update')) {
+        involvedFleetName = '⚙️ Configuration';
+        matchStrategy = 'category_config';
+      } else if (operation.includes('Cargo') || operation.includes('cargo')) {
+        involvedFleetName = '📦 Cargo Management';
+        matchStrategy = 'category_cargo';
+      } else if (operation.includes('Crew') || operation.includes('crew')) {
+        involvedFleetName = '👥 Crew Management';
+        matchStrategy = 'category_crew';
+      } else if (operation.includes('SDU') || operation.includes('Survey')) {
+        involvedFleetName = '🔍 Survey & Discovery';
+        matchStrategy = 'category_survey';
+      } else if (operation.includes('Profile') || operation.includes('Progression') || operation.includes('Points')) {
+        involvedFleetName = '👤 Player Profile';
+        matchStrategy = 'category_profile';
+      } else if (operation.includes('Rental') || operation.includes('rental')) {
+        involvedFleetName = '🔑 Fleet Rentals';
+        matchStrategy = 'category_rental';
+      } else if (operation.includes('Sector') || operation.includes('Planet') || operation.includes('Star')) {
+        involvedFleetName = '🌌 Universe Management';
+        matchStrategy = 'category_universe';
+      } else if (operation.includes('Game') || operation.includes('game')) {
+        involvedFleetName = '🎮 Game Management';
+        matchStrategy = 'category_game';
+      } else {
+        involvedFleetName = '🔧 Other Operations';
+        matchStrategy = 'category_other';
+      }
     }
     
     // Group related operations (start/stop pairs and logistics)
