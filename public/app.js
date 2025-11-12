@@ -116,6 +116,8 @@ function displayResults(data, fleetNames) {
   console.log('Top 5 fleets:', sortedFleets.map(([name, data]) => ({ name: fleetNames[name] || name, fee: data.totalFee })));
   console.log('Top 5 operations:', sortedOps.map(([name, data]) => ({ name, fee: data.totalFee })));
   
+  const sageFees24h = data.sageFees24h;
+  
   let html = `
     <div class="stats-grid">
       <div class="stat-card">
@@ -189,6 +191,7 @@ function displayResults(data, fleetNames) {
     label: fleetNames[name] || name,
     value: data.totalFee,
     count: data.totalOperations,
+    percentage: data.feePercentage,
     color: fleetColors[index]
   })));
   
@@ -196,6 +199,7 @@ function displayResults(data, fleetNames) {
     label: name,
     value: data.totalFee,
     count: data.count,
+    percentage: data.totalFee / (sageFees24h || 1),
     color: opColors[index]
   })));
   
@@ -215,9 +219,14 @@ function createFleetList(data, fleetNames) {
     html += `
       <div class="fleet-item" onclick="toggleFleet('${fleetId}')">
         <div class="fleet-header">
-          <div class="fleet-name">${fleetName} <span style="color: #7a8ba0; font-size: 10px;">(${fleetData.totalOperations} ops)</span></div>
-          <div class="fleet-fee">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</div>
-          <div class="fleet-percent">${(fleetData.feePercentage * 100).toFixed(1)}%</div>
+          <table>
+            <tr>
+              <td>${fleetName}</td>
+              <td>${fleetData.totalOperations} ops</td>
+              <td>${(fleetData.feePercentage * 100).toFixed(1)}%</td>
+              <td>${(fleetData.totalFee / 1e9).toFixed(6)} SOL</td>
+            </tr>
+          </table>
         </div>
         <div class="fleet-details" id="${fleetId}">
           <table class="fleet-ops-table">
@@ -293,20 +302,21 @@ function drawPieChart(canvasId, legendId, data) {
     currentAngle += sliceAngle;
   });
   
-  // Create legend
-  let legendHtml = '';
+  // Create legend with format: Nome | Ops | % | SOL
+  let legendHtml = '<table>';
   data.forEach((item, index) => {
-    const percentage = ((item.value / total) * 100).toFixed(1);
+    const percentage = ((item.percentage || item.value / total) * 100).toFixed(1);
     const solValue = (item.value / 1e9).toFixed(6);
-    const countText = item.count ? ` • ${item.count} ops` : '';
     legendHtml += `
-      <div class="legend-item">
-        <div class="legend-color" style="background: ${item.color}"></div>
-        <div class="legend-label">${item.label}${countText}</div>
-        <div class="legend-value">${solValue} SOL</div>
-        <div class="legend-percentage">${percentage}%</div>
-      </div>
+      <tr>
+        <td><div style="width: 8px; height: 8px; background: ${item.color}; border-radius: 1px;"></div></td>
+        <td>${item.label}</td>
+        <td>${item.count} ops</td>
+        <td>${percentage}%</td>
+        <td>${solValue} SOL</td>
+      </tr>
     `;
   });
+  legendHtml += '</table>';
   legend.innerHTML = legendHtml;
 }

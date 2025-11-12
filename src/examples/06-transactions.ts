@@ -271,6 +271,25 @@ export async function getWalletSageFeesDetailed(
     'depositCargoToGame': 'DepositCargo',
     'withdrawCargoFromGame': 'WithdrawCargo',
     
+    // Crafting operations (IMPORTANT: These were missing!)
+    'craftingStartProcess': 'CraftStart',
+    'craftingClaimOutput': 'CraftClaim',
+    'craftingProcess': 'Crafting',
+    'startCrafting': 'CraftStart',
+    'claimCraftingOutputs': 'CraftClaim',
+    'registerCraftingRecipe': 'RegisterRecipe',
+    
+    // Starbase operations
+    'starbaseCreateCargoPod': 'CreateCargoPod',
+    'starbaseCloseCargoPod': 'CloseCargoPod',
+    'starbaseDepositToCargoP': 'DepositToPod',
+    'starbaseWithdrawFromCar': 'WithdrawFromPod',
+    
+    // Resource and token operations
+    'depositTokensToGame': 'DepositTokens',
+    'withdrawTokensFromGame': 'WithdrawTokens',
+    'transferTokens': 'TransferTokens',
+    
     // Legacy/alternative patterns for backwards compatibility
     'ixFleetStateHandler': 'FleetState',
     'FleetStateHandler': 'FleetState',
@@ -281,7 +300,9 @@ export async function getWalletSageFeesDetailed(
     'StartSubwarp': 'StartSubwarp',
     'DepositCargoToFleet': 'LoadCargo',
     'WithdrawCargoFromFleet': 'UnloadCargo',
-    'WarpToCoordinate': 'Warp'
+    'WarpToCoordinate': 'Warp',
+    'Craft': 'Crafting',
+    'craft': 'Crafting'
   };
 
   for (const tx of recent24h) {
@@ -293,9 +314,17 @@ export async function getWalletSageFeesDetailed(
     let operation = 'Unknown';
     let foundMethod = 'none';
     
-    // Method 1: Check instruction names from transaction
+    // Method 1: Check instruction names from transaction (most reliable)
     if (tx.instructions && tx.instructions.length > 0) {
       for (const instr of tx.instructions) {
+        // Direct mapping check
+        if (OP_MAP[instr]) {
+          operation = OP_MAP[instr];
+          foundMethod = 'instruction_direct';
+          break;
+        }
+        
+        // Case-insensitive partial match
         for (const [key, value] of Object.entries(OP_MAP)) {
           if (instr.toLowerCase().includes(key.toLowerCase())) {
             operation = value;
@@ -307,10 +336,21 @@ export async function getWalletSageFeesDetailed(
       }
     }
     
-    // Method 2: Check log messages with broader pattern matching
+    // Method 2: Check log messages for instruction patterns
     if (operation === 'Unknown' && tx.logMessages) {
       for (const log of tx.logMessages) {
-        // Direct keyword matching
+        // Look for "Instruction: <name>" pattern in logs
+        const ixMatch = log.match(/Instruction:\s*(\w+)/i);
+        if (ixMatch) {
+          const ixName = ixMatch[1];
+          if (OP_MAP[ixName]) {
+            operation = OP_MAP[ixName];
+            foundMethod = 'log_instruction';
+            break;
+          }
+        }
+        
+        // Direct keyword matching from OP_MAP
         for (const [key, value] of Object.entries(OP_MAP)) {
           if (log.includes(key)) {
             operation = value;
@@ -319,134 +359,56 @@ export async function getWalletSageFeesDetailed(
           }
         }
         
-        // Enhanced pattern matching for SAGE-specific operations
-        if (operation === 'Unknown') {
-          if (log.includes('mine') || log.includes('Mining')) {
-            if (log.includes('start') || log.includes('begin') || log.includes('Start')) {
-              operation = 'StartMining';
-              foundMethod = 'log_pattern';
-            } else if (log.includes('stop') || log.includes('end') || log.includes('Stop')) {
-              operation = 'StopMining';
-              foundMethod = 'log_pattern';
-            }
-          } else if (log.includes('scan') || log.includes('Scan')) {
-            if (log.includes('start') || log.includes('begin') || log.includes('Start')) {
-              operation = 'StartScan';
-              foundMethod = 'log_pattern';
-            } else if (log.includes('stop') || log.includes('end') || log.includes('Stop')) {
-              operation = 'StopScan';
-              foundMethod = 'log_pattern';
-            }
-          } else if (log.includes('subwarp') || log.includes('Subwarp') || log.includes('warp')) {
-            if (log.includes('start') || log.includes('begin') || log.includes('Start') || log.includes('enter')) {
-              operation = 'StartSubwarp';
-              foundMethod = 'log_pattern';
-            } else if (log.includes('exit') || log.includes('complete') || log.includes('end') || log.includes('Exit')) {
-              operation = 'EndSubwarp';
-              foundMethod = 'log_pattern';
-            }
-          } else if (log.includes('dock') || log.includes('Dock')) {
-            operation = log.includes('undock') || log.includes('Undock') ? 'Undock' : 'Dock';
-            foundMethod = 'log_pattern';
-          } else if (log.includes('fuel') || log.includes('Fuel')) {
-            operation = 'Refuel';
-            foundMethod = 'log_pattern';
-          } else if (log.includes('ammo') || log.includes('Ammo')) {
-            operation = 'Rearm';
-            foundMethod = 'log_pattern';
-          } else if (log.includes('cargo') || log.includes('Cargo')) {
-            operation = log.includes('unload') || log.includes('Unload') ? 'UnloadCargo' : 'LoadCargo';
-            foundMethod = 'log_pattern';
-          } else if (log.includes('move') || log.includes('Move') || log.includes('movement')) {
-            operation = 'Move';
-            foundMethod = 'log_pattern';
-          }
-        }
-        
         if (operation !== 'Unknown') break;
       }
     }
     
-    // Method 3: Enhanced instruction data analysis for SAGE operations
-    if (operation === 'Unknown' && tx.instructions) {
-      for (const instr of tx.instructions) {
-        // Look for SAGE program-specific patterns in instruction names
-        const instrLower = instr.toLowerCase();
-        
-        if (instrLower.includes('ix')) {
-          // SAGE instructions often start with 'ix'
-          if (instrLower.includes('mining')) {
-            operation = instrLower.includes('start') ? 'StartMining' : 'StopMining';
-            foundMethod = 'instruction_sage';
-            break;
-          } else if (instrLower.includes('scan')) {
-            operation = instrLower.includes('start') || instrLower.includes('scan') ? 'StartScan' : 'StopScan';
-            foundMethod = 'instruction_sage';
-            break;
-          } else if (instrLower.includes('subwarp')) {
-            operation = instrLower.includes('start') ? 'StartSubwarp' : 'EndSubwarp';
-            foundMethod = 'instruction_sage';
-            break;
-          } else if (instrLower.includes('dock')) {
-            operation = instrLower.includes('undock') ? 'Undock' : 'Dock';
-            foundMethod = 'instruction_sage';
-            break;
-          } else if (instrLower.includes('cargo')) {
-            operation = instrLower.includes('deposit') || instrLower.includes('load') ? 'LoadCargo' : 'UnloadCargo';
-            foundMethod = 'instruction_sage';
-            break;
-          } else if (instrLower.includes('fuel')) {
-            operation = 'Refuel';
-            foundMethod = 'instruction_sage';
-            break;
-          } else if (instrLower.includes('ammo') || instrLower.includes('rearm')) {
-            operation = 'Rearm';
-            foundMethod = 'instruction_sage';
-            break;
-          } else if (instrLower.includes('fleet')) {
-            operation = instrLower.includes('initialize') ? 'CreateFleet' : 'FleetStateChange';
-            foundMethod = 'instruction_sage';
-            break;
-          } else if (instrLower.includes('warp')) {
-            operation = 'Warp';
-            foundMethod = 'instruction_sage';
-            break;
-          } else if (instrLower.includes('movement')) {
-            operation = 'Move';
-            foundMethod = 'instruction_sage';
-            break;
-          }
-        }
-      }
-    }
-    
-    // Method 4: Analyze transaction structure for SAGE-specific patterns
-    if (operation === 'Unknown' && tx.accountKeys) {
-      const accountCount = tx.accountKeys.length;
+    // Method 3: Pattern-based detection for common operations
+    if (operation === 'Unknown' && tx.logMessages) {
+      const logsLower = tx.logMessages.join(' ').toLowerCase();
       
-      // Some SAGE operations have characteristic account count patterns
-      // Based on observed patterns from real SAGE transactions
-      if (accountCount === 8) {
-        operation = 'StartSubwarp'; // Most subwarp operations have 8 accounts
-        foundMethod = 'account_pattern';
-      } else if (accountCount === 14) {
-        operation = 'StartMining'; // Mining operations often have 14 accounts
-        foundMethod = 'account_pattern';
-      } else if (accountCount === 31) {
-        operation = 'StartScan'; // Scanning operations often have 31 accounts
-        foundMethod = 'account_pattern';
-      } else if (accountCount === 41) {
-        operation = 'StopMining'; // Stop mining often has 41 accounts
-        foundMethod = 'account_pattern';
-      } else if (accountCount >= 19 && accountCount <= 23) {
-        operation = 'FleetStateChange'; // Generic fleet state changes
-        foundMethod = 'account_pattern';
-      } else if (accountCount >= 29 && accountCount <= 34) {
-        operation = 'ComplexOperation'; // Complex operations with many accounts
-        foundMethod = 'account_pattern';
-      } else if (accountCount >= 10 && accountCount <= 12) {
-        operation = 'SimpleOperation'; // Simple operations
-        foundMethod = 'account_pattern';
+      if (logsLower.includes('craft')) {
+        operation = 'Crafting';
+        foundMethod = 'pattern_craft';
+      } else if (logsLower.includes('mine') || logsLower.includes('mining')) {
+        if (logsLower.includes('start')) {
+          operation = 'StartMining';
+        } else if (logsLower.includes('stop')) {
+          operation = 'StopMining';
+        } else {
+          operation = 'Mining';
+        }
+        foundMethod = 'pattern_mining';
+      } else if (logsLower.includes('subwarp') || logsLower.includes('warp')) {
+        if (logsLower.includes('start') || logsLower.includes('enter')) {
+          operation = 'StartSubwarp';
+        } else if (logsLower.includes('stop') || logsLower.includes('exit') || logsLower.includes('end')) {
+          operation = 'EndSubwarp';
+        } else {
+          operation = 'Subwarp';
+        }
+        foundMethod = 'pattern_warp';
+      } else if (logsLower.includes('scan')) {
+        if (logsLower.includes('start')) {
+          operation = 'StartScan';
+        } else if (logsLower.includes('stop')) {
+          operation = 'StopScan';
+        } else {
+          operation = 'Scan';
+        }
+        foundMethod = 'pattern_scan';
+      } else if (logsLower.includes('dock')) {
+        operation = logsLower.includes('undock') ? 'Undock' : 'Dock';
+        foundMethod = 'pattern_dock';
+      } else if (logsLower.includes('cargo')) {
+        operation = logsLower.includes('unload') ? 'UnloadCargo' : 'LoadCargo';
+        foundMethod = 'pattern_cargo';
+      } else if (logsLower.includes('fuel')) {
+        operation = 'Refuel';
+        foundMethod = 'pattern_fuel';
+      } else if (logsLower.includes('ammo')) {
+        operation = 'Rearm';
+        foundMethod = 'pattern_ammo';
       }
     }
     
@@ -469,13 +431,14 @@ export async function getWalletSageFeesDetailed(
       }
     }
     
+    // Strategy 2: For non-fleet operations (Craft, etc.), assign to "General" category
+    if (!involvedFleet) {
+      involvedFleetName = 'General';
+      matchStrategy = 'general';
+    }
+    
     // Group related operations (start/stop pairs and logistics)
     let groupedOperation = operation;
-    
-    // Debug: show original operation for first few transactions
-    if (recent24h.indexOf(tx) < 5) {
-      console.log(`  DEBUG: Original operation='${operation}', will group to='${groupedOperation}'`);
-    }
     
     if (operation === 'StartSubwarp' || operation === 'StopSubwarp' || operation === 'EndSubwarp') {
       groupedOperation = 'Subwarp';
@@ -485,6 +448,12 @@ export async function getWalletSageFeesDetailed(
       groupedOperation = 'Scan';
     } else if (operation === 'Dock' || operation === 'Undock' || operation === 'LoadCargo' || operation === 'UnloadCargo') {
       groupedOperation = 'Cargo/Dock';
+    } else if (operation === 'CraftStart' || operation === 'CraftClaim' || operation === 'Crafting') {
+      groupedOperation = 'Crafting';
+    } else if (operation === 'DepositTokens' || operation === 'WithdrawTokens') {
+      groupedOperation = 'Token Ops';
+    } else if (operation === 'CreateCargoPod' || operation === 'CloseCargoPod' || operation === 'DepositToPod' || operation === 'WithdrawFromPod') {
+      groupedOperation = 'Cargo Pods';
     }
     
     // Enhanced debug logging to understand account patterns

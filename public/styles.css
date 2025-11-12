@@ -46,60 +46,65 @@ h1 {
 
 .chart-container {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .pie-chart {
-  width: 100px;
-  height: 100px;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto;
   flex-shrink: 0;
 }
 
 .chart-legend {
   flex: 1;
-  font-size: 11px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  font-size: 10px;
 }
 
-.legend-item {
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 2px;
+.chart-legend table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  background: transparent;
+  border: none;
 }
 
-.legend-color {
+.chart-legend td {
+  padding: 3px 4px;
+  border: none;
+}
+
+.chart-legend td:nth-child(1) {
   width: 8px;
-  height: 8px;
-  border-radius: 1px;
-  flex-shrink: 0;
+  padding-right: 6px;
 }
 
-.legend-label {
+.chart-legend td:nth-child(2) {
   color: #b8c0cc;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.legend-value {
+.chart-legend td:nth-child(3) {
+  text-align: right;
+  color: #7a8ba0;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.chart-legend td:nth-child(4) {
+  text-align: right;
+  color: #7a8ba0;
+  white-space: nowrap;
+  min-width: 40px;
+}
+
+.chart-legend td:nth-child(5) {
+  text-align: right;
   color: #34d399;
   font-family: 'Roboto Mono', monospace;
   font-weight: 500;
-  font-size: 10px;
   white-space: nowrap;
-}
-
-.legend-percentage {
-  color: #7a8ba0;
-  font-size: 10px;
-  white-space: nowrap;
-  min-width: 45px;
-  text-align: right;
 }
 
 .fleet-item {
@@ -115,32 +120,52 @@ h1 {
 }
 
 .fleet-header {
-  display: grid;
-  grid-template-columns: 2fr auto auto;
-  gap: 20px;
+  display: flex;
   padding: 8px 12px;
   align-items: center;
+  border-bottom: 1px solid transparent;
 }
 
-.fleet-name {
+.fleet-header table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+  border: none;
+  margin: 0;
+  font-size: 11px;
+}
+
+.fleet-header td {
+  padding: 0 4px;
+  border: none;
+}
+
+.fleet-header td:nth-child(1) {
   font-weight: 500;
   color: #e0e6ed;
   font-family: 'Roboto Mono', monospace;
-  font-size: 11px;
 }
 
-.fleet-fee {
+.fleet-header td:nth-child(2) {
+  text-align: right;
+  color: #7a8ba0;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.fleet-header td:nth-child(3) {
+  text-align: right;
+  color: #7a8ba0;
+  white-space: nowrap;
+  min-width: 40px;
+}
+
+.fleet-header td:nth-child(4) {
+  text-align: right;
   color: #34d399;
   font-weight: 500;
   font-family: 'Roboto Mono', monospace;
-  font-size: 11px;
-}
-
-.fleet-percent {
-  color: #7a8ba0;
-  font-size: 11px;
-  min-width: 45px;
-  text-align: right;
+  white-space: nowrap;
 }
 
 .fleet-details {
