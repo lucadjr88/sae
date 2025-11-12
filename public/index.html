@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAE Star Atlas Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f1419, #1a202c);
+            color: #ffffff;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 40px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #00d4ff, #ff6b35);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .feature-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            transition: transform 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: #00d4ff;
+        }
+        
+        .api-section {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .api-section h2 {
+            color: #ff6b35;
+            margin-bottom: 20px;
+        }
+        
+        .api-endpoint {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            border-left: 4px solid #00d4ff;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status.online {
+            background: #10b981;
+            color: white;
+        }
+        
+        .wallet-input {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .input-group input {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+        }
+        
+        .input-group input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            background: linear-gradient(45deg, #00d4ff, #0ea5e9);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: transform 0.2s ease;
+        }
+        
+        .btn:hover {
+            transform: scale(1.05);
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px 0;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>SAE Star Atlas Explorer</h1>
+            <p>Explore Star Atlas wallet sage fees and blockchain interactions</p>
+        </div>
+        
+        <div class="features">
+            <div class="feature-card">
+                <h3>🚀 Wallet Analysis</h3>
+                <p>Analyze Solana wallets and their Star Atlas holdings with detailed breakdowns of tokens and balances.</p>
+            </div>
+            <div class="feature-card">
+                <h3>💰 SAGE Fees</h3>
+                <p>Calculate and track SAGE fees for mining, transport, combat, and marketplace activities.</p>
+            </div>
+            <div class="feature-card">
+                <h3>📊 Real-time Data</h3>
+                <p>Access live blockchain data and transaction history with real-time updates.</p>
+            </div>
+        </div>
+        
+        <div class="wallet-input">
+            <h2>Wallet Explorer</h2>
+            <p>Enter a Solana wallet address to explore Star Atlas data:</p>
+            <div class="input-group">
+                <input type="text" id="walletAddress" placeholder="Enter wallet address (e.g., 11111111111111111111111111111112)">
+                <button class="btn" onclick="exploreWallet()">Explore</button>
+            </div>
+        </div>
+        
+        <div class="api-section">
+            <h2>API Endpoints</h2>
+            <div class="api-endpoint">
+                <strong>GET /health</strong> <span class="status online">Online</span>
+                <div style="margin-top: 10px; color: #ccc;">Check server status</div>
+            </div>
+            <div class="api-endpoint">
+                <strong>GET /api/wallet/balance/:address</strong> <span class="status online">Ready</span>
+                <div style="margin-top: 10px; color: #ccc;">Get wallet SOL balance</div>
+            </div>
+            <div class="api-endpoint">
+                <strong>GET /api/wallet/tokens/:address</strong> <span class="status online">Ready</span>
+                <div style="margin-top: 10px; color: #ccc;">Get wallet token accounts</div>
+            </div>
+            <div class="api-endpoint">
+                <strong>GET /api/fees/wallet/:address</strong> <span class="status online">Coming Soon</span>
+                <div style="margin-top: 10px; color: #ccc;">Calculate SAGE fees for wallet</div>
+            </div>
+            <div class="api-endpoint">
+                <strong>GET /api/sage/profile/:address</strong> <span class="status online">Coming Soon</span>
+                <div style="margin-top: 10px; color: #ccc;">Get SAGE player profile</div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>SAE Star Atlas Explorer - Built with ❤️ for the Star Atlas community</p>
+        </div>
+    </div>
+    
+    <script>
+        async function exploreWallet() {
+            const address = document.getElementById('walletAddress').value.trim();
+            if (!address) {
+                alert('Please enter a wallet address');
+                return;
+            }
+            
+            try {
+                // Test the wallet balance endpoint
+                const response = await fetch(`/api/wallet/balance/${address}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert(`Wallet Balance: ${data.balance.sol} SOL (${data.balance.lamports} lamports)`);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`Network error: ${error.message}`);
+            }
+        }
+        
+        // Check server health on page load
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                console.log('Server status:', data);
+            } catch (error) {
+                console.error('Failed to check server status:', error);
+            }
+        });
+    </script>
+</body>
+</html>
