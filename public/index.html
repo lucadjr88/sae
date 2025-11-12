@@ -34,50 +34,55 @@
     .chart-card {
       background: #13151f;
       border: 1px solid #1e222e;
-      padding: 12px;
+      padding: 8px;
     }
     .chart-title {
-      font-size: 11px;
+      font-size: 9px;
       color: #7a8ba0;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       font-weight: 500;
     }
     .chart-container {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
     }
     .pie-chart {
-      width: 120px;
-      height: 120px;
+      width: 100px;
+      height: 100px;
       flex-shrink: 0;
     }
     .chart-legend {
       flex: 1;
-      font-size: 11px;
+      font-size: 10px;
     }
     .legend-item {
       display: flex;
       align-items: center;
-      gap: 6px;
-      margin-bottom: 4px;
+      gap: 5px;
+      margin-bottom: 3px;
     }
     .legend-color {
-      width: 10px;
-      height: 10px;
-      border-radius: 2px;
+      width: 8px;
+      height: 8px;
+      border-radius: 1px;
       flex-shrink: 0;
     }
     .legend-label {
       flex: 1;
       color: #b8c0cc;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
     }
     .legend-value {
       color: #34d399;
       font-family: 'Roboto Mono', monospace;
       font-weight: 500;
+      font-size: 10px;
     }
     .fleet-item {
       background: #13151f;
@@ -91,33 +96,36 @@
     }
     .fleet-header {
       display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: 12px;
-      padding: 8px 10px;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      padding: 5px 8px;
       align-items: center;
     }
     .fleet-name {
       font-weight: 500;
       color: #e0e6ed;
       font-family: 'Roboto Mono', monospace;
-      font-size: 12px;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .fleet-fee {
       color: #34d399;
       font-weight: 500;
       font-family: 'Roboto Mono', monospace;
-      font-size: 12px;
+      font-size: 11px;
     }
     .fleet-percent {
       color: #7a8ba0;
-      font-size: 12px;
-      min-width: 50px;
+      font-size: 11px;
+      min-width: 45px;
       text-align: right;
     }
     .fleet-details {
       display: none;
       border-top: 1px solid #1e222e;
-      padding: 10px;
+      padding: 6px 8px;
       background: #0f1119;
     }
     .fleet-item.expanded .fleet-details {
@@ -125,13 +133,14 @@
     }
     .fleet-item.expanded {
       background: #16182280;
+      border-color: #2d3748;
     }
     .fleet-ops-table {
       width: 100%;
-      font-size: 11px;
+      font-size: 10px;
     }
     .fleet-ops-table td {
-      padding: 4px 6px;
+      padding: 2px 4px;
     }
     .fleet-ops-table td:first-child {
       color: #b8c0cc;
@@ -416,8 +425,8 @@
         .sort((a, b) => b[1].totalFee - a[1].totalFee)
         .slice(0, 5); // Top 5 operations
       
-      const fleetColors = ['#34d399', '#60a5fa', '#f59e0b', '#ef4444', '#a78bfa'];
-      const opColors = ['#06b6d4', '#8b5cf6', '#ec4899', '#10b981', '#f97316'];
+      const fleetColors = ['#34d399', '#60a5fa', '#f59e0b', '#a78bfa', '#ec4899'];
+      const opColors = ['#06b6d4', '#8b5cf6', '#f97316', '#10b981', '#fbbf24'];
       
       let html = `
         <div class="stats-grid">
@@ -555,13 +564,17 @@
       const ctx = canvas.getContext('2d');
       const legend = document.getElementById(legendId);
       
-      // Set canvas size
-      canvas.width = 120;
-      canvas.height = 120;
+      // Set canvas size with higher resolution
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = 100 * dpr;
+      canvas.height = 100 * dpr;
+      canvas.style.width = '100px';
+      canvas.style.height = '100px';
+      ctx.scale(dpr, dpr);
       
-      const centerX = 60;
-      const centerY = 60;
-      const radius = 50;
+      const centerX = 50;
+      const centerY = 50;
+      const radius = 45;
       
       const total = data.reduce((sum, item) => sum + item.value, 0);
       
@@ -578,6 +591,11 @@
         ctx.fillStyle = item.color;
         ctx.fill();
         
+        // Add subtle border between slices
+        ctx.strokeStyle = '#0b0e1a';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
         currentAngle += sliceAngle;
       });
       
@@ -588,7 +606,7 @@
         legendHtml += `
           <div class="legend-item">
             <div class="legend-color" style="background: ${item.color}"></div>
-            <div class="legend-label">${item.label}</div>
+            <div class="legend-label" title="${item.label}">${item.label}</div>
             <div class="legend-value">${percentage}%</div>
           </div>
         `;
