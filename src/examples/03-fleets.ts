@@ -97,13 +97,13 @@ export async function getFleets(rpcEndpoint: string, rpcWebsocket: string, walle
       console.log('Searching for rented fleets via wallet transactions...');
       const walletSignatures = await connection.getSignaturesForAddress(
         new PublicKey(walletAuthority),
-        { limit: 100 } // Last 100 transactions should be enough
+        { limit: 1000 } // Scan up to 1000 transactions
       );
       
       console.log(`Found ${walletSignatures.length} recent wallet transactions`);
       
       // Check each transaction for fleet accounts
-      for (const sig of walletSignatures.slice(0, 50)) { // Check last 50 to avoid rate limits
+      for (const sig of walletSignatures.slice(0, 1000)) { // Increased to 1000 to find low-activity rentals
         try {
           const tx = await connection.getParsedTransaction(
             sig.signature,
@@ -367,7 +367,7 @@ export async function getFleets(rpcEndpoint: string, rpcWebsocket: string, walle
         isRented: isRented
       };
     });
-  
+
   return {
     fleets: fleetsData,
     walletAuthority: walletAuthority
