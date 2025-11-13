@@ -1,4 +1,29 @@
-// Main application logic for SAGE Fleet Fees Analysis
+// Main application logic for SAGE Fleet Fees Analysis + Market tab
+
+// Tabs handling
+function showFees() {
+  document.getElementById('fees-view').style.display = '';
+  document.getElementById('market-view').style.display = 'none';
+  document.getElementById('tab-fees').classList.add('tab-active');
+  document.getElementById('tab-market').classList.remove('tab-active');
+}
+
+function showMarket() {
+  document.getElementById('fees-view').style.display = 'none';
+  document.getElementById('market-view').style.display = '';
+  document.getElementById('tab-market').classList.add('tab-active');
+  document.getElementById('tab-fees').classList.remove('tab-active');
+  if (!marketState._bootstrapped) {
+    bootstrapMarket();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const tf = document.getElementById('tab-fees');
+  const tm = document.getElementById('tab-market');
+  if (tf) tf.addEventListener('click', showFees);
+  if (tm) tm.addEventListener('click', showMarket);
+});
 
 async function analyzeFees() {
   const profileId = document.getElementById('profileId').value.trim();
@@ -114,12 +139,37 @@ async function analyzeFees() {
     
     console.log('Analysis complete. Transactions:', data.transactionCount24h);
     
-    // Collect rented fleet names from fleet list (fallback if backend didn't tag)
-    const rentedFleetNames = new Set(
-      fleets
-        .filter(f => fleetRentalStatus[f.key] || fleetRentalStatus[f.data.fleetShips])
-        .map(f => f.callsign)
-    );
+    // Start from backend authoritative rented accounts (if provided)
+    try {
+      const backendRented = new Set(data.rentedFleetAccounts || []);
+      backendRented.forEach(acc => rentedFleetAccounts.add(acc));
+    } catch {}
+
+    // Collect rented fleet names from fleet list and backend map
+    const rentedFleetNames = new Set();
+    try {
+      const nameMap = { ...(fleetNames || {}), ...(data.fleetAccountNamesEcho || {}) };
+      // From local fleet list
+      fleets.forEach(f => {
+        const isRented = !!(fleetRentalStatus[f.key] || fleetRentalStatus[f.data.fleetShips]);
+        if (isRented) rentedFleetNames.add(f.callsign);
+      });
+      // From backend rented accounts
+      (data.rentedFleetAccounts || []).forEach(acc => {
+        const n = nameMap[acc];
+        if (n) rentedFleetNames.add(String(n));
+      });
+    } catch {}
+
+    // Ensure backend results carry rental flag by fleet name too
+    try {
+      Object.entries(data.feesByFleet || {}).forEach(([name, entry]) => {
+        const isRent = rentedFleetNames.has(String(name)) || rentedFleetNames.has(String(name).trim());
+        if (isRent) {
+          entry.isRented = true;
+        }
+      });
+    } catch {}
 
     // Display results
     displayResults(data, fleetNames, rentedFleetNames, rentedFleetAccounts);
@@ -399,4 +449,175 @@ function drawPieChart(canvasId, legendId, data) {
   });
   legendHtml += '</table>';
   legend.innerHTML = legendHtml;
+}
+
+// -------------------- Market Tab --------------------
+
+const marketState = {
+  items: [],
+  marketSummary: null,
+  loading: false,
+  searchTerm: '',
+  filter: 'all',
+  sortBy: 'name',
+  error: null,
+  backendStatus: 'checking',
+  _bootstrapped: false
+};
+
+function bootstrapMarket() {
+  marketState._bootstrapped = true;
+  const search = document.getElementById('marketSearch');
+  const filter = document.getElementById('marketFilter');
+  const sort = document.getElementById('marketSort');
+  const refresh = document.getElementById('marketRefreshBtn');
+  if (search) search.addEventListener('input', (e) => { marketState.searchTerm = e.target.value; renderMarket(); });
+  if (filter) filter.addEventListener('change', (e) => { marketState.filter = e.target.value; renderMarket(); });
+  if (sort) sort.addEventListener('change', (e) => { marketState.sortBy = e.target.value; renderMarket(); });
+  if (refresh) refresh.addEventListener('click', fetchMarketData);
+  checkBackendAndLoad();
+}
+
+async function checkBackendAndLoad() {
+  try {
+    const res = await fetch('/health');
+    if (res.ok) {
+      marketState.backendStatus = 'connected';
+      fetchMarketData();
+    } else {
+      marketState.backendStatus = 'error';
+      marketState.error = 'Backend risponde ma con errore';
+      renderMarket();
+    }
+  } catch (e) {
+    marketState.backendStatus = 'offline';
+    marketState.error = 'Backend non raggiungibile.';
+    renderMarket();
+  }
+}
+
+async function fetchMarketData() {
+  marketState.loading = true; marketState.error = null; renderMarket();
+  try {
+    const [itemsRes, summaryRes] = await Promise.all([
+      fetch('/api/market/items-with-prices'),
+      fetch('/api/market/market-summary').catch(() => null)
+    ]);
+    if (!itemsRes.ok) throw new Error(`HTTP ${itemsRes.status}`);
+    marketState.items = await itemsRes.json();
+    if (summaryRes && summaryRes.ok) marketState.marketSummary = await summaryRes.json();
+    marketState.backendStatus = 'connected';
+  } catch (e) {
+    marketState.error = e.message || String(e);
+    marketState.backendStatus = 'error';
+  } finally {
+    marketState.loading = false;
+    renderMarket();
+  }
+}
+
+function getFilteredMarketItems() {
+  return marketState.items
+    .filter(item => {
+      const term = (marketState.searchTerm || '').toLowerCase();
+      const matches = (item.name || '').toLowerCase().includes(term) || (item.symbol || '').toLowerCase().includes(term);
+      if (marketState.filter === 'all') return matches;
+      if (marketState.filter === 'resources') return matches && item.itemType === 'resource';
+      if (marketState.filter === 'ships') return matches && item.itemType === 'ship';
+      if (marketState.filter === 'collectibles') return matches && item.itemType === 'collectible';
+      if (marketState.filter === 'with-prices') return matches && item.marketData !== null;
+      return matches;
+    })
+    .sort((a, b) => {
+      switch (marketState.sortBy) {
+        case 'name': return (a.name || '').localeCompare(b.name || '');
+        case 'price-high': return (b.marketData?.midPrice || 0) - (a.marketData?.midPrice || 0);
+        case 'price-low': return ((a.marketData?.midPrice ?? Infinity) - (b.marketData?.midPrice ?? Infinity));
+        case 'volume': {
+          const aVol = (a.marketData?.buyOrderCount || 0) + (a.marketData?.sellOrderCount || 0);
+          const bVol = (b.marketData?.buyOrderCount || 0) + (b.marketData?.sellOrderCount || 0);
+          return bVol - aVol;
+        }
+        default: return 0;
+      }
+    });
+}
+
+function renderMarket() {
+  const statusEl = document.getElementById('market-status');
+  const statsEl = document.getElementById('market-stats');
+  const resultsEl = document.getElementById('market-results');
+  if (!statusEl || !resultsEl) return;
+
+  // Status
+  if (marketState.loading) {
+    statusEl.style.display = '';
+    statusEl.textContent = 'Loading market data...';
+  } else if (marketState.error) {
+    statusEl.style.display = '';
+    statusEl.textContent = `Error: ${marketState.error}`;
+  } else {
+    statusEl.style.display = 'none';
+  }
+
+  // Stats
+  if (marketState.marketSummary) {
+    statsEl.style.display = '';
+    const s = marketState.marketSummary;
+    statsEl.innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-value">${(s.totalOrders||0).toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">Buy Orders</div><div class="stat-value">${(s.buyOrders||0).toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">Sell Orders</div><div class="stat-value">${(s.sellOrders||0).toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">Unique Assets</div><div class="stat-value">${(s.uniqueAssets||0).toLocaleString()}</div></div>
+    `;
+  } else {
+    statsEl.style.display = 'none';
+  }
+
+  // Table
+  const items = getFilteredMarketItems();
+  if (!items.length) {
+    resultsEl.innerHTML = marketState.loading ? '' : '<div class="loading">No items for filters.</div>';
+    return;
+  }
+
+  let html = `
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Type</th>
+          <th>Rarity</th>
+          <th class="num">Best Bid</th>
+          <th class="num">Best Ask</th>
+          <th class="num">Mid Price</th>
+          <th class="num">Orders</th>
+          <th class="num">Supply</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  items.forEach(item => {
+    const md = item.marketData || {};
+    const bid = md.bestBid != null ? Number(md.bestBid).toFixed(4) : '-';
+    const ask = md.bestAsk != null ? Number(md.bestAsk).toFixed(4) : '-';
+    const mid = md.midPrice != null ? Number(md.midPrice).toFixed(4) : '-';
+    const ocount = (md.buyOrderCount || 0) + (md.sellOrderCount || 0);
+    html += `
+      <tr>
+        <td>${item.name || ''}<div style="color:#7a8ba0; font-size:10px;">${item.symbol || ''}</div></td>
+        <td>${item.itemType || ''}</td>
+        <td>${item.rarity || 'common'}</td>
+        <td class="num">${bid}</td>
+        <td class="num">${ask}</td>
+        <td class="num">${mid}</td>
+        <td class="num">${ocount}</td>
+        <td class="num">${(item.totalSupply ?? 0).toLocaleString()}</td>
+      </tr>
+    `;
+  });
+
+  html += '</tbody></table>';
+  resultsEl.innerHTML = html;
 }

@@ -17,9 +17,11 @@
     "@staratlas/data-source": "^0.7.3",
     "@staratlas/player-profile": "^0.7.3",
     "@staratlas/sage": "^1.0.0",
+    "@staratlas/factory": "^0.7.1",
     "bn.js": "^5.2.1",
     "bs58": "^5.0.0",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "node-cache": "^5.1.2"
   },
   "devDependencies": {
     "@types/bn.js": "^5.2.0",

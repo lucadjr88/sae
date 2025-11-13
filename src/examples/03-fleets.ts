@@ -55,25 +55,31 @@ export async function getFleets(rpcEndpoint: string, rpcWebsocket: string, walle
   let walletAuthority: string | null = null;
   const additionalFleetKeys = new Set<string>();
   
-  // First, derive wallet from owned fleet's transaction
+  // First, derive wallet by scanning recent tx across fleets and counting fee payers
   if (fleets.length > 0) {
     try {
-      const firstFleetKey = (fleets[0] as any).key.toString();
-      const signatures = await connection.getSignaturesForAddress(
-        new PublicKey(firstFleetKey),
-        { limit: 1 }
-      );
-      
-      if (signatures.length > 0) {
-        const tx = await connection.getParsedTransaction(
-          signatures[0].signature,
-          { maxSupportedTransactionVersion: 0 }
-        );
-        
-        if (tx && tx.transaction.message.accountKeys.length > 0) {
-          walletAuthority = tx.transaction.message.accountKeys[0].pubkey.toString();
-          console.log('Derived wallet authority:', walletAuthority);
+      const payerCounts = new Map<string, number>();
+      const sampleFleets = fleets.slice(0, Math.min(10, fleets.length));
+      for (const f of sampleFleets) {
+        const fleetKey = (f as any).key.toString();
+        const signatures = await connection.getSignaturesForAddress(new PublicKey(fleetKey), { limit: 3 });
+        for (const sig of signatures) {
+          try {
+            const tx = await connection.getParsedTransaction(sig.signature, { maxSupportedTransactionVersion: 0 });
+            const feePayer = tx?.transaction.message.accountKeys?.[0]?.pubkey?.toString();
+            if (feePayer) payerCounts.set(feePayer, (payerCounts.get(feePayer) || 0) + 1);
+          } catch {}
         }
+      }
+      // Pick the most frequent payer
+      let topPayer: string | null = null;
+      let topCount = 0;
+      for (const [payer, count] of payerCounts.entries()) {
+        if (count > topCount) { topCount = count; topPayer = payer; }
+      }
+      if (topPayer) {
+        walletAuthority = topPayer;
+        console.log('Derived wallet authority (tallied):', walletAuthority, 'from', topCount, 'occurrences');
       }
     } catch (error) {
       console.error('Error deriving wallet:', error);

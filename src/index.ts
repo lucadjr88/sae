@@ -7,6 +7,7 @@ import { getFleets } from './examples/03-fleets.js';
 import { getPlanets } from './examples/04-planets.js';
 import { getShipsForFleet } from './examples/05-compose-fleet.js';
 import { getFleetTransactions, getWalletSageTransactions, getWalletSageFeesDetailed } from './examples/06-transactions.js';
+import { createMarketRouter } from './market/routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +35,11 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
+// Health check
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
+});
+
 // API: 01 - Game Info
 app.get('/api/game', async (req, res) => {
   try {
@@ -57,6 +63,9 @@ app.post('/api/profile', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Market API routes mounted under /api/market
+app.use('/api/market', createMarketRouter(RPC_ENDPOINT));
 
 // API: 03 - Fleets
 app.post('/api/fleets', async (req, res) => {
@@ -151,6 +160,45 @@ app.post('/api/wallet-sage-fees-detailed', async (req, res) => {
     console.error('❌ /api/wallet-sage-fees-detailed error:', err.message);
     console.error('Stack:', err.stack);
     res.status(500).json({ error: err.message, details: err.stack });
+  }
+});
+
+// Diagnostics: Fleet account/name/rental map for a profile
+app.post('/api/diagnostics/fleet-map', async (req, res) => {
+  const { profileId } = req.body;
+  if (!profileId) {
+    return res.status(400).json({ error: 'profileId required' });
+  }
+  try {
+    const { fleets, walletAuthority } = await getFleets(RPC_ENDPOINT, RPC_WEBSOCKET, WALLET_PATH, profileId);
+    const map: { [account: string]: { name: string; isRented: boolean } } = {};
+    const rows = fleets.map((f: any) => {
+      const name = f.callsign;
+      const isRented = !!f.isRented;
+      const accounts = [
+        f.key,
+        f.data?.fleetShips,
+        f.data?.fuelTank,
+        f.data?.ammoBank,
+        f.data?.cargoHold,
+      ].filter((x: string | undefined) => !!x);
+      accounts.forEach((acc: string) => { map[acc] = { name, isRented }; });
+      return {
+        name,
+        key: f.key,
+        fleetShips: f.data?.fleetShips,
+        fuelTank: f.data?.fuelTank,
+        ammoBank: f.data?.ammoBank,
+        cargoHold: f.data?.cargoHold,
+        owningProfile: f.data?.owningProfile?.toString?.() || null,
+        subProfile: f.data?.subProfile?.toString?.() || null,
+        isRented,
+      };
+    });
+    res.json({ success: true, walletAuthority, rows, map });
+  } catch (err: any) {
+    console.error('❌ /api/diagnostics/fleet-map error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

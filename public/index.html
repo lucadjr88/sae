@@ -9,18 +9,55 @@
 </head>
 <body>
   <div class="container">
-    <h1>SAGE Fleet Fees Analysis</h1>
-    
-    <div class="form-box">
-      <label for="profileId">Profile ID</label>
-      <input 
-        type="text" 
-        id="profileId" 
-      >
-      <button onclick="analyzeFees()" id="analyzeBtn">Analyze 24h</button>
+    <div class="tabs">
+      <button id="tab-fees" class="tab tab-active" type="button">Fleet Fees</button>
+      <button id="tab-market" class="tab" type="button">Market</button>
     </div>
 
-    <div id="results"></div>
+    <div id="fees-view">
+      <h1>SAGE Fleet Fees Analysis</h1>
+      <div class="form-box">
+        <label for="profileId">Profile ID</label>
+        <input type="text" id="profileId">
+        <button onclick="analyzeFees()" id="analyzeBtn">Analyze 24h</button>
+      </div>
+      <div id="results"></div>
+    </div>
+
+    <div id="market-view" style="display:none;">
+      <h1>Star Atlas Market Tracker</h1>
+      <div class="form-box" style="gap:8px; flex-wrap:wrap;">
+        <div style="display:flex; gap:8px; align-items:center; flex:1; min-width:260px;">
+          <label for="marketSearch">Search</label>
+          <input type="text" id="marketSearch" placeholder="name or symbol...">
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <label for="marketFilter">Filter</label>
+          <select id="marketFilter">
+            <option value="all">All</option>
+            <option value="ships">Ships</option>
+            <option value="resources">Resources</option>
+            <option value="collectibles">Collectibles</option>
+            <option value="with-prices">With Prices</option>
+          </select>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <label for="marketSort">Sort</label>
+          <select id="marketSort">
+            <option value="name">Name</option>
+            <option value="price-high">Price (High)</option>
+            <option value="price-low">Price (Low)</option>
+            <option value="volume">Order Volume</option>
+          </select>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:8px;">
+          <button id="marketRefreshBtn" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="market-status" class="loading">Checking backend...</div>
+      <div id="market-stats" class="stats-grid" style="display:none;"></div>
+      <div id="market-results"></div>
+    </div>
   </div>
 </body>
 </html>

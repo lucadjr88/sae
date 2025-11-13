@@ -25,21 +25,40 @@ export interface FleetOperation {
 }
 
 export async function getAccountTransactions(
-  rpcEndpoint: string, 
-  rpcWebsocket: string, 
+  rpcEndpoint: string,
+  rpcWebsocket: string,
   accountPubkey: string,
-  limit: number = 50
+  limit: number = 50,
+  sinceUnixMs?: number,
+  maxSignatures: number = 5000
 ): Promise<TransactionInfo[]> {
   const connection = newConnection(rpcEndpoint, rpcWebsocket);
   const pubkey = new PublicKey(accountPubkey);
 
-  // Get signatures for address
-  const signatures = await connection.getSignaturesForAddress(pubkey, { limit });
+  // Paginate signatures until reaching cutoff or maxSignatures
+  const allSignatures: ConfirmedSignatureInfo[] = [] as any;
+  let before: string | undefined = undefined;
+  let done = false;
+  while (!done) {
+    const batch = await connection.getSignaturesForAddress(pubkey, { limit: Math.min(1000, limit), before });
+    if (batch.length === 0) break;
+    allSignatures.push(...batch);
+    const last = batch[batch.length - 1];
+    before = last.signature;
+    // Stop if we passed cutoff time
+    if (sinceUnixMs && last.blockTime && (last.blockTime * 1000) < sinceUnixMs) {
+      done = true;
+    }
+    // Stop if reached caps
+    if (allSignatures.length >= maxSignatures || allSignatures.length >= limit) {
+      done = true;
+    }
+  }
 
   // Get transaction details
   const transactions: TransactionInfo[] = [];
-  
-  for (const sig of signatures) {
+
+  for (const sig of allSignatures) {
     const tx = await connection.getParsedTransaction(sig.signature, { 
       maxSupportedTransactionVersion: 0,
       commitment: 'confirmed'
@@ -196,6 +215,10 @@ export async function getWalletSageFeesDetailed(
   feesByOperation: { [operation: string]: { count: number; totalFee: number; avgFee: number } };
   transactions: TransactionInfo[];
   unknownOperations: number;
+  // Extra mapping to strengthen rental attribution on the client
+  rentedFleetAccounts: string[];
+  fleetAccountNamesEcho: { [account: string]: string };
+  fleetRentalStatusFinal: { [account: string]: boolean };
 }> {
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   const connection = newConnection(rpcEndpoint, rpcWebsocket);
@@ -221,17 +244,19 @@ export async function getWalletSageFeesDetailed(
   console.log(`[DEBUG] Specific fleet accounts (after filtering): ${specificFleetAccounts.length}`);
   specificFleetAccounts.forEach((fleet, i) => console.log(`  Specific Fleet ${i}: ${fleet.substring(0, 8)}...`));
   
-  // Get all transactions for wallet (last 1000 to ensure we get 24h)
+  // Compute cutoff for the analysis window
+  const now = Date.now();
+  const cutoffTime = now - (hours * 60 * 60 * 1000);
+
+  // Get all transactions for wallet (paginate until cutoff to ensure we get 24h)
   const allTransactions = await getAccountTransactions(
     rpcEndpoint,
     rpcWebsocket,
     walletPubkey,
-    1000
+    5000,
+    cutoffTime,
+    10000
   );
-
-  // Filter transactions from last 24h
-  const now = Date.now();
-  const cutoffTime = now - (hours * 60 * 60 * 1000);
   
   const recent24h = allTransactions.filter(tx => {
     const txTime = new Date(tx.timestamp).getTime();
@@ -648,22 +673,24 @@ export async function getWalletSageFeesDetailed(
     const fleetKey = involvedFleetName || 'NONE';
     
     if (!feesByFleet[fleetKey]) {
-      // Initialize fleet entry with rental status if available
-      let isRented = involvedFleet && fleetRentalStatus[involvedFleet] ? fleetRentalStatus[involvedFleet] : false;
-      // Override with rental operation detection
-      if (involvedFleet && rentedFleets.has(involvedFleet)) {
-        isRented = true;
-      }
+      // Initialize fleet entry; rental status computed below per-transaction and OR-ed in
       feesByFleet[fleetKey] = { 
         totalFee: 0, 
         feePercentage: 0, 
         totalOperations: 0, 
-        isRented: isRented,
+        isRented: false,
         operations: {} 
       };
     }
     const fleetEntry = feesByFleet[fleetKey];
     fleetEntry.totalFee += tx.fee;
+    // Compute rental status for this tx and propagate
+    let txRented = false;
+    if (involvedFleet) {
+      if (fleetRentalStatus[involvedFleet]) txRented = true;
+      if (rentedFleets.has(involvedFleet)) txRented = true;
+    }
+    fleetEntry.isRented = !!(fleetEntry.isRented || txRented);
     if (!fleetEntry.operations[groupedOperation]) {
       fleetEntry.operations[groupedOperation] = { count: 0, totalFee: 0, avgFee: 0, percentageOfFleet: 0 };
     }
@@ -702,6 +729,15 @@ export async function getWalletSageFeesDetailed(
     console.log(`  ${fleet}: ${totalOps} total operations, ${(data.totalFee / 1000000000).toFixed(6)} SOL`);
   });
 
+  // Build final rental status, combining input map with detected rental ops
+  const fleetRentalStatusFinal: { [account: string]: boolean } = { ...(fleetRentalStatus || {}) };
+  for (const acc of rentedFleets) {
+    fleetRentalStatusFinal[acc] = true;
+  }
+  const rentedFleetAccounts = Object.entries(fleetRentalStatusFinal)
+    .filter(([_, v]) => !!v)
+    .map(([k]) => k);
+
   return {
     walletAddress: walletPubkey,
     period: `Last ${hours} hours`,
@@ -711,6 +747,9 @@ export async function getWalletSageFeesDetailed(
     feesByFleet,
     feesByOperation,
     transactions: recent24h,
-    unknownOperations
+    unknownOperations,
+    rentedFleetAccounts,
+    fleetAccountNamesEcho: fleetAccountNames || {},
+    fleetRentalStatusFinal
   };
 }
