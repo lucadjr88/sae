@@ -184,6 +184,7 @@ function displayResults(data, fleetNames, rentedFleetNames = new Set(), rentedFl
     </div>
 
   <h2 class="section-title">Fleet Breakdown <span class="legend-rented"><span class="legend-dot"></span> RENTED</span></h2>
+    <div class="rented-debug" id="rentedDebug"></div>
     <div id="fleetList"></div>
 
     <h2 class="section-title">Operations Summary</h2>
@@ -221,6 +222,15 @@ function displayResults(data, fleetNames, rentedFleetNames = new Set(), rentedFl
   
   // Create fleet list with fold/unfold
   createFleetList(data, fleetNames, rentedFleetNames, rentedFleetAccounts);
+
+  // Populate small debug line with detected rented fleet names
+  try {
+    const dbg = document.getElementById('rentedDebug');
+    const names = Array.from(rentedFleetNames);
+    if (dbg && names.length) {
+      dbg.textContent = `Detected RENTED: ${names.join(', ')}`;
+    }
+  } catch {}
   
   // Draw pie charts
   drawPieChart('fleetChart', 'fleetLegend', sortedFleets.map(([name, data], index) => ({
@@ -287,7 +297,7 @@ function createFleetList(data, fleetNames, rentedFleetNames = new Set(), rentedF
     const rentalBadge = isRented ? '<span class="rental-badge">RENTED</span>' : '';
     const nameClass = isRented ? 'fleet-name rented-name' : 'fleet-name';
     const nameInner = isRented
-      ? `<span class="rented-name" style="color:#fbbf24;font-weight:800">${fleetName}</span>`
+      ? `<span class="rented-name" style="color:#fbbf24;font-weight:800">[RENTED] ${fleetName}</span>`
       : `${fleetName}`;
     
     html += `

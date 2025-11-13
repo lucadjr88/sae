@@ -185,6 +185,13 @@ h1 {
   font-weight: 700;
 }
 
+.rented-debug {
+  margin: 6px 0 8px 0;
+  color: #fbbf24;
+  font-size: 10px;
+  opacity: 0.9;
+}
+
 .fleet-header .fleet-ops {
   text-align: right;
   color: #7a8ba0;
