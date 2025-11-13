@@ -17,21 +17,23 @@ export function createMarketRouter(rpcEndpoint: string) {
 
   let gmOrderbookService: GmOrderbookService | null = null;
 
-  async function initializeOrderbookService() {
+  function initializeOrderbookService() {
     try {
       gmOrderbookService = new GmOrderbookService(connection, programId, 60);
-      await gmOrderbookService.initialize();
-      // eslint-disable-next-line no-console
-      console.log('✅ Market: GmOrderbookService initialized');
+      gmOrderbookService.initialize()
+        .then(() => {
+          console.log('✅ Market: GmOrderbookService initialized');
+        })
+        .catch((error) => {
+          console.error('❌ Market: Error initializing GmOrderbookService:', error);
+        });
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('❌ Market: Error initializing GmOrderbookService:', error);
-      // Continue without orderbook service; some endpoints will return 503
+      console.error('❌ Market: Error constructing GmOrderbookService:', error);
     }
   }
 
-  // Init in background
-  initializeOrderbookService().catch(() => {/* noop */});
+  // Init in background, never await
+  initializeOrderbookService();
 
   // GET /api/market/items - Galaxy NFTs
   router.get('/items', async (_req, res) => {

@@ -3,6 +3,29 @@ import { Commitment, Connection, Keypair } from "@solana/web3.js";
 
 const confirmTransactionInitialTimeout = 60000;
 
+// Exponential backoff helper for rate limits (429 errors)
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 500
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      const is429 = error?.message?.includes('429') || error?.response?.status === 429;
+      if (is429 && attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.log(`⏳ Rate limited (429), retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
+  }
+  throw new Error('withRetry: unreachable');
+}
+
 const providerOptions = {
     preflightCommitment: 'confirmed' as Commitment,
     commitment: 'confirmed' as Commitment,

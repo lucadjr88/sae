@@ -2,7 +2,7 @@ import { Program } from "@project-serum/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { byteArrayToString, readAllFromRPC } from "@staratlas/data-source";
 import { Fleet, SAGE_IDL } from "@staratlas/sage";
-import { newConnection, newAnchorProvider } from '../utils/anchor-setup.js';
+import { newConnection, newAnchorProvider, withRetry } from '../utils/anchor-setup.js';
 import { loadKeypair } from '../utils/wallet-setup.js';
 
 const SAGE_PROGRAM_ID = "SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE";
@@ -54,6 +54,11 @@ export async function getFleets(rpcEndpoint: string, rpcWebsocket: string, walle
   // This catches borrowed/rented fleets that don't have player profile in subProfile
   let walletAuthority: string | null = null;
   const additionalFleetKeys = new Set<string>();
+  // Track fleets discovered via heuristics to mark them as rented later
+  const walletHeuristicKeys = new Set<string>();
+  const srslyHeuristicKeys = new Set<string>();
+  // Track fleets that show recent usage by the derived wallet (fee payer)
+  const operatedByWalletKeys = new Set<string>();
   
   // First, derive wallet by scanning recent tx across fleets and counting fee payers
   if (fleets.length > 0) {
@@ -158,6 +163,7 @@ export async function getFleets(rpcEndpoint: string, rpcWebsocket: string, walle
             fleets.push(wrapped);
             knownFleetKeys.add(fleetKey);
             console.log(`Added rented fleet (wallet heuristic): ${byteArrayToString((accountData as any).fleetLabel)}`);
+            walletHeuristicKeys.add(fleetKey);
           }
         } catch (error) {
           console.error(`Error fetching fleet ${fleetKey}:`, error);
@@ -166,13 +172,34 @@ export async function getFleets(rpcEndpoint: string, rpcWebsocket: string, walle
     } catch (error) {
       console.error('Error searching for rented fleets:', error);
     }
+
+    // Additionally: mark fleets that clearly show recent usage by this wallet as RENTED if not owned by player
+    try {
+      const sample = fleets.filter((f: any) => f && (f as any).key).slice(0, Math.min(20, fleets.length));
+      for (const f of sample) {
+        const fk = (f as any).key.toString();
+        try {
+          const sigs = await connection.getSignaturesForAddress(new PublicKey(fk), { limit: 2 });
+          let usedByWallet = false;
+          for (const s of sigs) {
+            try {
+              const tx = await connection.getParsedTransaction(s.signature, { maxSupportedTransactionVersion: 0 });
+              const payer = tx?.transaction.message.accountKeys?.[0]?.pubkey?.toString();
+              if (payer === walletAuthority) { usedByWallet = true; break; }
+            } catch {}
+          }
+          if (usedByWallet) operatedByWalletKeys.add(fk);
+        } catch {}
+      }
+      console.log(`Wallet usage evidence on ${operatedByWalletKeys.size} fleets`);
+    } catch {}
   }
 
   // NEW: SRSLY rentals scan - identify fleets referenced by the rentals program for this profile
   try {
     console.log('Scanning SRSLY rentals to augment rented fleets...');
     const srslyProgramKey = new PublicKey(SRSLY_PROGRAM_ID);
-    const accounts = await connection.getProgramAccounts(srslyProgramKey);
+    const accounts = await withRetry(() => connection.getProgramAccounts(srslyProgramKey));
 
     // Helper to find byte subsequence
     const bufIncludes = (haystack: Uint8Array, needle: Uint8Array) => {
@@ -237,6 +264,7 @@ export async function getFleets(rpcEndpoint: string, rpcWebsocket: string, walle
           fleets.push(wrapped);
           knownFleetKeys.add(k);
           console.log(`Added rented fleet (SRSLY): ${byteArrayToString((accountData as any).fleetLabel)}`);
+          srslyHeuristicKeys.add(k);
         }
       } catch (e) {
         console.error(`Failed to fetch SRSLY-discovered fleet ${k}:`, e);
@@ -250,17 +278,93 @@ export async function getFleets(rpcEndpoint: string, rpcWebsocket: string, walle
     throw new Error('No fleets found');
   }
 
+  // Pre-extract owningProfile and subProfile from raw account bytes for robustness
+  const keyList: PublicKey[] = fleets
+    .filter((f: any) => f && f.type === 'ok' && (f as any).key)
+    .map((f: any) => (f as any).key as PublicKey);
+
+  const ownerByKey = new Map<string, string | null>();
+  const subByKey = new Map<string, string | null>();
+  try {
+    const chunkSize = 50;
+    for (let i = 0; i < keyList.length; i += chunkSize) {
+      const chunk = keyList.slice(i, i + chunkSize);
+      const infos = await connection.getMultipleAccountsInfo(chunk);
+      for (let j = 0; j < chunk.length; j++) {
+        const info = infos[j];
+        const k = chunk[j].toBase58();
+        if (info?.data && info.data.length >= 105) {
+          try {
+            const ownerPk = new PublicKey(info.data.slice(41, 73)).toBase58();
+            const subPk = new PublicKey(info.data.slice(73, 105)).toBase58();
+            ownerByKey.set(k, ownerPk);
+            subByKey.set(k, subPk);
+          } catch {
+            ownerByKey.set(k, null);
+            subByKey.set(k, null);
+          }
+        } else {
+          ownerByKey.set(k, null);
+          subByKey.set(k, null);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to pre-extract owner/subProfile from accounts:', e);
+  }
+
   const fleetsData = fleets
     .filter((f: any) => f.type === 'ok')
     .map((fleet: any) => {
-      const isRented = fleet.data.data.subProfile && 
-                       fleet.data.data.subProfile.toString() === playerProfilePubkey.toString();
+      const subProfile = fleet.data.data.subProfile;
+      const owningProfile = fleet.data.data.owningProfile;
+      const keyStr = fleet.key.toString();
+
+      // Resolve base58 strings using raw account bytes first, then fallbacks
+      const ownerStr = ownerByKey.get(keyStr) ?? (typeof (owningProfile as any)?.toBase58 === 'function'
+        ? (owningProfile as any).toBase58()
+        : (typeof (owningProfile as any)?.toString === 'function'
+          ? (owningProfile as any).toString()
+          : null));
+      const subStr = subByKey.get(keyStr) ?? (typeof (subProfile as any)?.toBase58 === 'function'
+        ? (subProfile as any).toBase58()
+        : (typeof (subProfile as any)?.toString === 'function'
+          ? (subProfile as any).toString()
+          : null));
+      
+      // A fleet is RENTED when any of the following is true:
+      // 1) You are the subProfile (you use it) AND you are NOT the owner
+      // 2) It was discovered via wallet heuristic AND it's not owned by you
+      // 3) It was discovered via SRSLY rental scan AND it's not owned by you
+      const rentedBySubProfile = !!(
+        subStr &&
+        subStr === playerProfilePubkey.toBase58() &&
+        ownerStr &&
+        ownerStr !== playerProfilePubkey.toBase58()
+      );
+      const rentedByWalletHeuristic = !!(
+        (walletHeuristicKeys.has(keyStr) || operatedByWalletKeys.has(keyStr)) &&
+        // treat unknown owner as not owned by player
+        (ownerStr ? (ownerStr !== playerProfilePubkey.toBase58()) : true)
+      );
+      const rentedBySrsly = !!(
+        srslyHeuristicKeys.has(keyStr) &&
+        (ownerStr ? (ownerStr !== playerProfilePubkey.toBase58()) : true)
+      );
+      const isRented = rentedBySubProfile || rentedByWalletHeuristic || rentedBySrsly;
+
+      try {
+        const name = byteArrayToString(fleet.data.data.fleetLabel) || '<unnamed>';
+        console.log(
+          `[fleets] ${name} | key=${keyStr} | owner=${ownerStr} | sub=${subStr} | flags: subMatch=${subStr===playerProfilePubkey.toString()} ownerMatch=${ownerStr===playerProfilePubkey.toString()} walletHeuristic=${walletHeuristicKeys.has(keyStr)} srslyHeuristic=${srslyHeuristicKeys.has(keyStr)} => isRented=${isRented}`
+        );
+      } catch {}
+      
       return {
         callsign: byteArrayToString(fleet.data.data.fleetLabel),
         key: fleet.key.toString(),
         data: fleet.data.data,
-        // If subProfile matches, or if not owned by this profile but discovered via SRSLY/wallet heuristics, mark rented
-        isRented: isRented || (fleet.data.data.owningProfile && fleet.data.data.owningProfile.toString() !== playerProfilePubkey.toString())
+        isRented: isRented
       };
     });
   

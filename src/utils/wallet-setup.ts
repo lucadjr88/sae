@@ -11,8 +11,7 @@ export function loadKeypair(walletPath: string): Keypair {
     // If wallet path doesn't exist, generate a temporary keypair
     // This allows the server to run in read-only mode without requiring a wallet file
     if (!fs.existsSync(walletPath)) {
-        console.warn(`⚠️  Wallet file not found: ${walletPath}`);
-        console.warn('⚠️  Generating temporary keypair (read-only mode)');
+        console.info('ℹ️  Using ephemeral provider keypair; analysis wallet is derived per profile request');
         return Keypair.generate();
     }
     
