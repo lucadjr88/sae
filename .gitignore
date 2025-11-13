@@ -44,3 +44,6 @@ node_modules
 
 # Persistent runtime cache (do not commit)
 cache/
+
+# Heavy art assets folder (keep out of repo)
+Star Atlas_ Build/
