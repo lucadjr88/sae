@@ -8,6 +8,7 @@ import { getPlanets } from './examples/04-planets.js';
 import { getShipsForFleet } from './examples/05-compose-fleet.js';
 import { getFleetTransactions, getWalletSageTransactions, getWalletSageFeesDetailed } from './examples/06-transactions.js';
 import { createMarketRouter } from './market/routes.js';
+import { getCacheDataOnly, setCache } from './utils/persist-cache.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,7 +58,16 @@ app.post('/api/profile', async (req, res) => {
     return res.status(400).json({ error: 'profileId required' });
   }
   try {
+    const refresh = (req.query.refresh === 'true') || (req.body && req.body.refresh === true);
+    if (!refresh) {
+      const cached = await getCacheDataOnly<any>('profile', profileId);
+      if (cached) {
+        res.setHeader('X-Cache-Hit', 'disk');
+        return res.json(cached);
+      }
+    }
     const result = await getPlayerProfile(RPC_ENDPOINT, RPC_WEBSOCKET, WALLET_PATH, profileId);
+    await setCache('profile', profileId, result);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -74,7 +84,16 @@ app.post('/api/fleets', async (req, res) => {
     return res.status(400).json({ error: 'profileId required' });
   }
   try {
+    const refresh = (req.query.refresh === 'true') || (req.body && req.body.refresh === true);
+    if (!refresh) {
+      const cached = await getCacheDataOnly<any>('fleets', profileId);
+      if (cached) {
+        res.setHeader('X-Cache-Hit', 'disk');
+        return res.json(cached);
+      }
+    }
     const result = await getFleets(RPC_ENDPOINT, RPC_WEBSOCKET, WALLET_PATH, profileId);
+    await setCache('fleets', profileId, result);
     res.json(result);
   } catch (err: any) {
     console.error('❌ /api/fleets error:', err.message);
@@ -146,6 +165,18 @@ app.post('/api/wallet-sage-fees-detailed', async (req, res) => {
     return res.status(400).json({ error: 'walletPubkey required' });
   }
   try {
+    const refresh = (req.query.refresh === 'true') || (req.body && req.body.refresh === true);
+    const keyPayload = JSON.stringify({ a: fleetAccounts || [], n: fleetNames || {}, r: fleetRentalStatus || {}, h: hours || 24 });
+    // Use persist cache keyed by wallet + request fingerprint
+    const cacheKey = `${walletPubkey}__${keyPayload}`;
+    if (!refresh) {
+      const cached = await getCacheDataOnly<any>('wallet-fees-detailed', cacheKey);
+      if (cached) {
+        res.setHeader('X-Cache-Hit', 'disk');
+        return res.json(cached);
+      }
+    }
+
     const result = await getWalletSageFeesDetailed(
       RPC_ENDPOINT,
       RPC_WEBSOCKET,
@@ -153,8 +184,10 @@ app.post('/api/wallet-sage-fees-detailed', async (req, res) => {
       fleetAccounts || [],
       fleetNames || {},  // This maps to fleetAccountNames parameter
       fleetRentalStatus || {},  // Pass rental status
-      hours || 24
+      hours || 24,
+      { refresh }
     );
+    await setCache('wallet-fees-detailed', cacheKey, result);
     res.json(result);
   } catch (err: any) {
     console.error('❌ /api/wallet-sage-fees-detailed error:', err.message);

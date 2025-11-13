@@ -1,5 +1,6 @@
 import { Connection, PublicKey, ConfirmedSignatureInfo, ParsedTransactionWithMeta } from "@solana/web3.js";
 import { newConnection } from '../utils/anchor-setup.js';
+import { getCacheDataOnly, setCache } from '../utils/persist-cache.js';
 
 export interface TransactionInfo {
   signature: string;
@@ -30,10 +31,21 @@ export async function getAccountTransactions(
   accountPubkey: string,
   limit: number = 50,
   sinceUnixMs?: number,
-  maxSignatures: number = 5000
+  maxSignatures: number = 5000,
+  opts?: { refresh?: boolean }
 ): Promise<TransactionInfo[]> {
   const connection = newConnection(rpcEndpoint, rpcWebsocket);
   const pubkey = new PublicKey(accountPubkey);
+
+  // Persistent cache key for this query shape
+  const cacheKey = `${accountPubkey}__since=${sinceUnixMs || 0}__limit=${limit}__max=${maxSignatures}`;
+  const refresh = !!(opts && opts.refresh);
+  if (!refresh) {
+    const cached = await getCacheDataOnly<TransactionInfo[]>('transactions', cacheKey);
+    if (cached) {
+      return cached;
+    }
+  }
 
   // Paginate signatures until reaching cutoff or maxSignatures
   const allSignatures: ConfirmedSignatureInfo[] = [] as any;
@@ -109,7 +121,8 @@ export async function getAccountTransactions(
       accountKeys
     });
   }
-
+  // Save to persistent cache for reuse across restarts
+  await setCache('transactions', cacheKey, transactions);
   return transactions;
 }
 
@@ -117,7 +130,8 @@ export async function getFleetTransactions(
   rpcEndpoint: string,
   rpcWebsocket: string,
   fleetAccountPubkey: string,
-  limit: number = 50
+  limit: number = 50,
+  opts?: { refresh?: boolean }
 ): Promise<{
   fleetAccount: string;
   totalTransactions: number;
@@ -127,7 +141,10 @@ export async function getFleetTransactions(
     rpcEndpoint,
     rpcWebsocket,
     fleetAccountPubkey,
-    limit
+    limit,
+    undefined,
+    5000,
+    opts
   );
 
   return {
@@ -141,7 +158,8 @@ export async function getWalletSageTransactions(
   rpcEndpoint: string,
   rpcWebsocket: string,
   walletPubkey: string,
-  limit: number = 100
+  limit: number = 100,
+  opts?: { refresh?: boolean }
 ): Promise<{
   walletAddress: string;
   totalTransactions: number;
@@ -157,7 +175,10 @@ export async function getWalletSageTransactions(
     rpcEndpoint,
     rpcWebsocket,
     walletPubkey,
-    limit
+    limit,
+    undefined,
+    5000,
+    opts
   );
 
   // Filter SAGE transactions
@@ -204,7 +225,8 @@ export async function getWalletSageFeesDetailed(
   fleetAccounts: string[],
   fleetAccountNames: { [account: string]: string } = {},
   fleetRentalStatus: { [account: string]: boolean } = {},
-  hours: number = 24
+  hours: number = 24,
+  opts?: { refresh?: boolean }
 ): Promise<{
   walletAddress: string;
   period: string;
@@ -255,7 +277,8 @@ export async function getWalletSageFeesDetailed(
     walletPubkey,
     5000,
     cutoffTime,
-    10000
+    10000,
+    opts
   );
   
   const recent24h = allTransactions.filter(tx => {
