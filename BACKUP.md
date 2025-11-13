@@ -70,6 +70,32 @@ git branch --list "backup_*" | head -n -10 | xargs -r git branch -d
 git tag --list "backup_*" | head -n -10 | xargs -r git tag -d
 ```
 
+### Rimuovere File Pesanti dalla History
+```powershell
+# Se hai committato file pesanti per errore, usa git-filter-repo
+# Installa (una volta):
+py -3 -m pip install --user git-filter-repo
+
+# Aggiungi al PATH (Windows PowerShell):
+$env:Path = "$env:Path;$env:APPDATA\Python\Python312\Scripts"
+
+# Crea backup di sicurezza:
+$ts=(Get-Date).ToString('yyyyMMdd_HHmmss')
+git branch "backup_before_filter_$ts"
+
+# Rimuovi cartella/file dalla history completa:
+git filter-repo --path "Nome_Cartella_Pesante" --invert-paths --force
+
+# Riaggiungi remote (filter-repo lo rimuove):
+git remote add origin https://github.com/lucadjr88/sae.git
+
+# Comprimi repository:
+git gc --aggressive --prune=now
+
+# Push forzato (attenzione: riscrive la history remota!):
+git push origin main --force-with-lease
+```
+
 ## 🔄 Backup Strategy
 
 1. **Backup automatici**: Prima di modifiche importanti
@@ -84,6 +110,8 @@ git tag --list "backup_*" | head -n -10 | xargs -r git tag -d
 - ✅ Backup script creati
 - ✅ Prima versione (v1.0.0) taggata
 - ✅ Funzionalità SAGE fees operative
+- ✅ Cache persistente esterna (fuori dal repo)
+- ✅ History pulita da file pesanti
 
 ## 🛡️ Sicurezza
 
@@ -91,3 +119,18 @@ git tag --list "backup_*" | head -n -10 | xargs -r git tag -d
 - Backup multipli per ridondanza
 - Tag immutabili per versioni stabili
 - Branch separati per esperimenti
+- Cache persistente salvata fuori dal repository
+- Asset pesanti esclusi dalla history git
+
+## 💾 Cache e Performance
+
+La cache persistente è salvata automaticamente in:
+- Windows: `%LOCALAPPDATA%\sa-explorer\cache`
+- Altre piattaforme: `~/.sa-explorer-cache`
+
+Per personalizzare:
+```powershell
+# Imposta variabile d'ambiente prima di avviare il server
+$env:SA_CACHE_DIR = "D:\sa\sae-cache"
+npm start
+```
