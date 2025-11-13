@@ -7,8 +7,7 @@ import { getFleets } from './examples/03-fleets.js';
 import { getPlanets } from './examples/04-planets.js';
 import { getShipsForFleet } from './examples/05-compose-fleet.js';
 import { getFleetTransactions, getWalletSageTransactions, getWalletSageFeesDetailed } from './examples/06-transactions.js';
-import { createMarketRouter } from './market/routes.js';
-import { getCacheDataOnly, setCache } from './utils/persist-cache.js';
+import { getCacheDataOnly, getCacheWithTimestamp, setCache } from './utils/persist-cache.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,9 +72,6 @@ app.post('/api/profile', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Market API routes mounted under /api/market
-app.use('/api/market', createMarketRouter(RPC_ENDPOINT));
 
 // API: 03 - Fleets
 app.post('/api/fleets', async (req, res) => {
@@ -158,7 +154,73 @@ app.post('/api/wallet-sage-fees', async (req, res) => {
   }
 });
 
-// Detailed 24h SAGE fees with fleet breakdown
+// Streaming detailed 24h SAGE fees with progressive updates
+app.post('/api/wallet-sage-fees-stream', async (req, res) => {
+  const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, hours } = req.body;
+  if (!walletPubkey) {
+    return res.status(400).json({ error: 'walletPubkey required' });
+  }
+  
+  // Check for cached results first
+  const refresh = (req.query.refresh === 'true') || (req.body && req.body.refresh === true);
+  const keyPayload = JSON.stringify({ a: fleetAccounts || [], n: fleetNames || {}, r: fleetRentalStatus || {}, h: hours || 24 });
+  const cacheKey = `${walletPubkey}__${keyPayload}`;
+  
+  if (!refresh) {
+    const cached = await getCacheWithTimestamp<any>('wallet-fees-detailed', cacheKey);
+    if (cached) {
+      // Return cached data via SSE format (single complete message)
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Cache-Hit', 'disk');
+      res.setHeader('X-Cache-Timestamp', String(cached.savedAt));
+      res.flushHeaders();
+      
+      res.write(`data: ${JSON.stringify({ type: 'complete', ...cached.data, fromCache: true })}\n\n`);
+      res.end();
+      return;
+    }
+  }
+  
+  // Set up SSE headers for fresh data
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  
+  const sendUpdate = (data: any) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+  
+  try {
+    const { getWalletSageFeesDetailedStreaming } = await import('./examples/06-transactions.js');
+    
+    const finalResult = await getWalletSageFeesDetailedStreaming(
+      RPC_ENDPOINT,
+      RPC_WEBSOCKET,
+      walletPubkey,
+      fleetAccounts || [],
+      fleetNames || {},
+      fleetRentalStatus || {},
+      hours || 24,
+      sendUpdate
+    );
+    
+    // Save to cache
+    if (finalResult) {
+      await setCache('wallet-fees-detailed', cacheKey, finalResult);
+    }
+    
+    res.end();
+  } catch (err: any) {
+    console.error('❌ /api/wallet-sage-fees-stream error:', err.message);
+    sendUpdate({ error: err.message });
+    res.end();
+  }
+});
+
+// Detailed 24h SAGE fees with fleet breakdown (legacy non-streaming)
 app.post('/api/wallet-sage-fees-detailed', async (req, res) => {
   const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, hours } = req.body;
   if (!walletPubkey) {
@@ -170,10 +232,11 @@ app.post('/api/wallet-sage-fees-detailed', async (req, res) => {
     // Use persist cache keyed by wallet + request fingerprint
     const cacheKey = `${walletPubkey}__${keyPayload}`;
     if (!refresh) {
-      const cached = await getCacheDataOnly<any>('wallet-fees-detailed', cacheKey);
+      const cached = await getCacheWithTimestamp<any>('wallet-fees-detailed', cacheKey);
       if (cached) {
         res.setHeader('X-Cache-Hit', 'disk');
-        return res.json(cached);
+        res.setHeader('X-Cache-Timestamp', String(cached.savedAt));
+        return res.json(cached.data);
       }
     }
 

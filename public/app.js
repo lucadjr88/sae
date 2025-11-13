@@ -1,5 +1,39 @@
 // Main application logic for SAGE Fleet Fees Analysis + Market tab
 
+// Global state
+let currentProfileId = null;
+let analysisStartTime = null;
+let progressInterval = null;
+
+// Helper to show/hide sidebar
+function setSidebarVisible(visible) {
+  const sidebar = document.getElementById('sidebar');
+  const container = document.querySelector('.container');
+  if (sidebar) {
+    sidebar.style.display = visible ? 'flex' : 'none';
+  }
+  if (container) {
+    if (visible) {
+      container.classList.add('with-sidebar');
+    } else {
+      container.classList.remove('with-sidebar');
+    }
+  }
+}
+
+// Helper to update progress message
+function updateProgress(message) {
+  const resultsDiv = document.getElementById('results');
+  if (resultsDiv) {
+    let elapsed = '';
+    if (analysisStartTime) {
+      const seconds = Math.floor((Date.now() - analysisStartTime) / 1000);
+      elapsed = ` - ${seconds}s`;
+    }
+    resultsDiv.innerHTML = `<div class="loading">Processing transaction data, this may take up to 2 minutes...<br><span style="font-size:11px; color:#7a8ba0; margin-top:8px; display:block;">(${message}${elapsed})</span></div>`;
+  }
+}
+
 // Tabs handling
 function showFees() {
   document.getElementById('fees-view').style.display = '';
@@ -25,6 +59,76 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tm) tm.addEventListener('click', showMarket);
 });
 
+function displayPartialResults(update, fleets, fleetRentalStatus) {
+  const resultsDiv = document.getElementById('results');
+  if (!resultsDiv) return;
+  
+  // Build partial HTML with available data
+  const rentedFleetNames = new Set();
+  try {
+    fleets.forEach(f => {
+      const isRented = !!(fleetRentalStatus[f.key] || fleetRentalStatus[f.data.fleetShips]);
+      if (isRented) rentedFleetNames.add(f.callsign);
+    });
+  } catch {}
+  
+  // Mark rented fleets in the partial data
+  Object.entries(update.feesByFleet || {}).forEach(([name, entry]) => {
+    if (rentedFleetNames.has(String(name))) {
+      entry.isRented = true;
+    }
+  });
+  
+  // Build simplified HTML for partial view
+  let html = `
+    <div style="opacity: 0.8;">
+      <h2>⏳ Analysis in progress... (${update.percentage}%)</h2>
+      <div class="summary">
+        <div class="summary-item">
+          <span class="label">Total Fees:</span>
+          <span class="value">${(update.totalFees24h / 1e9).toFixed(6)} SOL</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">SAGE Fees:</span>
+          <span class="value">${(update.sageFees24h / 1e9).toFixed(6)} SOL</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">Transactions:</span>
+          <span class="value">${update.transactionCount24h || 0}</span>
+        </div>
+      </div>
+  `;
+  
+  // Show fleet breakdown if available
+  if (update.feesByFleet && Object.keys(update.feesByFleet).length > 0) {
+    const sortedFleets = Object.entries(update.feesByFleet)
+      .sort((a, b) => b[1].totalFee - a[1].totalFee);
+    
+    html += '<h3>Fleet Breakdown (partial)</h3><div class="fleet-list">';
+    
+    sortedFleets.forEach(([fleetName, fleetData]) => {
+      const isRented = !!fleetData.isRented;
+      const nameClass = isRented ? 'rented-name' : '';
+      const badge = isRented ? '<span class="rented-badge">RENTED</span>' : '';
+      
+      html += `
+        <div class="fleet-item">
+          <div class="fleet-header">
+            <span class="fleet-name ${nameClass}">${fleetName}</span>
+            ${badge}
+            <span class="fleet-fee">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</span>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += '</div>';
+  }
+  
+  html += '</div>';
+  resultsDiv.innerHTML = html;
+}
+
 async function analyzeFees() {
   const profileId = document.getElementById('profileId').value.trim();
   const resultsDiv = document.getElementById('results');
@@ -34,15 +138,37 @@ async function analyzeFees() {
     alert('Inserisci un Player Profile ID!');
     return;
   }
+  
+  // Store profile ID globally
+  currentProfileId = profileId;
+  
+  // Hide form and sidebar during analysis
+  const formBox = document.querySelector('.form-box');
+  if (formBox) formBox.style.display = 'none';
+  
+  setSidebarVisible(false);
 
   btn.disabled = true;
   btn.textContent = 'Loading...';
-  resultsDiv.innerHTML = '<div class="loading">Processing transaction data...</div>';
+  
+  analysisStartTime = Date.now();
+  updateProgress('Initializing...');
+  
+  // Update progress every second
+  if (progressInterval) clearInterval(progressInterval);
+  progressInterval = setInterval(() => {
+    const currentMessage = document.querySelector('.loading span')?.textContent;
+    if (currentMessage) {
+      const msgWithoutTime = currentMessage.split(' - ')[0].replace(/\(|\)/g, '');
+      updateProgress(msgWithoutTime);
+    }
+  }, 1000);
 
   try {
     // Get fleets first to derive wallet from transactions
+    updateProgress('Fetching fleet data...');
     console.log('Fetching fleets for profile:', profileId);
-    const fleetsResponse = await fetch('/api/fleets', {
+    const fleetsResponse = await fetch('/api/fleets?refresh=true', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profileId })
@@ -61,10 +187,12 @@ async function analyzeFees() {
     const walletPubkey = fleetsData.walletAuthority;
   const fleets = fleetsData.fleets;
     
+    updateProgress(`Found ${fleets.length} fleets, deriving wallet...`);
     console.log('Derived wallet:', walletPubkey);
     console.log('Fleets found:', fleets.length);
     
     // Collect all fleet-related accounts
+    updateProgress(`Analyzing ${fleets.length} fleet accounts...`);
     const allFleetAccounts = [];
     const fleetNames = {};
   const fleetRentalStatus = {}; // Track which fleets are rented (from backend)
@@ -98,24 +226,124 @@ async function analyzeFees() {
     const uniqueFleetAccounts = [...new Set(allFleetAccounts)];
     console.log('Fleet accounts collected:', uniqueFleetAccounts.length);
     
-    // Get detailed fees
-    console.log('Fetching detailed fees...');
-    const response = await fetch('/api/wallet-sage-fees-detailed', {
+    // Get detailed fees with streaming updates
+    updateProgress(`Analyzing transaction history (limit: 24h or 5000 tx)...`);
+    console.log('Starting streaming analysis...');
+    
+    let data = null;
+    let fromCache = false;
+    
+    // Use fetch with streaming response
+    const response = await fetch('/api/wallet-sage-fees-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         walletPubkey, 
         fleetAccounts: uniqueFleetAccounts,
         fleetNames: fleetNames,
-        fleetRentalStatus: fleetRentalStatus, // Send rental status
+        fleetRentalStatus: fleetRentalStatus,
         hours: 24 
       })
     });
     
-    const data = await response.json();
-    
     if (!response.ok) {
-      throw new Error(data.error || 'Analysis failed');
+      throw new Error('Streaming request failed');
+    }
+    
+    // Check cache headers
+    const cacheHit = response.headers.get('X-Cache-Hit');
+    const cacheTimestamp = response.headers.get('X-Cache-Timestamp');
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      
+      // Process complete messages (SSE format: "data: {...}\n\n")
+      const messages = buffer.split('\n\n');
+      buffer = messages.pop() || ''; // Keep incomplete message in buffer
+      
+      for (const message of messages) {
+        if (!message.trim() || !message.startsWith('data: ')) continue;
+        
+        const jsonStr = message.substring(6); // Remove "data: " prefix
+        try {
+          const update = JSON.parse(jsonStr);
+          
+          if (update.type === 'progress') {
+            if (update.stage === 'signatures') {
+              updateProgress(`${update.message} (${update.processed}/${update.total})`);
+            } else if (update.stage === 'transactions') {
+              const msg = `Processing: ${update.processed}/${update.total} tx (${update.percentage}%)`;
+              updateProgress(msg);
+              
+              // Update UI with partial results if available
+              if (update.feesByFleet && Object.keys(update.feesByFleet).length > 0) {
+                displayPartialResults(update, fleets, fleetRentalStatus);
+              }
+            }
+          } else if (update.type === 'complete') {
+            data = update;
+            fromCache = !!update.fromCache;
+          } else if (update.error) {
+            throw new Error(update.error);
+          }
+        } catch (e) {
+          console.error('Failed to parse SSE message:', e);
+        }
+      }
+    }
+    
+    if (!data) {
+      throw new Error('Analysis failed - no data received');
+    }
+    
+    // Show final processing stats
+    const totalSigs = data.totalSignaturesFetched || 'N/A';
+    const processedTxs = data.transactionCount24h || 0;
+    const cacheMsg = fromCache ? ' (from cache)' : '';
+    updateProgress(`Completed: ${processedTxs}/${totalSigs} transactions${cacheMsg}`);
+    
+    // Update icon based on cache status
+    const profileIcon = document.getElementById('profileIcon');
+    if (profileIcon) {
+      profileIcon.classList.remove('cache-fresh', 'cache-stale');
+      profileIcon.title = '';
+      profileIcon.onclick = null;
+      profileIcon.style.opacity = '1';
+      
+      if (cacheHit === 'disk' && cacheTimestamp) {
+        const cacheAge = Date.now() - parseInt(cacheTimestamp);
+        const sixHoursMs = 6 * 60 * 60 * 1000;
+        
+        console.log('Cache age (hours):', (cacheAge / (60 * 60 * 1000)).toFixed(2));
+        
+        if (cacheAge < sixHoursMs) {
+          profileIcon.classList.add('cache-fresh');
+          profileIcon.title = 'Cache is newer than 6h';
+          console.log('Icon: GREEN (fresh cache)');
+        } else {
+          profileIcon.classList.add('cache-stale');
+          profileIcon.title = 'Cache older than 6h. Click to refresh';
+          console.log('Icon: RED (stale cache)');
+          // Add click handler to refresh
+          profileIcon.onclick = (e) => {
+            console.log('Icon clicked - refreshing...');
+            refreshAnalysis();
+          };
+        }
+      } else {
+        // Fresh data from API
+        profileIcon.classList.add('cache-fresh');
+        profileIcon.title = 'Fresh data from API';
+        console.log('Icon: GREEN (fresh from API)');
+      }
     }
     
     console.log('Analysis complete. Transactions:', data.transactionCount24h);
@@ -146,12 +374,152 @@ async function analyzeFees() {
     // Display results
     displayResults(data, fleetNames, rentedFleetNames);
     
+    // Show sidebar with profile info
+    const sidebar = document.getElementById('sidebar');
+    const sidebarProfileId = document.getElementById('sidebarProfileId');
+    const container = document.querySelector('.container');
+    
+    if (sidebar) {
+      sidebar.style.display = 'flex';
+      if (sidebarProfileId) {
+        sidebarProfileId.textContent = profileId.substring(0, 6) + '...';
+      }
+    }
+    if (container) container.classList.add('with-sidebar');
+    
   } catch (error) {
     console.error('Analysis error:', error);
     resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
   } finally {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
     btn.disabled = false;
     btn.textContent = 'Analyze 24h';
+  }
+}
+
+async function refreshAnalysis() {
+  if (!currentProfileId) return;
+  
+  const resultsDiv = document.getElementById('results');
+  const profileIcon = document.getElementById('profileIcon');
+  
+  // Hide sidebar during refresh
+  setSidebarVisible(false);
+  
+  analysisStartTime = Date.now();
+  updateProgress('Refreshing fleet data...');
+  if (profileIcon) {
+    profileIcon.classList.remove('cache-fresh', 'cache-stale');
+    profileIcon.style.opacity = '0.5';
+    profileIcon.title = 'Refreshing...';
+    profileIcon.onclick = null;
+  }
+  
+  try {
+    // Fetch with refresh flag
+    console.log('Refreshing fleets for profile:', currentProfileId);
+    const fleetsResponse = await fetch('/api/fleets?refresh=true', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profileId: currentProfileId })
+    });
+    
+    if (!fleetsResponse.ok) {
+      throw new Error('Failed to fetch fleets');
+    }
+    
+    const fleetsData = await fleetsResponse.json();
+    const walletPubkey = fleetsData.walletAuthority;
+    const fleets = fleetsData.fleets;
+    
+    updateProgress(`Found ${fleets.length} fleets, collecting accounts...`);
+    
+    // Collect fleet accounts and names
+    const allFleetAccounts = [];
+    const fleetNames = {};
+    const fleetRentalStatus = {};
+    
+    fleets.forEach(f => {
+      allFleetAccounts.push(f.data.fleetShips);
+      allFleetAccounts.push(f.key);
+      if (f.data.fuelTank) allFleetAccounts.push(f.data.fuelTank);
+      if (f.data.ammoBank) allFleetAccounts.push(f.data.ammoBank);
+      if (f.data.cargoHold) allFleetAccounts.push(f.data.cargoHold);
+      
+      fleetNames[f.data.fleetShips] = f.callsign;
+      fleetNames[f.key] = f.callsign;
+      if (f.data.fuelTank) fleetNames[f.data.fuelTank] = f.callsign;
+      if (f.data.ammoBank) fleetNames[f.data.ammoBank] = f.callsign;
+      if (f.data.cargoHold) fleetNames[f.data.cargoHold] = f.callsign;
+      
+      const initialRented = !!f.isRented;
+      fleetRentalStatus[f.data.fleetShips] = initialRented;
+      fleetRentalStatus[f.key] = initialRented;
+      if (f.data.fuelTank) fleetRentalStatus[f.data.fuelTank] = initialRented;
+      if (f.data.ammoBank) fleetRentalStatus[f.data.ammoBank] = initialRented;
+      if (f.data.cargoHold) fleetRentalStatus[f.data.cargoHold] = initialRented;
+    });
+    
+    const uniqueFleetAccounts = [...new Set(allFleetAccounts)];
+    
+    updateProgress('Fetching fresh transaction data...');
+    
+    // Get detailed fees with refresh
+    const response = await fetch('/api/wallet-sage-fees-detailed?refresh=true', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        walletPubkey, 
+        fleetAccounts: uniqueFleetAccounts,
+        fleetNames: fleetNames,
+        fleetRentalStatus: fleetRentalStatus,
+        hours: 24 
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Refresh failed');
+    }
+    
+    // Update icon - should be fresh now
+    if (profileIcon) {
+      profileIcon.classList.add('cache-fresh');
+      profileIcon.style.opacity = '1';
+      profileIcon.title = 'Fresh data from API';
+    }
+    
+    // Collect rented fleet names
+    const rentedFleetNames = new Set();
+    fleets.forEach(f => {
+      const isRented = !!(fleetRentalStatus[f.key] || fleetRentalStatus[f.data.fleetShips]);
+      if (isRented) rentedFleetNames.add(f.callsign);
+    });
+    
+    // Display results
+    displayResults(data, fleetNames, rentedFleetNames);
+    
+    // Show sidebar again
+    setSidebarVisible(true);
+    const sidebarProfileId = document.getElementById('sidebarProfileId');
+    if (sidebarProfileId) {
+      sidebarProfileId.textContent = currentProfileId.substring(0, 6) + '...';
+    }
+    
+  } catch (error) {
+    console.error('Refresh error:', error);
+    resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+    // Show sidebar even on error
+      } finally {
+        if (progressInterval) {
+          clearInterval(progressInterval);
+          progressInterval = null;
+        }
+    setSidebarVisible(true);
   }
 }
 
@@ -209,40 +577,16 @@ function displayResults(data, fleetNames, rentedFleetNames = new Set()) {
     <div id="fleetList"></div>
 
     <h2 class="section-title">Operations Summary</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Operation</th>
-          <th class="num">Count</th>
-          <th class="num">Total (SOL)</th>
-          <th class="num">Avg (SOL)</th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-  
-  Object.entries(data.feesByOperation)
-    .sort((a, b) => b[1].totalFee - a[1].totalFee)
-    .forEach(([operation, stats]) => {
-      html += `
-        <tr>
-          <td class="fleet-name">${operation}</td>
-          <td class="num">${stats.count}</td>
-          <td class="fee-value num">${(stats.totalFee / 1e9).toFixed(6)}</td>
-          <td class="num">${(stats.avgFee / 1e9).toFixed(6)}</td>
-        </tr>
-      `;
-    });
-  
-  html += `
-      </tbody>
-    </table>
+    <div id="operationList"></div>
   `;
   
   resultsDiv.innerHTML = html;
   
   // Create fleet list with fold/unfold
   createFleetList(data, fleetNames, rentedFleetNames);
+  
+  // Create operation list with fold/unfold
+  createOperationList(data, fleetNames, rentedFleetNames);
 
   // No additional labels; rented fleets are highlighted by name only
   
@@ -348,6 +692,89 @@ function createFleetList(data, fleetNames, rentedFleetNames = new Set()) {
   });
   
   fleetListDiv.innerHTML = html;
+}
+
+function createOperationList(data, fleetNames, rentedFleetNames = new Set()) {
+  const operationListDiv = document.getElementById('operationList');
+  const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
+  
+  // Build a map of operation -> list of fleets with that operation
+  const operationFleetMap = {};
+  
+  Object.entries(data.feesByFleet).forEach(([fleetAccount, fleetData]) => {
+    const fleetName = fleetNames[fleetAccount] || fleetAccount;
+    const isRented = !!(fleetData.isRented || rentedLc.has((fleetName || '').toString().toLowerCase()));
+    
+    Object.entries(fleetData.operations || {}).forEach(([opName, opStats]) => {
+      if (!operationFleetMap[opName]) {
+        operationFleetMap[opName] = [];
+      }
+      operationFleetMap[opName].push({
+        fleetAccount,
+        fleetName,
+        isRented,
+        count: opStats.count,
+        totalFee: opStats.totalFee,
+        percentageOfFleet: opStats.percentageOfFleet
+      });
+    });
+  });
+  
+  // Sort operations by total fee (from data.feesByOperation)
+  const sortedOperations = Object.entries(data.feesByOperation)
+    .sort((a, b) => b[1].totalFee - a[1].totalFee);
+  
+  let html = '';
+  sortedOperations.forEach(([operation, opStats]) => {
+    const opId = 'op-' + operation.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 20);
+    const fleets = operationFleetMap[operation] || [];
+    
+    // Sort fleets by total fee for this operation (descending)
+    fleets.sort((a, b) => b.totalFee - a.totalFee);
+    
+    // Calculate percentage of total fees for this operation
+    const opPercentage = (opStats.totalFee / data.sageFees24h) * 100;
+    
+    html += `
+      <div class="fleet-item" onclick="toggleFleet('${opId}')">
+        <div class="fleet-header">
+          <div class="fleet-name">${operation}</div>
+          <div class="fleet-ops">${opStats.count} ops</div>
+          <div class="fleet-pct">${opPercentage.toFixed(1)}%</div>
+          <div class="fleet-sol">${(opStats.totalFee / 1e9).toFixed(6)} SOL</div>
+        </div>
+        <div class="fleet-details" id="${opId}">
+          <table class="fleet-ops-table">
+    `;
+    
+    fleets.forEach(fleet => {
+      const nameClass = fleet.isRented ? 'rented-name' : '';
+      const nameStyle = fleet.isRented ? 'color:#fbbf24;font-weight:800' : '';
+      const fleetNameHtml = fleet.isRented
+        ? `<span class="${nameClass}" style="${nameStyle}">${fleet.fleetName}</span>`
+        : fleet.fleetName;
+      
+      // Calculate percentage of this operation's fees from this fleet
+      const fleetOpPercentage = (fleet.totalFee / opStats.totalFee) * 100;
+      
+      html += `
+        <tr>
+          <td>${fleetNameHtml}</td>
+          <td>${fleet.count}x</td>
+          <td>${(fleet.totalFee / 1e9).toFixed(6)} SOL</td>
+          <td>${fleetOpPercentage.toFixed(1)}%</td>
+        </tr>
+      `;
+    });
+    
+    html += `
+          </table>
+        </div>
+      </div>
+    `;
+  });
+  
+  operationListDiv.innerHTML = html;
 }
 
 function toggleFleet(fleetId) {

@@ -33,7 +33,7 @@ export async function getAccountTransactions(
   sinceUnixMs?: number,
   maxSignatures: number = 5000,
   opts?: { refresh?: boolean }
-): Promise<TransactionInfo[]> {
+): Promise<{ transactions: TransactionInfo[], totalSignaturesFetched: number }> {
   const connection = newConnection(rpcEndpoint, rpcWebsocket);
   const pubkey = new PublicKey(accountPubkey);
 
@@ -41,7 +41,7 @@ export async function getAccountTransactions(
   const cacheKey = `${accountPubkey}__since=${sinceUnixMs || 0}__limit=${limit}__max=${maxSignatures}`;
   const refresh = !!(opts && opts.refresh);
   if (!refresh) {
-    const cached = await getCacheDataOnly<TransactionInfo[]>('transactions', cacheKey);
+    const cached = await getCacheDataOnly<{ transactions: TransactionInfo[], totalSignaturesFetched: number }>('transactions', cacheKey);
     if (cached) {
       return cached;
     }
@@ -54,23 +54,59 @@ export async function getAccountTransactions(
   while (!done) {
     const batch = await connection.getSignaturesForAddress(pubkey, { limit: Math.min(1000, limit), before });
     if (batch.length === 0) break;
-    allSignatures.push(...batch);
-    const last = batch[batch.length - 1];
-    before = last.signature;
-    // Stop if we passed cutoff time
-    if (sinceUnixMs && last.blockTime && (last.blockTime * 1000) < sinceUnixMs) {
-      done = true;
+    
+    // Filter only signatures within time window
+    for (const sig of batch) {
+      if (sinceUnixMs && sig.blockTime && (sig.blockTime * 1000) < sinceUnixMs) {
+        // Found transaction older than cutoff, stop here
+        done = true;
+        break;
+      }
+      allSignatures.push(sig);
+      if (allSignatures.length >= maxSignatures || allSignatures.length >= limit) {
+        done = true;
+        break;
+      }
     }
-    // Stop if reached caps
-    if (allSignatures.length >= maxSignatures || allSignatures.length >= limit) {
+    
+    if (!done && batch.length > 0) {
+      const last = batch[batch.length - 1];
+      before = last.signature;
+    } else {
       done = true;
     }
   }
 
+  const totalSigs = allSignatures.length;
+  console.log(`📊 Fetched ${totalSigs} signatures for ${accountPubkey.substring(0, 8)}...`);
+
   // Get transaction details
   const transactions: TransactionInfo[] = [];
+  let processedCount = 0;
+  const startTime = Date.now();
 
   for (const sig of allSignatures) {
+    processedCount++;
+    
+    // Progress logging every 25 transactions (more frequent updates)
+    if (processedCount % 25 === 0) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      const rate = (processedCount / (Date.now() - startTime) * 1000).toFixed(1);
+      const pct = ((processedCount / totalSigs) * 100).toFixed(1);
+      console.log(`[tx-details] ${processedCount}/${totalSigs} txs (${pct}%, ${elapsed}s, ${rate} tx/s)`);
+    }
+    
+    // Shorter delay every 50 transactions (was 10 with 200ms, now 50 with 100ms)
+    if (processedCount % 50 === 0) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Skip if already outside time window (defensive check)
+    if (sinceUnixMs && sig.blockTime && (sig.blockTime * 1000) < sinceUnixMs) {
+      console.log(`[tx-details] Cutoff reached at tx ${processedCount}`);
+      break;
+    }
+    
     const tx = await connection.getParsedTransaction(sig.signature, { 
       maxSupportedTransactionVersion: 0,
       commitment: 'confirmed'
@@ -122,8 +158,9 @@ export async function getAccountTransactions(
     });
   }
   // Save to persistent cache for reuse across restarts
-  await setCache('transactions', cacheKey, transactions);
-  return transactions;
+  const result = { transactions, totalSignaturesFetched: totalSigs };
+  await setCache('transactions', cacheKey, result);
+  return result;
 }
 
 export async function getFleetTransactions(
@@ -137,11 +174,11 @@ export async function getFleetTransactions(
   totalTransactions: number;
   transactions: TransactionInfo[];
 }> {
-  const transactions = await getAccountTransactions(
+  const result = await getAccountTransactions(
     rpcEndpoint,
     rpcWebsocket,
     fleetAccountPubkey,
-    limit,
+    limit || 50,
     undefined,
     5000,
     opts
@@ -149,8 +186,8 @@ export async function getFleetTransactions(
 
   return {
     fleetAccount: fleetAccountPubkey,
-    totalTransactions: transactions.length,
-    transactions
+    totalTransactions: result.transactions.length,
+    transactions: result.transactions
   };
 }
 
@@ -171,7 +208,7 @@ export async function getWalletSageTransactions(
 }> {
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   
-  const allTransactions = await getAccountTransactions(
+  const result = await getAccountTransactions(
     rpcEndpoint,
     rpcWebsocket,
     walletPubkey,
@@ -180,6 +217,7 @@ export async function getWalletSageTransactions(
     5000,
     opts
   );
+  const allTransactions = result.transactions;
 
   // Filter SAGE transactions
   const sageTransactions = allTransactions.filter(tx => 
@@ -218,6 +256,264 @@ export async function getWalletSageTransactions(
   };
 }
 
+export async function getWalletSageFeesDetailedStreaming(
+  rpcEndpoint: string,
+  rpcWebsocket: string,
+  walletPubkey: string,
+  fleetAccounts: string[],
+  fleetAccountNames: { [account: string]: string } = {},
+  fleetRentalStatus: { [account: string]: boolean } = {},
+  hours: number = 24,
+  sendUpdate: (data: any) => void
+): Promise<any> {
+  const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
+  const connection = newConnection(rpcEndpoint, rpcWebsocket);
+  const BATCH_SIZE = 100;
+  const MAX_TRANSACTIONS = 5000;
+  
+  const excludeAccounts = [
+    'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE',
+    'GAMEzqJehF8yAnKiTARUuhZMvLvkZVAsCVri5vSfemLr',
+    '11111111111111111111111111111111',
+    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  ];
+  
+  const specificFleetAccounts = fleetAccounts.filter(account => 
+    account && !excludeAccounts.includes(account) && account.length > 40
+  );
+  
+  const now = Date.now();
+  const cutoffTime = now - (hours * 60 * 60 * 1000);
+  const pubkey = new PublicKey(walletPubkey);
+  
+  // Step 1: Fetch signatures with 24h OR 5000 limit
+  sendUpdate({ type: 'progress', stage: 'signatures', message: 'Fetching signatures...', processed: 0, total: 0 });
+  
+  const allSignatures: ConfirmedSignatureInfo[] = [];
+  let before: string | undefined = undefined;
+  let done = false;
+  
+  while (!done && allSignatures.length < MAX_TRANSACTIONS) {
+    const batch = await connection.getSignaturesForAddress(pubkey, { limit: 200, before });
+    if (batch.length === 0) break;
+    
+    for (const sig of batch) {
+      if (sig.blockTime && (sig.blockTime * 1000) < cutoffTime) {
+        done = true;
+        break;
+      }
+      allSignatures.push(sig);
+      if (allSignatures.length >= MAX_TRANSACTIONS) {
+        done = true;
+        break;
+      }
+    }
+    
+    if (!done && batch.length > 0) {
+      before = batch[batch.length - 1].signature;
+    } else {
+      done = true;
+    }
+  }
+  
+  const totalSigs = allSignatures.length;
+  sendUpdate({ type: 'progress', stage: 'signatures', message: `Found ${totalSigs} signatures`, processed: totalSigs, total: totalSigs });
+  
+  // Step 2: Process transactions in batches of 100
+  const feesByFleet: any = {};
+  const feesByOperation: any = {};
+  let totalFees24h = 0;
+  let sageFees24h = 0;
+  let unknownOperations = 0;
+  const processedTransactions: TransactionInfo[] = [];
+  
+  const OP_MAP: { [key: string]: string } = {
+    'StartMiningAsteroid': 'Mining',
+    'StopMiningAsteroid': 'Mining',
+    'IdleToLoadingBay': 'Cargo/Dock',
+    'LoadingBayToIdle': 'Cargo/Dock',
+    'WithdrawCargoFromFleet': 'Cargo/Dock',
+    'DepositCargoToFleet': 'Cargo/Dock',
+    'StartSubwarp': 'Subwarp',
+    'StopSubwarp': 'Subwarp',
+    'WarpToCoordinate': 'Warp',
+    'ScanForSurveyDataUnits': 'ScanSDU',
+    'DockedToLoadingBay': 'Cargo/Dock',
+    'FleetStateHandler': 'Mining',
+    'ConsumeCargo': 'Mining',
+    'Craft': 'Crafting',
+    'craft': 'Crafting',
+    'StarbaseUpgradeForFaction': 'StarbaseUpgradeSubmit',
+    'CraftingProcessCraftingMaterial': 'CraftBurn',
+  };
+  
+  for (let i = 0; i < allSignatures.length; i += BATCH_SIZE) {
+    const batchSigs = allSignatures.slice(i, Math.min(i + BATCH_SIZE, allSignatures.length));
+    const batchStart = Date.now();
+    
+    for (const sig of batchSigs) {
+      // Skip if outside time window
+      if (sig.blockTime && (sig.blockTime * 1000) < cutoffTime) continue;
+      
+      const tx = await connection.getParsedTransaction(sig.signature, { 
+        maxSupportedTransactionVersion: 0,
+        commitment: 'confirmed'
+      });
+      
+      if (!tx) continue;
+      
+      const programIds = tx.transaction.message.instructions
+        .map((ix: any) => ix.programId?.toString())
+        .filter((id: any) => id);
+      
+      const instructions: string[] = [];
+      const logMessages: string[] = tx.meta?.logMessages || [];
+      
+      logMessages.forEach(log => {
+        const ixMatch = log.match(/Instruction: (\w+)/);
+        if (ixMatch) instructions.push(ixMatch[1]);
+      });
+      
+      const accountKeys = tx.transaction.message.accountKeys.map(k => k.pubkey.toString());
+      const fee = tx.meta?.fee || 0;
+      
+      const txInfo: TransactionInfo = {
+        signature: sig.signature,
+        blockTime: sig.blockTime || 0,
+        slot: sig.slot,
+        err: sig.err,
+        timestamp: sig.blockTime ? new Date(sig.blockTime * 1000).toISOString() : 'Unknown',
+        status: sig.err ? 'failed' : 'success',
+        fee,
+        programIds,
+        instructions,
+        logMessages,
+        accountKeys
+      };
+      
+      processedTransactions.push(txInfo);
+      totalFees24h += fee;
+      
+      if (!programIds.includes(SAGE_PROGRAM_ID)) continue;
+      sageFees24h += fee;
+      
+      // Determine operation
+      let operation = 'Unknown';
+      if (instructions.length > 0) {
+        for (const instr of instructions) {
+          if (OP_MAP[instr]) {
+            operation = OP_MAP[instr];
+            break;
+          }
+        }
+      }
+      
+      if (operation === 'Unknown') unknownOperations++;
+      
+      // Find involved fleet
+      let involvedFleetName = 'Other Operations';
+      for (const fleet of specificFleetAccounts) {
+        if (accountKeys.includes(fleet)) {
+          involvedFleetName = fleetAccountNames[fleet] || fleet.substring(0, 8);
+          break;
+        }
+      }
+      
+      // Aggregate by fleet
+      if (!feesByFleet[involvedFleetName]) {
+        feesByFleet[involvedFleetName] = {
+          totalFee: 0,
+          feePercentage: 0,
+          totalOperations: 0,
+          operations: {},
+          isRented: fleetRentalStatus[involvedFleetName] || false
+        };
+      }
+      
+      feesByFleet[involvedFleetName].totalFee += fee;
+      feesByFleet[involvedFleetName].totalOperations++;
+      
+      if (!feesByFleet[involvedFleetName].operations[operation]) {
+        feesByFleet[involvedFleetName].operations[operation] = {
+          count: 0,
+          totalFee: 0,
+          avgFee: 0,
+          percentageOfFleet: 0
+        };
+      }
+      
+      feesByFleet[involvedFleetName].operations[operation].count++;
+      feesByFleet[involvedFleetName].operations[operation].totalFee += fee;
+      
+      // Aggregate by operation
+      if (!feesByOperation[operation]) {
+        feesByOperation[operation] = { count: 0, totalFee: 0, avgFee: 0 };
+      }
+      feesByOperation[operation].count++;
+      feesByOperation[operation].totalFee += fee;
+    }
+    
+    const batchTime = ((Date.now() - batchStart) / 1000).toFixed(1);
+    const processed = Math.min(i + BATCH_SIZE, allSignatures.length);
+    const pct = ((processed / totalSigs) * 100).toFixed(1);
+    
+    // Send progressive update with current results
+    sendUpdate({
+      type: 'progress',
+      stage: 'transactions',
+      message: `Processing batch ${Math.floor(i/BATCH_SIZE) + 1}`,
+      processed,
+      total: totalSigs,
+      percentage: pct,
+      batchTime,
+      feesByFleet: { ...feesByFleet },
+      feesByOperation: { ...feesByOperation },
+      totalFees24h,
+      sageFees24h,
+      transactionCount24h: processedTransactions.filter(t => t.programIds.includes(SAGE_PROGRAM_ID)).length
+    });
+    
+    // Small delay between batches
+    if (processed < totalSigs) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+  
+  // Calculate percentages
+  Object.keys(feesByOperation).forEach(op => {
+    feesByOperation[op].avgFee = feesByOperation[op].totalFee / feesByOperation[op].count;
+  });
+  
+  Object.keys(feesByFleet).forEach(fleet => {
+    feesByFleet[fleet].feePercentage = sageFees24h > 0 ? (feesByFleet[fleet].totalFee / sageFees24h) * 100 : 0;
+    Object.keys(feesByFleet[fleet].operations).forEach(op => {
+      const opData = feesByFleet[fleet].operations[op];
+      opData.avgFee = opData.totalFee / opData.count;
+      opData.percentageOfFleet = feesByFleet[fleet].totalFee > 0 ? (opData.totalFee / feesByFleet[fleet].totalFee) * 100 : 0;
+    });
+  });
+  
+  // Send final complete result and return it for caching
+  const finalResult = {
+    type: 'complete',
+    walletAddress: walletPubkey,
+    period: `Last ${hours} hours`,
+    totalFees24h,
+    sageFees24h,
+    transactionCount24h: processedTransactions.filter(t => t.programIds.includes(SAGE_PROGRAM_ID)).length,
+    totalSignaturesFetched: totalSigs,
+    feesByFleet,
+    feesByOperation,
+    unknownOperations,
+    rentedFleetAccounts: Object.keys(fleetRentalStatus).filter(k => fleetRentalStatus[k]),
+    fleetAccountNamesEcho: fleetAccountNames,
+    fleetRentalStatusFinal: fleetRentalStatus
+  };
+  
+  sendUpdate(finalResult);
+  return finalResult;
+}
+
 export async function getWalletSageFeesDetailed(
   rpcEndpoint: string,
   rpcWebsocket: string,
@@ -233,6 +529,7 @@ export async function getWalletSageFeesDetailed(
   totalFees24h: number;
   sageFees24h: number;
   transactionCount24h: number;
+  totalSignaturesFetched: number;
   feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; totalOperations: number; isRented?: boolean; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number } } } };
   feesByOperation: { [operation: string]: { count: number; totalFee: number; avgFee: number } };
   transactions: TransactionInfo[];
@@ -270,16 +567,18 @@ export async function getWalletSageFeesDetailed(
   const now = Date.now();
   const cutoffTime = now - (hours * 60 * 60 * 1000);
 
-  // Get all transactions for wallet (paginate until cutoff to ensure we get 24h)
-  const allTransactions = await getAccountTransactions(
+  // Get all transactions for wallet (paginate until cutoff - process in chunks)
+  const result = await getAccountTransactions(
     rpcEndpoint,
     rpcWebsocket,
     walletPubkey,
-    5000,
+    5000,  // Allow up to 5000 to cover 24h
     cutoffTime,
-    10000,
+    10000,  // Max signatures for 24h coverage
     opts
   );
+  const allTransactions = result.transactions;
+  const totalSigs = result.totalSignaturesFetched;
   
   const recent24h = allTransactions.filter(tx => {
     const txTime = new Date(tx.timestamp).getTime();
@@ -767,6 +1066,7 @@ export async function getWalletSageFeesDetailed(
     totalFees24h,
     sageFees24h,
     transactionCount24h: recent24h.length,
+    totalSignaturesFetched: totalSigs,
     feesByFleet,
     feesByOperation,
     transactions: recent24h,

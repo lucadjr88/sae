@@ -3,61 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SAGE Fees 24h - Fleet Analyzer</title>
-  <link rel="stylesheet" href="styles.css?v=rent8">
-  <script src="app.js?v=rent8"></script>
+  <title>Star Atlas Explorer</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css?v=ui1">
 </head>
 <body>
+  <div class="sidebar" id="sidebar" style="display:none;">
+    <div class="profile-icon" id="profileIcon" title="">👤</div>
+    <div class="profile-id" id="sidebarProfileId"></div>
+  </div>
   <div class="container">
-    <div class="tabs">
-      <button id="tab-fees" class="tab tab-active" type="button">Fleet Fees</button>
-      <button id="tab-market" class="tab" type="button">Market</button>
-    </div>
-
     <div id="fees-view">
-      <h1>SAGE Fleet Fees Analysis</h1>
-      <div class="form-box">
-        <label for="profileId">Profile ID</label>
-        <input type="text" id="profileId">
+      <div class="hero">
+        <div class="hero-title">Star Atlas Explorer</div>
+        <div class="hero-subtitle">powered by the people</div>
+      </div>
+      <div class="form-box centered">
+        <input type="text" id="profileId" placeholder="Player Profile ID">
         <button onclick="analyzeFees()" id="analyzeBtn">Analyze 24h</button>
       </div>
       <div id="results"></div>
     </div>
-
-    <div id="market-view" style="display:none;">
-      <h1>Star Atlas Market Tracker</h1>
-      <div class="form-box" style="gap:8px; flex-wrap:wrap;">
-        <div style="display:flex; gap:8px; align-items:center; flex:1; min-width:260px;">
-          <label for="marketSearch">Search</label>
-          <input type="text" id="marketSearch" placeholder="name or symbol...">
-        </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <label for="marketFilter">Filter</label>
-          <select id="marketFilter">
-            <option value="all">All</option>
-            <option value="ships">Ships</option>
-            <option value="resources">Resources</option>
-            <option value="collectibles">Collectibles</option>
-            <option value="with-prices">With Prices</option>
-          </select>
-        </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <label for="marketSort">Sort</label>
-          <select id="marketSort">
-            <option value="name">Name</option>
-            <option value="price-high">Price (High)</option>
-            <option value="price-low">Price (Low)</option>
-            <option value="volume">Order Volume</option>
-          </select>
-        </div>
-        <div style="margin-left:auto; display:flex; gap:8px;">
-          <button id="marketRefreshBtn" type="button">Refresh</button>
-        </div>
-      </div>
-      <div id="market-status" class="loading">Checking backend...</div>
-      <div id="market-stats" class="stats-grid" style="display:none;"></div>
-      <div id="market-results"></div>
-    </div>
   </div>
+  <script src="app.js?v=rent8"></script>
 </body>
 </html>

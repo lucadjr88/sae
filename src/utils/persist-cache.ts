@@ -44,3 +44,13 @@ export async function getCacheDataOnly<T = any>(namespace: string, key: string):
   if (typeof raw === 'object' && raw && 'data' in (raw as any)) return (raw as any).data as T;
   return raw as T;
 }
+
+export async function getCacheWithTimestamp<T = any>(namespace: string, key: string): Promise<{ data: T; savedAt: number } | null> {
+  const raw = await getCache(namespace, key);
+  if (!raw) return null;
+  if (typeof raw === 'object' && raw && 'data' in (raw as any) && 'savedAt' in (raw as any)) {
+    return { data: (raw as any).data as T, savedAt: (raw as any).savedAt };
+  }
+  // Legacy: no timestamp
+  return { data: raw as T, savedAt: 0 };
+}

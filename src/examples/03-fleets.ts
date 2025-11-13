@@ -91,61 +91,132 @@ export async function getFleets(rpcEndpoint: string, rpcWebsocket: string, walle
     }
   }
   
-  // Now search for fleet accounts that have recent transactions from this wallet
+  // OPTIMIZED: Analyze wallet transactions and extract SAGE fleet accounts
   if (walletAuthority) {
     try {
-      console.log('Searching for rented fleets via wallet transactions...');
-      const walletSignatures = await connection.getSignaturesForAddress(
-        new PublicKey(walletAuthority),
-        { limit: 1000 } // Scan up to 1000 transactions
-      );
+      console.log('Analyzing wallet transactions for SAGE fleet involvement (optimized)...');
+      const cutoffMs = Date.now() - (24 * 60 * 60 * 1000); // 24h cutoff
       
-      console.log(`Found ${walletSignatures.length} recent wallet transactions`);
+      // Collect wallet signatures with early cutoff - process in chunks of 500
+      const walletSignatures: any[] = [];
+      let before: string | undefined = undefined;
+      const maxToAnalyze = 5000; // Allow more for 24h coverage, but process efficiently
       
-      // Check each transaction for fleet accounts
-      for (const sig of walletSignatures.slice(0, 1000)) { // Increased to 1000 to find low-activity rentals
-        try {
-          const tx = await connection.getParsedTransaction(
-            sig.signature,
-            { maxSupportedTransactionVersion: 0 }
-          );
-          
-          if (!tx) continue;
-          
-          // Look for SAGE program involvement
-          const hasSage = tx.transaction.message.accountKeys.some(
-            key => key.pubkey.toString() === SAGE_PROGRAM_ID
-          );
-          
-          if (!hasSage) continue;
-          
-          // Extract all fleet-like accounts (accounts that might be fleets)
-          for (const accountKey of tx.transaction.message.accountKeys) {
-            const account = accountKey.pubkey.toString();
-            
-            // Skip if already known
-            if (fleets.some((f: any) => f.key.toString() === account)) continue;
-            if (additionalFleetKeys.has(account)) continue;
-            
-            // Try to read as Fleet
-            try {
-              const accountInfo = await connection.getAccountInfo(new PublicKey(account));
-              if (!accountInfo || accountInfo.data.length !== 536) continue; // Fleet accounts are 536 bytes
-              
-              // Check if this is owned by SAGE program
-              if (accountInfo.owner.toString() !== SAGE_PROGRAM_ID) continue;
-              
-              additionalFleetKeys.add(account);
-            } catch {
-              // Not a valid fleet account
-            }
+      console.log('[wallet-scan] Fetching recent wallet signatures (up to 5000 for 24h)...');
+      let fetchBatchCount = 0;
+      while (walletSignatures.length < maxToAnalyze) {
+        fetchBatchCount++;
+        const batch = await connection.getSignaturesForAddress(
+          new PublicKey(walletAuthority),
+          { limit: 200, before } // Original batch size
+        );
+        
+        console.log(`[wallet-scan] Batch ${fetchBatchCount}: fetched ${batch.length} signatures, total: ${walletSignatures.length}`);
+        
+        if (batch.length === 0) break;
+        
+        for (const sig of batch) {
+          const btMs = sig.blockTime ? sig.blockTime * 1000 : 0;
+          // Early cutoff if older than 24h
+          if (sig.blockTime && btMs < cutoffMs) {
+            console.log(`[wallet-scan] cutoff reached at ${new Date(btMs).toISOString()}`);
+            break;
           }
-        } catch (error) {
-          // Skip failed transactions
+          walletSignatures.push(sig);
+          if (walletSignatures.length >= maxToAnalyze) break;
+        }
+        
+        if (walletSignatures.length >= maxToAnalyze) break;
+        const last = batch[batch.length - 1];
+        before = last.signature;
+        if (last.blockTime && (last.blockTime * 1000) < cutoffMs) break;
+        
+        // Delay every 2000 signatures to avoid rate limiting
+        if (walletSignatures.length % 2000 === 0) {
+          console.log(`[wallet-scan] Pausing briefly at ${walletSignatures.length} signatures...`);
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
       
-      console.log(`Found ${additionalFleetKeys.size} potential rented fleet accounts`);
+      console.log(`[wallet-scan] Collected ${walletSignatures.length} signatures`);
+      
+      // Now extract fleet accounts from these transactions efficiently
+      console.log(`[tx-analysis] Processing ${walletSignatures.length} wallet transactions...`);
+      
+      let analyzedCount = 0;
+      const fleetCandidates = new Set<string>();
+      const startTime = Date.now();
+      
+      for (const sig of walletSignatures) {
+        analyzedCount++;
+        if (analyzedCount % 50 === 0) {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          const rate = (analyzedCount / (Date.now() - startTime) * 1000).toFixed(1);
+          console.log(`[tx-analysis] ${analyzedCount}/${walletSignatures.length} txs (${elapsed}s, ${rate} tx/s)`);
+        }
+        
+        // Delay every 10 transactions to avoid rate limiting
+        if (analyzedCount % 10 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+        try {
+          // Use getTransaction (faster than getParsedTransaction)
+          const tx = await connection.getTransaction(sig.signature, {
+            maxSupportedTransactionVersion: 0
+          });
+          
+          if (!tx) {
+            if (analyzedCount % 100 === 0) {
+              console.log(`[tx-analysis] Warning: tx ${analyzedCount} returned null`);
+            }
+            continue;
+          }
+          
+          // Check if SAGE program is involved
+          const accountKeys = tx.transaction.message.staticAccountKeys || [];
+          const hasSage = accountKeys.some(key => key.toString() === SAGE_PROGRAM_ID);
+          
+          if (!hasSage) continue;
+          
+          // Extract all accounts - potential fleet candidates
+          for (const accountKey of accountKeys) {
+            const account = accountKey.toString();
+            
+            // Skip if already known or system accounts
+          if (knownFleetKeys.has(account)) continue;
+          if (account === SAGE_PROGRAM_ID) continue;
+          if (account === walletAuthority) continue;
+          
+          fleetCandidates.add(account);
+        }
+      } catch {
+        // Skip failed transactions
+      }
+    }      console.log(`[tx-analysis] Found ${fleetCandidates.size} potential fleet accounts from transactions`);
+      
+      // Now verify which candidates are actually fleet accounts (536 bytes, SAGE owner)
+      let verifiedCount = 0;
+      for (const candidate of fleetCandidates) {
+        verifiedCount++;
+        if (verifiedCount % 50 === 0) {
+          console.log(`[tx-analysis] verified ${verifiedCount}/${fleetCandidates.size} candidates...`);
+        }
+        
+        try {
+          const accountInfo = await connection.getAccountInfo(new PublicKey(candidate));
+          if (!accountInfo) continue;
+          if (accountInfo.data.length !== 536) continue;
+          if (accountInfo.owner.toString() !== SAGE_PROGRAM_ID) continue;
+          
+          // This is a fleet account!
+          additionalFleetKeys.add(candidate);
+        } catch {
+          // Skip invalid accounts
+        }
+      }
+      
+      console.log(`[tx-analysis] Found ${additionalFleetKeys.size} verified fleet accounts with recent wallet activity`);
       
       // Fetch full fleet data for additional fleets
       for (const fleetKey of additionalFleetKeys) {
