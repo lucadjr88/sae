@@ -166,9 +166,15 @@ app.post('/api/wallet-sage-fees-stream', async (req, res) => {
   const keyPayload = JSON.stringify({ a: fleetAccounts || [], n: fleetNames || {}, r: fleetRentalStatus || {}, h: hours || 24 });
   const cacheKey = `${walletPubkey}__${keyPayload}`;
   
+  console.log(`[stream] Request for wallet ${walletPubkey.substring(0, 8)}... refresh=${refresh}`);
+  
   if (!refresh) {
     const cached = await getCacheWithTimestamp<any>('wallet-fees-detailed', cacheKey);
     if (cached) {
+      const cacheAgeMs = Date.now() - cached.savedAt;
+      const cacheAgeMin = (cacheAgeMs / 60000).toFixed(1);
+      console.log(`[stream] ✅ Cache HIT! Age: ${cacheAgeMin} minutes`);
+      
       // Return cached data via SSE format (single complete message)
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
@@ -180,7 +186,11 @@ app.post('/api/wallet-sage-fees-stream', async (req, res) => {
       res.write(`data: ${JSON.stringify({ type: 'complete', ...cached.data, fromCache: true })}\n\n`);
       res.end();
       return;
+    } else {
+      console.log(`[stream] ❌ Cache MISS - processing fresh data`);
     }
+  } else {
+    console.log(`[stream] 🔄 Refresh requested - bypassing cache`);
   }
   
   // Set up SSE headers for fresh data
@@ -191,6 +201,20 @@ app.post('/api/wallet-sage-fees-stream', async (req, res) => {
   
   const sendUpdate = (data: any) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
+    // Force flush to ensure message is sent immediately
+    if (typeof (res as any).flush === 'function') {
+      (res as any).flush();
+    }
+  };
+  
+  // Incremental cache callback - saves progress after each batch
+  const saveProgress = async (partialResult: any) => {
+    try {
+      await setCache('wallet-fees-detailed', cacheKey, partialResult);
+      console.log(`[stream] 📦 Incremental cache saved (${partialResult.transactionCount24h || 0} tx processed)`);
+    } catch (err) {
+      console.error('[stream] Failed to save incremental cache:', err);
+    }
   };
   
   try {
@@ -204,14 +228,19 @@ app.post('/api/wallet-sage-fees-stream', async (req, res) => {
       fleetNames || {},
       fleetRentalStatus || {},
       hours || 24,
-      sendUpdate
+      sendUpdate,
+      saveProgress
     );
     
     // Save to cache
     if (finalResult) {
+      console.log(`[stream] 💾 Saving to cache for wallet ${walletPubkey.substring(0, 8)}...`);
       await setCache('wallet-fees-detailed', cacheKey, finalResult);
+      console.log(`[stream] ✅ Cache saved successfully`);
     }
     
+    // Small delay to ensure final message is received before closing
+    await new Promise(resolve => setTimeout(resolve, 100));
     res.end();
   } catch (err: any) {
     console.error('❌ /api/wallet-sage-fees-stream error:', err.message);

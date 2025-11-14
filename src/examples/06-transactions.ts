@@ -264,12 +264,13 @@ export async function getWalletSageFeesDetailedStreaming(
   fleetAccountNames: { [account: string]: string } = {},
   fleetRentalStatus: { [account: string]: boolean } = {},
   hours: number = 24,
-  sendUpdate: (data: any) => void
+  sendUpdate: (data: any) => void,
+  saveProgress?: (partialResult: any) => Promise<void>
 ): Promise<any> {
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   const connection = newConnection(rpcEndpoint, rpcWebsocket);
   const BATCH_SIZE = 100;
-  const MAX_TRANSACTIONS = 5000;
+  const MAX_TRANSACTIONS = 1000; // Reduced to stay under rate limits (was 5000)
   
   const excludeAccounts = [
     'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE',
@@ -286,6 +287,18 @@ export async function getWalletSageFeesDetailedStreaming(
   const cutoffTime = now - (hours * 60 * 60 * 1000);
   const pubkey = new PublicKey(walletPubkey);
   
+  // Dynamic delay system - Ultra-conservative for Helius Free tier (10 RPS hard limit)
+  // The library's internal retry happens BEFORE our code sees the error
+  // Must be conservative enough to NEVER trigger 429 in the first place
+  // Start at 1 RPS (1000ms) to account for concurrent requests from fleet discovery
+  let currentDelay = 1000; // ms - start at 1 request per second
+  let consecutiveErrors = 0;
+  const MIN_DELAY = 500;       // Minimum: 2 RPS (very conservative)
+  const MAX_DELAY = 5000;      // Maximum backoff: 5 seconds
+  const BACKOFF_MULTIPLIER = 2.0;  // Double delay on 429 (aggressive backoff)
+  const SUCCESS_REDUCTION = 0.98;  // Reduce delay VERY slowly (2% per success)
+  const MAX_RETRIES = 5;       // Max retry attempts per request
+  
   // Step 1: Fetch signatures with 24h OR 5000 limit
   sendUpdate({ type: 'progress', stage: 'signatures', message: 'Fetching signatures...', processed: 0, total: 0 });
   
@@ -294,7 +307,41 @@ export async function getWalletSageFeesDetailedStreaming(
   let done = false;
   
   while (!done && allSignatures.length < MAX_TRANSACTIONS) {
-    const batch = await connection.getSignaturesForAddress(pubkey, { limit: 200, before });
+    // Apply delay before each signature fetch batch
+    if (allSignatures.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, currentDelay));
+    }
+    
+    // Retry logic for getSignaturesForAddress with dynamic delay
+    let batch: ConfirmedSignatureInfo[] = [];
+    let retries = 0;
+    
+    while (retries < MAX_RETRIES) {
+      try {
+        batch = await connection.getSignaturesForAddress(pubkey, { limit: 200, before });
+        // Success - reduce delay gradually
+        consecutiveErrors = 0;
+        currentDelay = Math.max(MIN_DELAY, Math.floor(currentDelay * SUCCESS_REDUCTION));
+        break;
+      } catch (error: any) {
+        if (error.message && error.message.includes('429')) {
+          consecutiveErrors++;
+          retries++;
+          currentDelay = Math.min(MAX_DELAY, Math.floor(currentDelay * BACKOFF_MULTIPLIER));
+          const waitTime = currentDelay * retries;
+          console.log(`[429 signatures] Rate limit hit. Waiting ${waitTime}ms (delay now: ${currentDelay}ms, retry: ${retries}/${MAX_RETRIES})`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          
+          if (retries >= MAX_RETRIES) {
+            console.error(`[429 signatures] Max retries reached for getSignaturesForAddress`);
+            throw error;
+          }
+        } else {
+          throw error;
+        }
+      }
+    }
+    
     if (batch.length === 0) break;
     
     for (const sig of batch) {
@@ -327,6 +374,9 @@ export async function getWalletSageFeesDetailedStreaming(
   let unknownOperations = 0;
   const processedTransactions: TransactionInfo[] = [];
   
+  // Reset consecutive errors counter for transaction processing phase
+  consecutiveErrors = 0;
+  
   const OP_MAP: { [key: string]: string } = {
     'StartMiningAsteroid': 'Mining',
     'StopMiningAsteroid': 'Mining',
@@ -347,6 +397,9 @@ export async function getWalletSageFeesDetailedStreaming(
     'CraftingProcessCraftingMaterial': 'CraftBurn',
   };
   
+  let txProcessed = 0;
+  const cacheSavePromises: Promise<void>[] = []; // Track async cache saves
+  
   for (let i = 0; i < allSignatures.length; i += BATCH_SIZE) {
     const batchSigs = allSignatures.slice(i, Math.min(i + BATCH_SIZE, allSignatures.length));
     const batchStart = Date.now();
@@ -355,12 +408,50 @@ export async function getWalletSageFeesDetailedStreaming(
       // Skip if outside time window
       if (sig.blockTime && (sig.blockTime * 1000) < cutoffTime) continue;
       
-      const tx = await connection.getParsedTransaction(sig.signature, { 
-        maxSupportedTransactionVersion: 0,
-        commitment: 'confirmed'
-      });
+      // Apply delay BEFORE every transaction (not every 10)
+      if (txProcessed > 0) {
+        await new Promise(resolve => setTimeout(resolve, currentDelay));
+      }
       
-      if (!tx) continue;
+      let retries = 0;
+      const MAX_RETRIES = 5;
+      let tx = null;
+      
+      while (retries < MAX_RETRIES) {
+        try {
+          tx = await connection.getParsedTransaction(sig.signature, { 
+            maxSupportedTransactionVersion: 0,
+            commitment: 'confirmed'
+          });
+          
+          // Success - reduce delay gradually
+          consecutiveErrors = 0;
+          currentDelay = Math.max(MIN_DELAY, Math.floor(currentDelay * SUCCESS_REDUCTION));
+          break;
+          
+        } catch (error: any) {
+          if (error.message && error.message.includes('429')) {
+            consecutiveErrors++;
+            retries++;
+            
+            // Increase delay exponentially
+            currentDelay = Math.min(MAX_DELAY, Math.floor(currentDelay * BACKOFF_MULTIPLIER));
+            
+            const waitTime = currentDelay * (retries + 1);
+            console.log(`[429] Rate limit hit. Waiting ${waitTime}ms (delay now: ${currentDelay}ms, errors: ${consecutiveErrors})`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            
+          } else {
+            console.error(`[tx-error] ${error.message}`);
+            break;
+          }
+        }
+      }
+      
+      if (!tx) {
+        txProcessed++;
+        continue;
+      }
       
       const programIds = tx.transaction.message.instructions
         .map((ix: any) => ix.programId?.toString())
@@ -393,6 +484,7 @@ export async function getWalletSageFeesDetailedStreaming(
       
       processedTransactions.push(txInfo);
       totalFees24h += fee;
+      txProcessed++;
       
       if (!programIds.includes(SAGE_PROGRAM_ID)) continue;
       sageFees24h += fee;
@@ -457,27 +549,66 @@ export async function getWalletSageFeesDetailedStreaming(
     const processed = Math.min(i + BATCH_SIZE, allSignatures.length);
     const pct = ((processed / totalSigs) * 100).toFixed(1);
     
-    // Send progressive update with current results
-    sendUpdate({
+    // Calculate current percentages for this batch
+    Object.keys(feesByOperation).forEach(op => {
+      feesByOperation[op].avgFee = feesByOperation[op].totalFee / feesByOperation[op].count;
+    });
+    
+    Object.keys(feesByFleet).forEach(fleet => {
+      feesByFleet[fleet].feePercentage = sageFees24h > 0 ? (feesByFleet[fleet].totalFee / sageFees24h) * 100 : 0;
+      Object.keys(feesByFleet[fleet].operations).forEach(op => {
+        const opData = feesByFleet[fleet].operations[op];
+        opData.avgFee = opData.totalFee / opData.count;
+        opData.percentageOfFleet = feesByFleet[fleet].totalFee > 0 ? (opData.totalFee / feesByFleet[fleet].totalFee) * 100 : 0;
+      });
+    });
+    
+    // Build partial result for this batch
+    const partialResult = {
       type: 'progress',
       stage: 'transactions',
-      message: `Processing batch ${Math.floor(i/BATCH_SIZE) + 1}`,
+      message: `Processing batch ${Math.floor(i/BATCH_SIZE) + 1} (delay: ${currentDelay}ms)`,
       processed,
       total: totalSigs,
       percentage: pct,
       batchTime,
-      feesByFleet: { ...feesByFleet },
-      feesByOperation: { ...feesByOperation },
+      currentDelay,
+      walletAddress: walletPubkey,
+      period: `Last ${hours} hours`,
       totalFees24h,
       sageFees24h,
-      transactionCount24h: processedTransactions.filter(t => t.programIds.includes(SAGE_PROGRAM_ID)).length
-    });
+      transactionCount24h: processedTransactions.filter(t => t.programIds.includes(SAGE_PROGRAM_ID)).length,
+      totalSignaturesFetched: totalSigs,
+      feesByFleet: { ...feesByFleet },
+      feesByOperation: { ...feesByOperation },
+      unknownOperations,
+      rentedFleetAccounts: Object.keys(fleetRentalStatus).filter(k => fleetRentalStatus[k]),
+      fleetAccountNamesEcho: fleetAccountNames,
+      fleetRentalStatusFinal: fleetRentalStatus
+    };
     
-    // Small delay between batches
-    if (processed < totalSigs) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+    // Send progressive update
+    sendUpdate(partialResult);
+    
+    // Save incremental cache asynchronously (don't await - do it in parallel)
+    if (saveProgress) {
+      const cachePromise = saveProgress(partialResult).catch(err => {
+        console.error('[stream] Incremental cache save failed:', err);
+      });
+      cacheSavePromises.push(cachePromise);
     }
+    
+    // No fixed delay - using dynamic delay per transaction instead
   }
+  
+  // Wait for all pending cache saves to complete before finishing
+  if (cacheSavePromises.length > 0) {
+    console.log(`[stream] Waiting for ${cacheSavePromises.length} pending cache saves...`);
+    await Promise.all(cacheSavePromises);
+    console.log(`[stream] All incremental caches saved`);
+  }
+  
+  console.log(`[stream] Completed processing with final delay: ${currentDelay}ms, total 429 errors: ${consecutiveErrors}`);
   
   // Calculate percentages
   Object.keys(feesByOperation).forEach(op => {
@@ -510,7 +641,9 @@ export async function getWalletSageFeesDetailedStreaming(
     fleetRentalStatusFinal: fleetRentalStatus
   };
   
+  console.log(`[stream] Sending final complete message with ${finalResult.transactionCount24h} transactions`);
   sendUpdate(finalResult);
+  console.log(`[stream] Final message sent`);
   return finalResult;
 }
 

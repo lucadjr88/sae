@@ -42,6 +42,8 @@ export function newConnection(rpcEndpoint: string, rpcWebsocket: string): Connec
         commitment: providerOptions.commitment,
         confirmTransactionInitialTimeout,
         wsEndpoint: rpcWebsocket,
+        // Disable built-in retry by setting disableRetryOnRateLimit
+        disableRetryOnRateLimit: true,
     });
 
     return connection;

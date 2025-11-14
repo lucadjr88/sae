@@ -21,6 +21,18 @@ function setSidebarVisible(visible) {
   }
 }
 
+// Setup refresh button click handler
+document.addEventListener('DOMContentLoaded', () => {
+  const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
+  if (cacheRefreshBtn) {
+    cacheRefreshBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      console.log('Cache refresh button clicked');
+      refreshAnalysis();
+    });
+  }
+});
+
 // Helper to update progress message
 function updateProgress(message) {
   const resultsDiv = document.getElementById('results');
@@ -154,21 +166,33 @@ async function analyzeFees() {
   analysisStartTime = Date.now();
   updateProgress('Initializing...');
   
-  // Update progress every second
+  // Update timer every second independently
   if (progressInterval) clearInterval(progressInterval);
   progressInterval = setInterval(() => {
-    const currentMessage = document.querySelector('.loading span')?.textContent;
-    if (currentMessage) {
-      const msgWithoutTime = currentMessage.split(' - ')[0].replace(/\(|\)/g, '');
-      updateProgress(msgWithoutTime);
+    if (analysisStartTime) {
+      const seconds = Math.floor((Date.now() - analysisStartTime) / 1000);
+      const resultsDiv = document.getElementById('results');
+      if (resultsDiv) {
+        const loadingDiv = resultsDiv.querySelector('.loading');
+        if (loadingDiv) {
+          const span = loadingDiv.querySelector('span');
+          if (span) {
+            // Extract message without time
+            const text = span.textContent;
+            const messageMatch = text.match(/\((.+?)(?:\s-\s\d+s)?\)$/);
+            const message = messageMatch ? messageMatch[1] : text.replace(/\(|\)/g, '').split(' - ')[0];
+            span.textContent = `(${message} - ${seconds}s)`;
+          }
+        }
+      }
     }
   }, 1000);
 
   try {
-    // Get fleets first to derive wallet from transactions
+    // Get fleets first to derive wallet from transactions (use cache if available)
     updateProgress('Fetching fleet data...');
     console.log('Fetching fleets for profile:', profileId);
-    const fleetsResponse = await fetch('/api/fleets?refresh=true', {
+    const fleetsResponse = await fetch('/api/fleets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profileId })
@@ -312,37 +336,85 @@ async function analyzeFees() {
     
     // Update icon based on cache status
     const profileIcon = document.getElementById('profileIcon');
-    if (profileIcon) {
+    const cacheTooltip = document.getElementById('cacheTooltip');
+    const cacheTooltipIcon = document.getElementById('cacheTooltipIcon');
+    const cacheTooltipTitle = document.getElementById('cacheTooltipTitle');
+    const cacheTooltipStatus = document.getElementById('cacheTooltipStatus');
+    const cacheTooltipAge = document.getElementById('cacheTooltipAge');
+    
+    if (profileIcon && cacheTooltip) {
       profileIcon.classList.remove('cache-fresh', 'cache-stale');
       profileIcon.title = '';
-      profileIcon.onclick = null;
       profileIcon.style.opacity = '1';
+      
+      // Setup hover behavior for tooltip
+      let hideTimeout = null;
+      
+      profileIcon.onmouseenter = () => {
+        if (hideTimeout) {
+          clearTimeout(hideTimeout);
+          hideTimeout = null;
+        }
+        cacheTooltip.classList.add('visible');
+      };
+      
+      profileIcon.onmouseleave = () => {
+        // Delay hiding to allow mouse to move to tooltip
+        hideTimeout = setTimeout(() => {
+          cacheTooltip.classList.remove('visible');
+        }, 200);
+      };
+      
+      cacheTooltip.onmouseenter = () => {
+        // Cancel hide if mouse enters tooltip
+        if (hideTimeout) {
+          clearTimeout(hideTimeout);
+          hideTimeout = null;
+        }
+      };
+      
+      cacheTooltip.onmouseleave = () => {
+        cacheTooltip.classList.remove('visible');
+      };
       
       if (cacheHit === 'disk' && cacheTimestamp) {
         const cacheAge = Date.now() - parseInt(cacheTimestamp);
         const sixHoursMs = 6 * 60 * 60 * 1000;
+        const ageMinutes = (cacheAge / 60000).toFixed(1);
+        const ageHours = (cacheAge / 3600000).toFixed(1);
         
         console.log('Cache age (hours):', (cacheAge / (60 * 60 * 1000)).toFixed(2));
         
         if (cacheAge < sixHoursMs) {
           profileIcon.classList.add('cache-fresh');
-          profileIcon.title = 'Cache is newer than 6h';
+          cacheTooltipIcon.textContent = '✅';
+          cacheTooltipTitle.textContent = 'Cache Fresh';
+          cacheTooltipStatus.textContent = 'Data loaded from cache';
+          cacheTooltipAge.textContent = ageHours < 1 ? `Age: ${ageMinutes} minutes` : `Age: ${ageHours} hours`;
           console.log('Icon: GREEN (fresh cache)');
         } else {
           profileIcon.classList.add('cache-stale');
-          profileIcon.title = 'Cache older than 6h. Click to refresh';
+          cacheTooltipIcon.textContent = '⚠️';
+          cacheTooltipTitle.textContent = 'Cache Stale';
+          cacheTooltipStatus.textContent = 'Cache is older than 6 hours';
+          cacheTooltipAge.textContent = `Age: ${ageHours} hours`;
           console.log('Icon: RED (stale cache)');
-          // Add click handler to refresh
-          profileIcon.onclick = (e) => {
-            console.log('Icon clicked - refreshing...');
-            refreshAnalysis();
-          };
         }
       } else {
         // Fresh data from API
         profileIcon.classList.add('cache-fresh');
-        profileIcon.title = 'Fresh data from API';
+        cacheTooltipIcon.textContent = '✨';
+        cacheTooltipTitle.textContent = 'Fresh Data';
+        cacheTooltipStatus.textContent = 'Just fetched from API';
+        cacheTooltipAge.textContent = 'No cached data';
         console.log('Icon: GREEN (fresh from API)');
+      }
+      
+      // Re-enable refresh button
+      const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
+      if (cacheRefreshBtn) {
+        cacheRefreshBtn.disabled = false;
+        cacheRefreshBtn.textContent = '🔄 Force Refresh';
       }
     }
     
@@ -405,17 +477,48 @@ async function refreshAnalysis() {
   
   const resultsDiv = document.getElementById('results');
   const profileIcon = document.getElementById('profileIcon');
+  const cacheTooltip = document.getElementById('cacheTooltip');
+  const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
   
-  // Hide sidebar during refresh
+  // Hide tooltip and sidebar during refresh
+  if (cacheTooltip) cacheTooltip.classList.remove('visible');
   setSidebarVisible(false);
   
   analysisStartTime = Date.now();
+  if (progressInterval) {
+    clearInterval(progressInterval);
+    progressInterval = null;
+  }
   updateProgress('Refreshing fleet data...');
+  
+  // Start timer interval for refresh
+  progressInterval = setInterval(() => {
+    if (analysisStartTime) {
+      const seconds = Math.floor((Date.now() - analysisStartTime) / 1000);
+      const resultsDiv = document.getElementById('results');
+      if (resultsDiv) {
+        const loadingDiv = resultsDiv.querySelector('.loading');
+        if (loadingDiv) {
+          const span = loadingDiv.querySelector('span');
+          if (span) {
+            const text = span.textContent;
+            const messageMatch = text.match(/\((.+?)(?:\s-\s\d+s)?\)$/);
+            const message = messageMatch ? messageMatch[1] : text.replace(/\(|\)/g, '').split(' - ')[0];
+            span.textContent = `(${message} - ${seconds}s)`;
+          }
+        }
+      }
+    }
+  }, 1000);
+  
   if (profileIcon) {
     profileIcon.classList.remove('cache-fresh', 'cache-stale');
     profileIcon.style.opacity = '0.5';
     profileIcon.title = 'Refreshing...';
-    profileIcon.onclick = null;
+  }
+  if (cacheRefreshBtn) {
+    cacheRefreshBtn.disabled = true;
+    cacheRefreshBtn.textContent = '⏳ Refreshing...';
   }
   
   try {
@@ -467,8 +570,8 @@ async function refreshAnalysis() {
     
     updateProgress('Fetching fresh transaction data...');
     
-    // Get detailed fees with refresh
-    const response = await fetch('/api/wallet-sage-fees-detailed?refresh=true', {
+    // Use streaming endpoint with refresh flag
+    const response = await fetch('/api/wallet-sage-fees-stream?refresh=true', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -476,32 +579,69 @@ async function refreshAnalysis() {
         fleetAccounts: uniqueFleetAccounts,
         fleetNames: fleetNames,
         fleetRentalStatus: fleetRentalStatus,
-        hours: 24 
+        hours: 24,
+        refresh: true
       })
     });
     
-    const data = await response.json();
-    
     if (!response.ok) {
-      throw new Error(data.error || 'Refresh failed');
+      throw new Error(`Failed to fetch transaction data: ${response.statusText}`);
     }
     
-    // Update icon - should be fresh now
-    if (profileIcon) {
-      profileIcon.classList.add('cache-fresh');
-      profileIcon.style.opacity = '1';
-      profileIcon.title = 'Fresh data from API';
+    // Process streaming response
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const messages = buffer.split('\n\n');
+      buffer = messages.pop() || '';
+      
+      for (const msg of messages) {
+        if (!msg.trim() || !msg.startsWith('data: ')) continue;
+        
+        try {
+          const data = JSON.parse(msg.substring(6));
+          
+          if (data.type === 'progress') {
+            // Update progress with partial results
+            if (data.feesByFleet) {
+              displayPartialResults(data);
+            }
+            const pct = data.percentage || '0';
+            const delay = data.currentDelay || '?';
+            updateProgress(`${data.message || 'Processing...'} (${pct}% - delay: ${delay}ms)`);
+          } else if (data.type === 'complete' || data.walletAddress) {
+            // Final complete data
+            displayPartialResults(data);
+            const processedTxs = data.transactionCount24h || 0;
+            const totalSigs = data.totalSignaturesFetched || 0;
+            updateProgress(`Refreshed: ${processedTxs}/${totalSigs} transactions`);
+            
+            // Update icon to fresh state
+            if (profileIcon) {
+              profileIcon.classList.remove('cache-stale');
+              profileIcon.classList.add('cache-fresh');
+              profileIcon.style.opacity = '1';
+              profileIcon.title = 'Fresh data. Click to refresh';
+              profileIcon.onclick = (e) => {
+                e.stopPropagation();
+                refreshAnalysis();
+              };
+            }
+            break;
+          } else if (data.error) {
+            throw new Error(data.error);
+          }
+        } catch (err) {
+          console.error('Error parsing SSE message:', err, msg);
+        }
+      }
     }
-    
-    // Collect rented fleet names
-    const rentedFleetNames = new Set();
-    fleets.forEach(f => {
-      const isRented = !!(fleetRentalStatus[f.key] || fleetRentalStatus[f.data.fleetShips]);
-      if (isRented) rentedFleetNames.add(f.callsign);
-    });
-    
-    // Display results
-    displayResults(data, fleetNames, rentedFleetNames);
     
     // Show sidebar again
     setSidebarVisible(true);

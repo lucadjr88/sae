@@ -11,6 +11,18 @@
   <div class="sidebar" id="sidebar" style="display:none;">
     <div class="profile-icon" id="profileIcon" title="">👤</div>
     <div class="profile-id" id="sidebarProfileId"></div>
+    <!-- Cache tooltip -->
+    <div class="cache-tooltip" id="cacheTooltip">
+      <div class="cache-tooltip-title">
+        <span id="cacheTooltipIcon">💾</span>
+        <span id="cacheTooltipTitle">Cache Status</span>
+      </div>
+      <div class="cache-tooltip-status" id="cacheTooltipStatus">Loading...</div>
+      <div class="cache-tooltip-age" id="cacheTooltipAge"></div>
+      <button class="cache-tooltip-btn" id="cacheRefreshBtn">
+        🔄 Force Refresh
+      </button>
+    </div>
   </div>
   <div class="container">
     <div id="fees-view">
