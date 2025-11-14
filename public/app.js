@@ -168,7 +168,7 @@ async function analyzeFees() {
     // Get fleets first to derive wallet from transactions
     updateProgress('Fetching fleet data...');
     console.log('Fetching fleets for profile:', profileId);
-    const fleetsResponse = await fetch('/api/fleets?refresh=true', {
+    const fleetsResponse = await fetch('/api/fleets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profileId })
