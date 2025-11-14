@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import { getGameInfo } from './examples/01-game.js';
 import { getPlayerProfile } from './examples/02-profile.js';
 import { getFleets } from './examples/03-fleets.js';
@@ -163,12 +164,44 @@ app.post('/api/wallet-sage-fees-stream', async (req, res) => {
   
   // Check for cached results first
   const refresh = (req.query.refresh === 'true') || (req.body && req.body.refresh === true);
+  const update = (req.query.update === 'true') || (req.body && req.body.update === true);
   const keyPayload = JSON.stringify({ a: fleetAccounts || [], n: fleetNames || {}, r: fleetRentalStatus || {}, h: hours || 24 });
   const cacheKey = `${walletPubkey}__${keyPayload}`;
   
-  console.log(`[stream] Request for wallet ${walletPubkey.substring(0, 8)}... refresh=${refresh}`);
+  // Helper to get cache hash for debugging
+  const cacheHash = crypto.createHash('sha256').update(cacheKey).digest('hex');
+  console.log(`[stream] Cache key hash: ${cacheHash.substring(0, 16)}...`);
   
-  if (!refresh) {
+  console.log(`[stream] Request for wallet ${walletPubkey.substring(0, 8)}... refresh=${refresh}, update=${update}`);
+  
+  // For update mode, retrieve cached data to use as base
+  let cachedData = null;
+  let lastProcessedSignature = null;
+  if (update) {
+    const cached = await getCacheWithTimestamp<any>('wallet-fees-detailed', cacheKey);
+    if (cached) {
+      const cacheAgeMs = Date.now() - cached.savedAt;
+      const sixHoursMs = 6 * 60 * 60 * 1000;
+      if (cacheAgeMs < sixHoursMs) {
+        console.log(`[stream] ⚡ Update mode: cache is fresh (${(cacheAgeMs / 60000).toFixed(1)}min), will fetch only new transactions`);
+        cachedData = cached.data;
+        // Extract the most recent signature from cached transactions
+        if (cachedData.allTransactions && cachedData.allTransactions.length > 0) {
+          lastProcessedSignature = cachedData.allTransactions[0].signature;
+          console.log(`[stream] Last processed signature: ${lastProcessedSignature.substring(0, 8)}...`);
+        } else {
+          console.log('[stream] ⚠️ Legacy cache detected (missing allTransactions). Performing full fetch this time to upgrade format.');
+        }
+      } else {
+        console.log(`[stream] ⚠️ Update mode: cache too old (${(cacheAgeMs / 3600000).toFixed(1)}h), doing full refresh`);
+        // Fall through to full refresh
+      }
+    } else {
+      console.log(`[stream] ⚠️ Update mode: no cache found, doing full fetch`);
+    }
+  }
+  
+  if (!refresh && !update) {
     const cached = await getCacheWithTimestamp<any>('wallet-fees-detailed', cacheKey);
     if (cached) {
       const cacheAgeMs = Date.now() - cached.savedAt;
@@ -189,7 +222,7 @@ app.post('/api/wallet-sage-fees-stream', async (req, res) => {
     } else {
       console.log(`[stream] ❌ Cache MISS - processing fresh data`);
     }
-  } else {
+  } else if (refresh) {
     console.log(`[stream] 🔄 Refresh requested - bypassing cache`);
   }
   
@@ -200,7 +233,12 @@ app.post('/api/wallet-sage-fees-stream', async (req, res) => {
   res.flushHeaders();
   
   const sendUpdate = (data: any) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    try {
+      console.log(`[stream] -> sendUpdate type=${data.type || 'unknown'} stage=${data.stage || ''} processed=${data.processed || ''}`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch (e) {
+      console.error('[stream] Failed to write SSE chunk', e);
+    }
     // Force flush to ensure message is sent immediately
     if (typeof (res as any).flush === 'function') {
       (res as any).flush();
@@ -229,7 +267,9 @@ app.post('/api/wallet-sage-fees-stream', async (req, res) => {
       fleetRentalStatus || {},
       hours || 24,
       sendUpdate,
-      saveProgress
+      saveProgress,
+      cachedData,
+      lastProcessedSignature
     );
     
     // Save to cache
@@ -246,6 +286,24 @@ app.post('/api/wallet-sage-fees-stream', async (req, res) => {
     console.error('❌ /api/wallet-sage-fees-stream error:', err.message);
     sendUpdate({ error: err.message });
     res.end();
+  }
+});
+
+// Cache wipe endpoint
+app.post('/api/cache/wipe', async (req, res) => {
+  const { profileId } = req.body;
+  if (!profileId) {
+    return res.status(400).json({ error: 'profileId required' });
+  }
+  
+  try {
+    console.log(`[cache] Wiping cache for profile: ${profileId}`);
+    // TODO: Implement cache deletion by profile pattern
+    // For now, just acknowledge - cache will be overwritten on next fetch
+    res.json({ success: true, message: 'Cache wipe acknowledged' });
+  } catch (err: any) {
+    console.error('Cache wipe error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

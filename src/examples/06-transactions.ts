@@ -265,8 +265,17 @@ export async function getWalletSageFeesDetailedStreaming(
   fleetRentalStatus: { [account: string]: boolean } = {},
   hours: number = 24,
   sendUpdate: (data: any) => void,
-  saveProgress?: (partialResult: any) => Promise<void>
+  saveProgress?: (partialResult: any) => Promise<void>,
+  cachedData?: any,
+  lastProcessedSignature?: string
 ): Promise<any> {
+  console.log('[stream] getWalletSageFeesDetailedStreaming start', {
+    walletPubkey: walletPubkey.substring(0,8)+'...',
+    fleetAccountsCount: fleetAccounts.length,
+    hours,
+    hasCachedData: !!cachedData,
+    lastProcessedSignature: lastProcessedSignature ? lastProcessedSignature.substring(0,8)+'...' : null
+  });
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   const connection = newConnection(rpcEndpoint, rpcWebsocket);
   const BATCH_SIZE = 100;
@@ -287,29 +296,49 @@ export async function getWalletSageFeesDetailedStreaming(
   const cutoffTime = now - (hours * 60 * 60 * 1000);
   const pubkey = new PublicKey(walletPubkey);
   
-  // Dynamic delay system - Ultra-conservative for Helius Free tier (10 RPS hard limit)
-  // The library's internal retry happens BEFORE our code sees the error
-  // Must be conservative enough to NEVER trigger 429 in the first place
-  // Start at 1 RPS (1000ms) to account for concurrent requests from fleet discovery
-  let currentDelay = 1000; // ms - start at 1 request per second
+  // Dynamic delay system (start fast, back off on 429)
+  // Goal: find the minimum stable delay without 429s.
+  // Start near the Free tier limit and increase only when rate-limited.
+  const MIN_DELAY = 90;          // ~11 rps lower bound probe; adjust up on 429
+  const MAX_DELAY = 5000;        // Hard cap backoff
+  const BACKOFF_MULTIPLIER = 1.6;// Increase delay on 429
+  const SUCCESS_PROBE_WINDOW = 25;// After N successes, try nudging delay down
+  const SUCCESS_DECREASE_STEP = 5;// ms step down per probe
+  const JITTER_PCT = 0.10;       // ±10% jitter to avoid thundering herd
+  const MAX_RETRIES = 5;         // Max retry attempts per request
+  let currentDelay = MIN_DELAY;  // Start from minimum and increase only if needed
+  let successStreak = 0;
   let consecutiveErrors = 0;
-  const MIN_DELAY = 500;       // Minimum: 2 RPS (very conservative)
-  const MAX_DELAY = 5000;      // Maximum backoff: 5 seconds
-  const BACKOFF_MULTIPLIER = 2.0;  // Double delay on 429 (aggressive backoff)
-  const SUCCESS_REDUCTION = 0.98;  // Reduce delay VERY slowly (2% per success)
-  const MAX_RETRIES = 5;       // Max retry attempts per request
+
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  const withJitter = (ms: number) => {
+    const factor = 1 + ((Math.random() * 2 - 1) * JITTER_PCT);
+    return Math.min(MAX_DELAY, Math.max(MIN_DELAY, Math.floor(ms * factor)));
+  };
+  
+  // Check if we're doing incremental update
+  const isIncrementalUpdate = !!(cachedData && lastProcessedSignature);
+  
+  if (isIncrementalUpdate) {
+    console.log(`[incremental] Starting incremental update from signature: ${lastProcessedSignature.substring(0, 8)}...`);
+    sendUpdate({ type: 'progress', stage: 'signatures', message: 'Fetching new signatures since last update...', processed: 0, total: 0 });
+  } else {
+    sendUpdate({ type: 'progress', stage: 'signatures', message: 'Fetching signatures...', processed: 0, total: 0 });
+  }
   
   // Step 1: Fetch signatures with 24h OR 5000 limit
-  sendUpdate({ type: 'progress', stage: 'signatures', message: 'Fetching signatures...', processed: 0, total: 0 });
-  
   const allSignatures: ConfirmedSignatureInfo[] = [];
   let before: string | undefined = undefined;
   let done = false;
   
   while (!done && allSignatures.length < MAX_TRANSACTIONS) {
+    if (isIncrementalUpdate && lastProcessedSignature && before === lastProcessedSignature) {
+      console.log('[incremental] before cursor reached last processed signature, stopping');
+      break;
+    }
     // Apply delay before each signature fetch batch
     if (allSignatures.length > 0) {
-      await new Promise(resolve => setTimeout(resolve, currentDelay));
+      await sleep(withJitter(currentDelay));
     }
     
     // Retry logic for getSignaturesForAddress with dynamic delay
@@ -319,18 +348,24 @@ export async function getWalletSageFeesDetailedStreaming(
     while (retries < MAX_RETRIES) {
       try {
         batch = await connection.getSignaturesForAddress(pubkey, { limit: 200, before });
-        // Success - reduce delay gradually
+        // Success: probe toward minimum in small steps
         consecutiveErrors = 0;
-        currentDelay = Math.max(MIN_DELAY, Math.floor(currentDelay * SUCCESS_REDUCTION));
+        successStreak++;
+        if (successStreak >= SUCCESS_PROBE_WINDOW && currentDelay > MIN_DELAY) {
+          currentDelay = Math.max(MIN_DELAY, currentDelay - SUCCESS_DECREASE_STEP);
+          successStreak = 0;
+          console.log(`[delay] Success probe (signatures): lowering delay to ${currentDelay}ms`);
+        }
         break;
       } catch (error: any) {
         if (error.message && error.message.includes('429')) {
           consecutiveErrors++;
           retries++;
-          currentDelay = Math.min(MAX_DELAY, Math.floor(currentDelay * BACKOFF_MULTIPLIER));
-          const waitTime = currentDelay * retries;
+          successStreak = 0;
+          currentDelay = Math.min(MAX_DELAY, Math.ceil(currentDelay * BACKOFF_MULTIPLIER));
+          const waitTime = withJitter(currentDelay * retries);
           console.log(`[429 signatures] Rate limit hit. Waiting ${waitTime}ms (delay now: ${currentDelay}ms, retry: ${retries}/${MAX_RETRIES})`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
+          await sleep(waitTime);
           
           if (retries >= MAX_RETRIES) {
             console.error(`[429 signatures] Max retries reached for getSignaturesForAddress`);
@@ -344,7 +379,18 @@ export async function getWalletSageFeesDetailedStreaming(
     
     if (batch.length === 0) break;
     
+    // For incremental update, stop when we reach the last processed signature
+    let foundLastProcessed = false;
+    
     for (const sig of batch) {
+      // Check if we've reached the last processed signature (incremental mode)
+      if (isIncrementalUpdate && sig.signature === lastProcessedSignature) {
+        console.log(`[incremental] Reached last processed signature, stopping fetch`);
+        foundLastProcessed = true;
+        done = true;
+        break;
+      }
+      
       if (sig.blockTime && (sig.blockTime * 1000) < cutoffTime) {
         done = true;
         break;
@@ -361,18 +407,35 @@ export async function getWalletSageFeesDetailedStreaming(
     } else {
       done = true;
     }
+    if (foundLastProcessed) {
+      console.log('[incremental] Stopped fetching signatures after encountering last processed');
+      break;
+    }
   }
   
   const totalSigs = allSignatures.length;
   sendUpdate({ type: 'progress', stage: 'signatures', message: `Found ${totalSigs} signatures`, processed: totalSigs, total: totalSigs });
   
   // Step 2: Process transactions in batches of 100
-  const feesByFleet: any = {};
-  const feesByOperation: any = {};
-  let totalFees24h = 0;
-  let sageFees24h = 0;
+  console.log(`[incremental] Fetched ${totalSigs} new signatures`);
+  sendUpdate({ type: 'progress', stage: 'signatures', message: `Found ${totalSigs} ${isIncrementalUpdate ? 'new ' : ''}signatures`, processed: totalSigs, total: totalSigs });
+  
+  // If incremental update with no new signatures, return cached data
+  if (isIncrementalUpdate && totalSigs === 0 && cachedData) {
+    console.log(`[incremental] No new transactions found, returning cached data`);
+    sendUpdate({ type: 'complete', ...cachedData, incrementalUpdate: true, newTransactions: 0 });
+    return cachedData;
+  }
+  
+  // Step 2: Process transactions in batches of 100
+  // Initialize with cached data if doing incremental update
+  const feesByFleet: any = isIncrementalUpdate && cachedData ? { ...cachedData.feesByFleet } : {};
+  const feesByOperation: any = isIncrementalUpdate && cachedData ? { ...cachedData.feesByOperation } : {};
+  let totalFees24h = isIncrementalUpdate && cachedData ? (cachedData.totalFees24h || 0) : 0;
+  let sageFees24h = isIncrementalUpdate && cachedData ? (cachedData.sageFees24h || 0) : 0;
   let unknownOperations = 0;
   const processedTransactions: TransactionInfo[] = [];
+  console.log('[stream] Transaction processing phase start. Signatures to process:', allSignatures.length, 'incremental?', isIncrementalUpdate);
   
   // Reset consecutive errors counter for transaction processing phase
   consecutiveErrors = 0;
@@ -408,14 +471,18 @@ export async function getWalletSageFeesDetailedStreaming(
       // Skip if outside time window
       if (sig.blockTime && (sig.blockTime * 1000) < cutoffTime) continue;
       
-      // Apply delay BEFORE every transaction (not every 10)
+      // Apply delay BEFORE every transaction
       if (txProcessed > 0) {
-        await new Promise(resolve => setTimeout(resolve, currentDelay));
+        await sleep(withJitter(currentDelay));
       }
       
       let retries = 0;
       const MAX_RETRIES = 5;
       let tx = null;
+      // Log every 100th transaction start
+      if (txProcessed % 100 === 0) {
+        console.log(`[stream] Fetching parsed transaction #${txProcessed} signature=${sig.signature.substring(0,8)}...`);
+      }
       
       while (retries < MAX_RETRIES) {
         try {
@@ -424,9 +491,14 @@ export async function getWalletSageFeesDetailedStreaming(
             commitment: 'confirmed'
           });
           
-          // Success - reduce delay gradually
+          // Success: probe toward minimum in small steps
           consecutiveErrors = 0;
-          currentDelay = Math.max(MIN_DELAY, Math.floor(currentDelay * SUCCESS_REDUCTION));
+          successStreak++;
+          if (successStreak >= SUCCESS_PROBE_WINDOW && currentDelay > MIN_DELAY) {
+            currentDelay = Math.max(MIN_DELAY, currentDelay - SUCCESS_DECREASE_STEP);
+            successStreak = 0;
+            console.log(`[delay] Success probe (tx): lowering delay to ${currentDelay}ms`);
+          }
           break;
           
         } catch (error: any) {
@@ -435,11 +507,12 @@ export async function getWalletSageFeesDetailedStreaming(
             retries++;
             
             // Increase delay exponentially
-            currentDelay = Math.min(MAX_DELAY, Math.floor(currentDelay * BACKOFF_MULTIPLIER));
+            successStreak = 0;
+            currentDelay = Math.min(MAX_DELAY, Math.ceil(currentDelay * BACKOFF_MULTIPLIER));
             
-            const waitTime = currentDelay * (retries + 1);
+            const waitTime = withJitter(currentDelay * (retries + 1));
             console.log(`[429] Rate limit hit. Waiting ${waitTime}ms (delay now: ${currentDelay}ms, errors: ${consecutiveErrors})`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
+            await sleep(waitTime);
             
           } else {
             console.error(`[tx-error] ${error.message}`);
@@ -625,14 +698,44 @@ export async function getWalletSageFeesDetailedStreaming(
   });
   
   // Send final complete result and return it for caching
+  // Build combined transactions (new first) and dedupe by signature
+  let combinedTransactions: TransactionInfo[];
+  if (isIncrementalUpdate && cachedData && cachedData.allTransactions) {
+    const seen = new Set<string>();
+    combinedTransactions = [];
+    for (const tx of processedTransactions) { // new first
+      if (!seen.has(tx.signature)) {
+        seen.add(tx.signature);
+        combinedTransactions.push(tx);
+      }
+    }
+    for (const tx of cachedData.allTransactions) { // then old
+      if (!seen.has(tx.signature)) {
+        seen.add(tx.signature);
+        combinedTransactions.push(tx);
+      }
+    }
+  } else {
+    combinedTransactions = processedTransactions;
+  }
+
+  // Sort combined by blockTime desc (most recent first) if blockTime present
+  combinedTransactions.sort((a,b) => (b.blockTime||0) - (a.blockTime||0));
+  const lastProcessedSigOut = combinedTransactions.length > 0 ? combinedTransactions[0].signature : null;
+  const transactionCount24h = combinedTransactions.filter(t => t.programIds.includes(SAGE_PROGRAM_ID)).length;
+
   const finalResult = {
     type: 'complete',
     walletAddress: walletPubkey,
     period: `Last ${hours} hours`,
     totalFees24h,
     sageFees24h,
-    transactionCount24h: processedTransactions.filter(t => t.programIds.includes(SAGE_PROGRAM_ID)).length,
-    totalSignaturesFetched: totalSigs,
+    transactionCount24h,
+    totalSignaturesFetched: isIncrementalUpdate ? (cachedData.totalSignaturesFetched || 0) + totalSigs : totalSigs,
+    newTransactionsFetched: isIncrementalUpdate ? totalSigs : undefined,
+    incrementalUpdate: isIncrementalUpdate,
+    allTransactions: combinedTransactions,
+    lastProcessedSignature: lastProcessedSigOut,
     feesByFleet,
     feesByOperation,
     unknownOperations,
@@ -642,6 +745,12 @@ export async function getWalletSageFeesDetailedStreaming(
   };
   
   console.log(`[stream] Sending final complete message with ${finalResult.transactionCount24h} transactions`);
+  console.log('[stream] Final result summary', {
+    newTransactionsFetched: finalResult.newTransactionsFetched,
+    incrementalUpdate: finalResult.incrementalUpdate,
+    totalSignaturesFetched: finalResult.totalSignaturesFetched,
+    allTransactionsLength: finalResult.allTransactions ? finalResult.allTransactions.length : processedTransactions.length
+  });
   sendUpdate(finalResult);
   console.log(`[stream] Final message sent`);
   return finalResult;

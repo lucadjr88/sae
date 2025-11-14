@@ -4,6 +4,7 @@
 let currentProfileId = null;
 let analysisStartTime = null;
 let progressInterval = null;
+let lastAnalysisParams = null; // Store last successful analysis parameters
 
 // Helper to show/hide sidebar
 function setSidebarVisible(visible) {
@@ -21,14 +22,33 @@ function setSidebarVisible(visible) {
   }
 }
 
-// Setup refresh button click handler
+// Setup cache button click handlers
 document.addEventListener('DOMContentLoaded', () => {
+  const cacheUpdateBtn = document.getElementById('cacheUpdateBtn');
   const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
+  const cacheWipeBtn = document.getElementById('cacheWipeBtn');
+  
+  if (cacheUpdateBtn) {
+    cacheUpdateBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      console.log('Cache update button clicked');
+      updateCache();
+    });
+  }
+  
   if (cacheRefreshBtn) {
     cacheRefreshBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       console.log('Cache refresh button clicked');
       refreshAnalysis();
+    });
+  }
+  
+  if (cacheWipeBtn) {
+    cacheWipeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      console.log('Cache wipe button clicked');
+      wipeAndReload();
     });
   }
 });
@@ -42,7 +62,7 @@ function updateProgress(message) {
       const seconds = Math.floor((Date.now() - analysisStartTime) / 1000);
       elapsed = ` - ${seconds}s`;
     }
-    resultsDiv.innerHTML = `<div class="loading">Processing transaction data, this may take up to 2 minutes...<br><span style="font-size:11px; color:#7a8ba0; margin-top:8px; display:block;">(${message}${elapsed})</span></div>`;
+    resultsDiv.innerHTML = `<div class="loading">Processing transaction data, this may take up to 10 minutes depending on your tx/day...<br><span style="font-size:11px; color:#7a8ba0; margin-top:8px; display:block;">(${message}${elapsed})</span></div>`;
   }
 }
 
@@ -255,6 +275,7 @@ async function analyzeFees() {
     console.log('Starting streaming analysis...');
     
     let data = null;
+    let lastProgress = null;
     let fromCache = false;
     
     // Use fetch with streaming response
@@ -281,11 +302,15 @@ async function analyzeFees() {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    console.log('[analyzeFees] Started SSE stream consumption');
+    let stopReading = false;
     
     while (true) {
+      if (stopReading) break;
       const { done, value } = await reader.read();
       
       if (done) break;
+      console.log('[analyzeFees] Received chunk bytes:', value.length);
       
       buffer += decoder.decode(value, { stream: true });
       
@@ -299,8 +324,10 @@ async function analyzeFees() {
         const jsonStr = message.substring(6); // Remove "data: " prefix
         try {
           const update = JSON.parse(jsonStr);
+          console.log('[analyzeFees] SSE message type:', update.type, 'stage:', update.stage, 'processed:', update.processed, 'total:', update.total);
           
           if (update.type === 'progress') {
+            lastProgress = update;
             if (update.stage === 'signatures') {
               updateProgress(`${update.message} (${update.processed}/${update.total})`);
             } else if (update.stage === 'transactions') {
@@ -315,6 +342,11 @@ async function analyzeFees() {
           } else if (update.type === 'complete') {
             data = update;
             fromCache = !!update.fromCache;
+            console.log('[analyzeFees] Received complete payload. Transactions:', data.transactionCount24h, 'Signatures:', data.totalSignaturesFetched);
+            // Stop reading further SSE events immediately
+            try { await reader.cancel(); } catch {}
+            stopReading = true;
+            break;
           } else if (update.error) {
             throw new Error(update.error);
           }
@@ -324,9 +356,42 @@ async function analyzeFees() {
       }
     }
     
+    // Fallback: parse any remaining buffer for a final message
+    if (!data && buffer.trim()) {
+      console.warn('[analyzeFees] No complete received, trying fallback parse of remaining buffer');
+      const lines = buffer.split(/\n/).filter(l => l.startsWith('data: '));
+      for (const l of lines) {
+        try {
+          const obj = JSON.parse(l.substring(6));
+          if (obj.type === 'complete') {
+            data = obj;
+            break;
+          }
+        } catch {}
+      }
+    }
+    // Synthetic completion if still missing but we had progress
+    if (!data && lastProgress) {
+      console.error('[analyzeFees] Synthesizing final result from last progress update');
+      data = {
+        ...lastProgress,
+        type: 'complete',
+        synthetic: true
+      };
+    }
     if (!data) {
       throw new Error('Analysis failed - no data received');
     }
+    console.log('[analyzeFees] Stream finished, data object present');
+    
+    // Save analysis parameters for future updates
+    lastAnalysisParams = {
+      walletPubkey,
+      fleetAccounts: uniqueFleetAccounts,
+      fleetNames,
+      fleetRentalStatus,
+      fleets
+    };
     
     // Show final processing stats
     const totalSigs = data.totalSignaturesFetched || 'N/A';
@@ -377,6 +442,9 @@ async function analyzeFees() {
         cacheTooltip.classList.remove('visible');
       };
       
+      const cacheUpdateBtn = document.getElementById('cacheUpdateBtn');
+      const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
+      
       if (cacheHit === 'disk' && cacheTimestamp) {
         const cacheAge = Date.now() - parseInt(cacheTimestamp);
         const sixHoursMs = 6 * 60 * 60 * 1000;
@@ -391,6 +459,9 @@ async function analyzeFees() {
           cacheTooltipTitle.textContent = 'Cache Fresh';
           cacheTooltipStatus.textContent = 'Data loaded from cache';
           cacheTooltipAge.textContent = ageHours < 1 ? `Age: ${ageMinutes} minutes` : `Age: ${ageHours} hours`;
+          // Show update button for fresh cache
+          if (cacheUpdateBtn) cacheUpdateBtn.style.display = '';
+          if (cacheRefreshBtn) cacheRefreshBtn.style.display = 'none';
           console.log('Icon: GREEN (fresh cache)');
         } else {
           profileIcon.classList.add('cache-stale');
@@ -398,6 +469,9 @@ async function analyzeFees() {
           cacheTooltipTitle.textContent = 'Cache Stale';
           cacheTooltipStatus.textContent = 'Cache is older than 6 hours';
           cacheTooltipAge.textContent = `Age: ${ageHours} hours`;
+          // Show refresh button for stale cache
+          if (cacheUpdateBtn) cacheUpdateBtn.style.display = 'none';
+          if (cacheRefreshBtn) cacheRefreshBtn.style.display = '';
           console.log('Icon: RED (stale cache)');
         }
       } else {
@@ -407,14 +481,27 @@ async function analyzeFees() {
         cacheTooltipTitle.textContent = 'Fresh Data';
         cacheTooltipStatus.textContent = 'Just fetched from API';
         cacheTooltipAge.textContent = 'No cached data';
+        // Hide update button, show refresh
+        if (cacheUpdateBtn) cacheUpdateBtn.style.display = 'none';
+        if (cacheRefreshBtn) cacheRefreshBtn.style.display = '';
         console.log('Icon: GREEN (fresh from API)');
       }
       
-      // Re-enable refresh button
-      const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
-      if (cacheRefreshBtn) {
-        cacheRefreshBtn.disabled = false;
-        cacheRefreshBtn.textContent = '🔄 Force Refresh';
+      // Re-enable cache buttons
+      const updateBtn = document.getElementById('cacheUpdateBtn');
+      const refreshBtn = document.getElementById('cacheRefreshBtn');
+      const wipeBtn = document.getElementById('cacheWipeBtn');
+      if (updateBtn) {
+        updateBtn.disabled = false;
+        updateBtn.textContent = '⚡ Update Cache';
+      }
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '🔄 Force Refresh';
+      }
+      if (wipeBtn) {
+        wipeBtn.disabled = false;
+        wipeBtn.textContent = '🗑️ Wipe & Reload';
       }
     }
     
@@ -469,6 +556,268 @@ async function analyzeFees() {
       }
     btn.disabled = false;
     btn.textContent = 'Analyze 24h';
+  }
+}
+
+async function updateCache() {
+  if (!currentProfileId) return;
+  
+  if (!lastAnalysisParams) {
+    alert('No previous analysis found. Please run "Analyze 24h" first.');
+    return;
+  }
+  
+  const resultsDiv = document.getElementById('results');
+  const profileIcon = document.getElementById('profileIcon');
+  const cacheTooltip = document.getElementById('cacheTooltip');
+  const cacheUpdateBtn = document.getElementById('cacheUpdateBtn');
+  
+  // Hide tooltip and sidebar during update
+  if (cacheTooltip) cacheTooltip.classList.remove('visible');
+  setSidebarVisible(false);
+  
+  analysisStartTime = Date.now();
+  if (progressInterval) {
+    clearInterval(progressInterval);
+    progressInterval = null;
+  }
+  updateProgress('Updating cache (incremental)...');
+  
+  console.log('[updateCache] Starting cache update...');
+  
+  // Start timer interval
+  progressInterval = setInterval(() => {
+    if (analysisStartTime) {
+      const seconds = Math.floor((Date.now() - analysisStartTime) / 1000);
+      const resultsDiv = document.getElementById('results');
+      if (resultsDiv) {
+        const loadingDiv = resultsDiv.querySelector('.loading');
+        if (loadingDiv) {
+          const span = loadingDiv.querySelector('span');
+          if (span) {
+            const text = span.textContent;
+            const messageMatch = text.match(/\((.+?)(?:\s-\s\d+s)?\)$/);
+            const message = messageMatch ? messageMatch[1] : text.replace(/\(|\)/g, '').split(' - ')[0];
+            span.textContent = `(${message} - ${seconds}s)`;
+          }
+        }
+      }
+    }
+  }, 1000);
+  
+  if (profileIcon) {
+    profileIcon.classList.remove('cache-fresh', 'cache-stale');
+    profileIcon.style.opacity = '0.5';
+    profileIcon.title = 'Updating...';
+  }
+  if (cacheUpdateBtn) {
+    cacheUpdateBtn.disabled = true;
+    cacheUpdateBtn.textContent = '⏳ Updating...';
+  }
+  
+  try {
+    // Use saved parameters from last analysis
+    const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, fleets } = lastAnalysisParams;
+    
+    console.log('Updating cache for profile:', currentProfileId);
+    console.log('Using saved parameters:', { 
+      walletPubkey: walletPubkey.substring(0, 8) + '...', 
+      fleetCount: fleetAccounts.length 
+    });
+    
+    // Call streaming endpoint with update=true flag
+    const response = await fetch('/api/wallet-sage-fees-stream?update=true', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        walletPubkey, 
+        fleetAccounts,
+        fleetNames,
+        fleetRentalStatus,
+        hours: 24,
+        update: true
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch wallet fees');
+    }
+    
+    // Process SSE stream
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let stopReading = false;
+    let finalData = null;
+    
+    console.log('[updateCache] Starting SSE stream read');
+    
+    while (true) {
+      if (stopReading) break;
+      const { done, value } = await reader.read();
+      if (done) {
+        console.log('[updateCache] Reader done');
+        break;
+      }
+      
+      console.log('[updateCache] Received chunk:', value.length, 'bytes');
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (!line.trim() || !line.startsWith('data: ')) continue;
+        const msg = line.substring(6);
+        
+        try {
+          const update = JSON.parse(msg);
+          console.log('[updateCache] Received update type:', update.type, 'stage:', update.stage);
+          if (update.type === 'progress') {
+            displayPartialResults(update, fleets, fleetRentalStatus);
+          } else if (update.type === 'complete') {
+            console.log('[updateCache] Update complete! Transactions:', update.transactionCount24h);
+            finalData = update;
+            try { await reader.cancel(); } catch {}
+            stopReading = true;
+            break;
+          } else if (update.type === 'error') {
+            throw new Error(update.message || 'Unknown error');
+          }
+        } catch (err) {
+          console.error('Error parsing SSE message:', err, msg);
+        }
+      }
+    }
+    
+    console.log('[updateCache] Stream ended. finalData present?', !!finalData);
+    
+    // Ensure we have final data
+    if (!finalData) {
+      console.error('[updateCache] No complete data received!');
+      throw new Error('Update completed but no final data received');
+    }
+    
+    // Build rented fleet names set from fleets
+    const rentedFleetNames = new Set();
+    try {
+      fleets.forEach(f => {
+        const isRented = !!(fleetRentalStatus[f.key] || fleetRentalStatus[f.data.fleetShips]);
+        if (isRented) rentedFleetNames.add(f.callsign);
+      });
+    } catch (err) {
+      console.warn('[updateCache] Could not build rentedFleetNames:', err);
+    }
+    
+    // Render full results with charts
+    console.log('[updateCache] Rendering final results...');
+    displayResults(finalData, fleetNames, rentedFleetNames);
+    
+    // Update cache status icon
+    if (profileIcon) {
+      profileIcon.classList.remove('cache-stale');
+      profileIcon.classList.add('cache-fresh');
+      profileIcon.style.opacity = '1';
+    }
+    
+    // Show sidebar again
+    setSidebarVisible(true);
+    const sidebarProfileId = document.getElementById('sidebarProfileId');
+    if (sidebarProfileId) {
+      sidebarProfileId.textContent = currentProfileId.substring(0, 6) + '...';
+    }
+    
+  } catch (error) {
+    console.error('Update error:', error);
+    resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+  } finally {
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+    setSidebarVisible(true);
+  }
+}
+
+async function wipeAndReload() {
+  if (!currentProfileId) return;
+  
+  if (!confirm('This will delete the cache for this profile and reload fresh data. Continue?')) {
+    return;
+  }
+  
+  const resultsDiv = document.getElementById('results');
+  const profileIcon = document.getElementById('profileIcon');
+  const cacheTooltip = document.getElementById('cacheTooltip');
+  const cacheWipeBtn = document.getElementById('cacheWipeBtn');
+  
+  // Hide tooltip and sidebar
+  if (cacheTooltip) cacheTooltip.classList.remove('visible');
+  setSidebarVisible(false);
+  
+  analysisStartTime = Date.now();
+  if (progressInterval) {
+    clearInterval(progressInterval);
+    progressInterval = null;
+  }
+  updateProgress('Wiping cache and reloading...');
+  
+  // Start timer interval
+  progressInterval = setInterval(() => {
+    if (analysisStartTime) {
+      const seconds = Math.floor((Date.now() - analysisStartTime) / 1000);
+      const resultsDiv = document.getElementById('results');
+      if (resultsDiv) {
+        const loadingDiv = resultsDiv.querySelector('.loading');
+        if (loadingDiv) {
+          const span = loadingDiv.querySelector('span');
+          if (span) {
+            const text = span.textContent;
+            const messageMatch = text.match(/\((.+?)(?:\s-\s\d+s)?\)$/);
+            const message = messageMatch ? messageMatch[1] : text.replace(/\(|\)/g, '').split(' - ')[0];
+            span.textContent = `(${message} - ${seconds}s)`;
+          }
+        }
+      }
+    }
+  }, 1000);
+  
+  if (profileIcon) {
+    profileIcon.classList.remove('cache-fresh', 'cache-stale');
+    profileIcon.style.opacity = '0.5';
+    profileIcon.title = 'Wiping cache...';
+  }
+  if (cacheWipeBtn) {
+    cacheWipeBtn.disabled = true;
+    cacheWipeBtn.textContent = '⏳ Wiping...';
+  }
+  
+  try {
+    // Call wipe endpoint
+    console.log('Wiping cache for profile:', currentProfileId);
+    const wipeResponse = await fetch('/api/cache/wipe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profileId: currentProfileId })
+    });
+    
+    if (!wipeResponse.ok) {
+      throw new Error('Failed to wipe cache');
+    }
+    
+    console.log('Cache wiped, reloading data...');
+    updateProgress('Cache wiped, fetching fresh data...');
+    
+    // Now call refresh
+    await refreshAnalysis();
+    
+  } catch (error) {
+    console.error('Wipe error:', error);
+    resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+    setSidebarVisible(true);
   }
 }
 
@@ -592,11 +941,20 @@ async function refreshAnalysis() {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let stopReading = false;
+    let finalData = null;
+    
+    console.log('[refreshAnalysis] Starting SSE stream read');
     
     while (true) {
+      if (stopReading) break;
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        console.log('[refreshAnalysis] Reader done');
+        break;
+      }
       
+      console.log('[refreshAnalysis] Received chunk:', value.length, 'bytes');
       buffer += decoder.decode(value, { stream: true });
       const messages = buffer.split('\n\n');
       buffer = messages.pop() || '';
@@ -606,18 +964,20 @@ async function refreshAnalysis() {
         
         try {
           const data = JSON.parse(msg.substring(6));
+          console.log('[refreshAnalysis] SSE message type:', data.type);
           
           if (data.type === 'progress') {
             // Update progress with partial results
             if (data.feesByFleet) {
-              displayPartialResults(data);
+              displayPartialResults(data, fleets, fleetRentalStatus);
             }
             const pct = data.percentage || '0';
             const delay = data.currentDelay || '?';
             updateProgress(`${data.message || 'Processing...'} (${pct}% - delay: ${delay}ms)`);
           } else if (data.type === 'complete' || data.walletAddress) {
-            // Final complete data
-            displayPartialResults(data);
+            console.log('[refreshAnalysis] Received COMPLETE event');
+            // Final complete data - use displayResults to show full UI with charts
+            finalData = data;
             const processedTxs = data.transactionCount24h || 0;
             const totalSigs = data.totalSignaturesFetched || 0;
             updateProgress(`Refreshed: ${processedTxs}/${totalSigs} transactions`);
@@ -633,6 +993,8 @@ async function refreshAnalysis() {
                 refreshAnalysis();
               };
             }
+            try { await reader.cancel(); } catch {}
+            stopReading = true;
             break;
           } else if (data.error) {
             throw new Error(data.error);
@@ -642,6 +1004,29 @@ async function refreshAnalysis() {
         }
       }
     }
+    
+    console.log('[refreshAnalysis] Stream ended. finalData present?', !!finalData);
+    
+    // Ensure we have final data before showing sidebar
+    if (!finalData) {
+      console.error('[refreshAnalysis] No complete data received!');
+      throw new Error('Analysis completed but no final data received');
+    }
+    
+    // Build rented fleet names set from fleets
+    const rentedFleetNames = new Set();
+    try {
+      fleets.forEach(f => {
+        const isRented = !!(fleetRentalStatus[f.key] || fleetRentalStatus[f.data.fleetShips]);
+        if (isRented) rentedFleetNames.add(f.callsign);
+      });
+    } catch (err) {
+      console.warn('[refreshAnalysis] Could not build rentedFleetNames:', err);
+    }
+    
+    // Render full results with charts
+    console.log('[refreshAnalysis] Rendering final results...');
+    displayResults(finalData, fleetNames, rentedFleetNames);
     
     // Show sidebar again
     setSidebarVisible(true);
