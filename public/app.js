@@ -138,17 +138,19 @@ function displayPartialResults(update, fleets, fleetRentalStatus) {
     
     html += '<h3>Fleet Breakdown (partial)</h3><div class="fleet-list">';
     
+    const totalFee = Object.values(update.feesByFleet).reduce((sum, f) => sum + (f.totalFee || 0), 0);
     sortedFleets.forEach(([fleetName, fleetData]) => {
       const isRented = !!fleetData.isRented;
       const nameClass = isRented ? 'rented-name' : '';
       const badge = isRented ? '<span class="rented-badge">RENTED</span>' : '';
-      
+      const pct = totalFee ? ((fleetData.totalFee / totalFee) * 100).toFixed(1) : '0.0';
       html += `
         <div class="fleet-item">
           <div class="fleet-header">
             <span class="fleet-name ${nameClass}">${fleetName}</span>
             ${badge}
             <span class="fleet-fee">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</span>
+            <span class="fleet-pct">${pct}%</span>
           </div>
         </div>
       `;
@@ -1356,7 +1358,7 @@ function drawPieChart(canvasId, legendId, data) {
   // Create legend with format: Nome | Ops | % | SOL
   let legendHtml = '<table>';
   data.forEach((item, index) => {
-    const percentage = ((item.percentage || item.value / total) * 100).toFixed(1);
+    const percentage = total ? ((item.value / total) * 100).toFixed(1) : '0.0';
     const solValue = (item.value / 1e9).toFixed(6);
     legendHtml += `
       <tr>
