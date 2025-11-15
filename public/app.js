@@ -271,7 +271,7 @@ async function analyzeFees() {
     console.log('Fleet accounts collected:', uniqueFleetAccounts.length);
     
     // Get detailed fees with streaming updates
-    updateProgress(`Analyzing transaction history (limit: 24h or 5000 tx)...`);
+    updateProgress(`Analyzing transaction history (limit: 24h or 3000 tx per batch, 3000 max)...`);
     console.log('Starting streaming analysis...');
     
     let data = null;
@@ -342,7 +342,7 @@ async function analyzeFees() {
           } else if (update.type === 'complete') {
             data = update;
             fromCache = !!update.fromCache;
-            console.log('[analyzeFees] Received complete payload. Transactions:', data.transactionCount24h, 'Signatures:', data.totalSignaturesFetched);
+            console.log('[analyzeFees] Received complete payload. Transactions:', data.transactionCount24h, 'Signatures:', data.totalSignaturesFetched, '(limit: 3000 per batch, 3000 max)');
             // Stop reading further SSE events immediately
             try { await reader.cancel(); } catch {}
             stopReading = true;
@@ -505,7 +505,7 @@ async function analyzeFees() {
       }
     }
     
-    console.log('Analysis complete. Transactions:', data.transactionCount24h);
+    console.log('Analysis complete. Transactions:', data.transactionCount24h, '(limit: 3000 per batch, 3000 max)');
     
     // Collect rented fleet names from fleet list (backend authoritative flags)
     const rentedFleetNames = new Set();
@@ -675,7 +675,7 @@ async function updateCache() {
           if (update.type === 'progress') {
             displayPartialResults(update, fleets, fleetRentalStatus);
           } else if (update.type === 'complete') {
-            console.log('[updateCache] Update complete! Transactions:', update.transactionCount24h);
+            console.log('[updateCache] Update complete! Transactions:', update.transactionCount24h, '(limit: 3000 per batch, 3000 max)');
             finalData = update;
             try { await reader.cancel(); } catch {}
             stopReading = true;

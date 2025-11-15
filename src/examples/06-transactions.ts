@@ -31,7 +31,7 @@ export async function getAccountTransactions(
   accountPubkey: string,
   limit: number = 50,
   sinceUnixMs?: number,
-  maxSignatures: number = 5000,
+  maxSignatures: number = 3000,
   opts?: { refresh?: boolean }
 ): Promise<{ transactions: TransactionInfo[], totalSignaturesFetched: number }> {
   const connection = newConnection(rpcEndpoint, rpcWebsocket);
@@ -52,7 +52,7 @@ export async function getAccountTransactions(
   let before: string | undefined = undefined;
   let done = false;
   while (!done) {
-    const batch = await connection.getSignaturesForAddress(pubkey, { limit: Math.min(1000, limit), before });
+    const batch = await connection.getSignaturesForAddress(pubkey, { limit: Math.min(3000, limit), before });
     if (batch.length === 0) break;
     
     // Filter only signatures within time window
