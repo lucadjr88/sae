@@ -718,7 +718,11 @@ async function updateCache() {
       profileIcon.classList.add('cache-fresh');
       profileIcon.style.opacity = '1';
     }
-    
+    // Restore update button state
+    if (cacheUpdateBtn) {
+      cacheUpdateBtn.disabled = false;
+      cacheUpdateBtn.textContent = '⚡ Update Cache';
+    }
     // Show sidebar again
     setSidebarVisible(true);
     const sidebarProfileId = document.getElementById('sidebarProfileId');
@@ -1189,7 +1193,7 @@ function createFleetList(data, fleetNames, rentedFleetNames = new Set()) {
         <div class="fleet-header">
           <div class="${nameClass}">${nameInner}</div>
           <div class="fleet-ops">${fleetData.totalOperations} ops</div>
-          <div class="fleet-pct">${(fleetData.feePercentage * 100).toFixed(1)}%</div>
+          <div class="fleet-pct">${((fleetData.totalFee / (data.sageFees24h || 1)) * 100).toFixed(1)}%</div>
           <div class="fleet-sol">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</div>
         </div>
         <div class="fleet-details" id="${fleetId}">
