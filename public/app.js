@@ -24,6 +24,39 @@ function setSidebarVisible(visible) {
 
 // Setup cache button click handlers
 document.addEventListener('DOMContentLoaded', () => {
+    // Price ticker fetch and update
+    async function updatePriceTicker() {
+      try {
+        // Fetch CoinGecko prices via backend proxy
+        const cgRes = await fetch('/api/prices');
+        let prices = cgRes.ok ? await cgRes.json() : {};
+
+        // Fetch WPAC price and icon from backend proxy
+        let wpacPrice = '--';
+        let wpacIcon = 'https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png';
+        try {
+          const boomRes = await fetch('/api/wpac');
+          if (boomRes.ok) {
+            const boomData = await boomRes.json();
+            if (boomData.price) wpacPrice = boomData.price;
+            if (boomData.icon) wpacIcon = boomData.icon;
+          } else {
+            console.warn('[WPAC proxy] Response not OK:', boomRes.status);
+          }
+        } catch (err) {
+          console.error('[WPAC proxy] Fetch error:', err);
+        }
+
+        // Merge WPAC into prices
+        prices['wpac'] = { usd: wpacPrice, icon: wpacIcon };
+        window.prices = prices;
+        renderPriceTicker(prices);
+      } catch {
+        renderPriceTicker(null);
+      }
+    }
+    updatePriceTicker();
+    setInterval(updatePriceTicker, 60000);
   const cacheUpdateBtn = document.getElementById('cacheUpdateBtn');
   const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
   const cacheWipeBtn = document.getElementById('cacheWipeBtn');
@@ -119,10 +152,12 @@ function displayPartialResults(update, fleets, fleetRentalStatus) {
         <div class="summary-item">
           <span class="label">Total Fees:</span>
           <span class="value">${(update.totalFees24h / 1e9).toFixed(6)} SOL</span>
+                  <span class="value">${(update.totalFees24h / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((update.totalFees24h / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></span>
         </div>
         <div class="summary-item">
           <span class="label">SAGE Fees:</span>
           <span class="value">${(update.sageFees24h / 1e9).toFixed(6)} SOL</span>
+                  <span class="value">${(update.sageFees24h / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((update.sageFees24h / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></span>
         </div>
         <div class="summary-item">
           <span class="label">Transactions:</span>
@@ -150,6 +185,7 @@ function displayPartialResults(update, fleets, fleetRentalStatus) {
             <span class="fleet-name ${nameClass}">${fleetName}</span>
             ${badge}
             <span class="fleet-fee">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</span>
+                        <span class="fleet-fee">${(fleetData.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((fleetData.totalFee / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></span>
             <span class="fleet-pct">${pct}%</span>
           </div>
         </div>
@@ -1083,7 +1119,7 @@ function displayResults(data, fleetNames, rentedFleetNames = new Set()) {
       </div>
       <div class="stat-card">
         <div class="stat-label">Total Fees</div>
-        <div class="stat-value highlight">${(data.sageFees24h / 1e9).toFixed(6)} SOL</div>
+        <div class="stat-value highlight">${(data.sageFees24h / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((data.sageFees24h / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></div>
       </div>
     </div>
 
@@ -1122,21 +1158,22 @@ function displayResults(data, fleetNames, rentedFleetNames = new Set()) {
   // No additional labels; rented fleets are highlighted by name only
   
   // Draw pie charts
+  const totalFleetFee = sortedFleets.reduce((sum, [_, data]) => sum + (data.totalFee || 0), 0);
   drawPieChart('fleetChart', 'fleetLegend', sortedFleets.map(([name, data], index) => ({
     label: fleetNames[name] || name,
     value: data.totalFee,
     count: data.totalOperations,
-    percentage: data.feePercentage,
+    percentage: totalFleetFee ? ((data.totalFee / totalFleetFee) * 100) : 0,
     color: fleetColors[index]
-  })));
-  
+  })), window.prices);
+
   drawPieChart('operationChart', 'operationLegend', sortedOps.map(([name, data], index) => ({
     label: name,
     value: data.totalFee,
     count: data.count,
     percentage: data.totalFee / (sageFees24h || 1),
     color: opColors[index]
-  })));
+  })), window.prices);
   
   console.log('Results displayed successfully');
 }
@@ -1196,7 +1233,7 @@ function createFleetList(data, fleetNames, rentedFleetNames = new Set()) {
           <div class="${nameClass}">${nameInner}</div>
           <div class="fleet-ops">${fleetData.totalOperations} ops</div>
           <div class="fleet-pct">${((fleetData.totalFee / (data.sageFees24h || 1)) * 100).toFixed(1)}%</div>
-          <div class="fleet-sol">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</div>
+            <div class="fleet-sol">${(fleetData.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((fleetData.totalFee / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></div>
         </div>
         <div class="fleet-details" id="${fleetId}">
           <table class="fleet-ops-table">
@@ -1209,7 +1246,7 @@ function createFleetList(data, fleetNames, rentedFleetNames = new Set()) {
           <tr>
             <td>${op}</td>
             <td>${stats.count}x</td>
-            <td>${(stats.totalFee / 1e9).toFixed(6)} SOL</td>
+            <td>${(stats.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((stats.totalFee / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></td>
             <td>${(stats.percentageOfFleet * 100).toFixed(1)}%</td>
           </tr>
         `;
@@ -1272,7 +1309,7 @@ function createOperationList(data, fleetNames, rentedFleetNames = new Set()) {
           <div class="fleet-name">${operation}</div>
           <div class="fleet-ops">${opStats.count} ops</div>
           <div class="fleet-pct">${opPercentage.toFixed(1)}%</div>
-          <div class="fleet-sol">${(opStats.totalFee / 1e9).toFixed(6)} SOL</div>
+            <div class="fleet-sol">${(opStats.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></div>
         </div>
         <div class="fleet-details" id="${opId}">
           <table class="fleet-ops-table">
@@ -1292,7 +1329,7 @@ function createOperationList(data, fleetNames, rentedFleetNames = new Set()) {
         <tr>
           <td>${fleetNameHtml}</td>
           <td>${fleet.count}x</td>
-          <td>${(fleet.totalFee / 1e9).toFixed(6)} SOL</td>
+            <td>${(fleet.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((fleet.totalFee / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></td>
           <td>${fleetOpPercentage.toFixed(1)}%</td>
         </tr>
       `;
@@ -1313,48 +1350,42 @@ function toggleFleet(fleetId) {
   fleetItem.classList.toggle('expanded');
 }
 
-function drawPieChart(canvasId, legendId, data) {
+function drawPieChart(canvasId, legendId, data, prices) {
   console.log(`Drawing pie chart: ${canvasId}`, data);
-  
   const canvas = document.getElementById(canvasId);
-  const ctx = canvas.getContext('2d');
   const legend = document.getElementById(legendId);
-  
-  // Set canvas size with higher resolution
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = 100 * dpr;
-  canvas.height = 100 * dpr;
-  canvas.style.width = '100px';
-  canvas.style.height = '100px';
-  ctx.scale(dpr, dpr);
-  
-  const centerX = 50;
-  const centerY = 50;
-  const radius = 45;
-  
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-  
-  let currentAngle = -Math.PI / 2; // Start at top
-  
-  // Draw pie slices
-  data.forEach((item, index) => {
-    const sliceAngle = (item.value / total) * 2 * Math.PI;
-    
-    ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
-    ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
-    ctx.closePath();
-    ctx.fillStyle = item.color;
-    ctx.fill();
-    
-    // Add subtle border between slices
-    ctx.strokeStyle = '#0b0e1a';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    
-    currentAngle += sliceAngle;
+
+  // Destroy previous chart instance if exists
+  if (canvas._chartInstance) {
+    canvas._chartInstance.destroy();
+    canvas._chartInstance = null;
+  }
+
+  // Prepare data for Chart.js
+  const chartData = {
+    labels: data.map(item => item.label),
+    datasets: [{
+      data: data.map(item => item.value),
+      backgroundColor: data.map(item => item.color),
+      borderWidth: 1
+    }]
+  };
+
+  // Create pie chart
+  const chartInstance = new Chart(canvas, {
+    type: 'pie',
+    data: chartData,
+    options: {
+      responsive: false,
+      plugins: {
+        legend: { display: false }
+      }
+    }
   });
-  
+  canvas._chartInstance = chartInstance;
+
+  // Calculate total value for percentage
+  const total = data.reduce((sum, item) => sum + item.value, 0);
   // Create legend with format: Nome | Ops | % | SOL
   let legendHtml = '<table>';
   data.forEach((item, index) => {
@@ -1366,7 +1397,7 @@ function drawPieChart(canvasId, legendId, data) {
         <td>${item.label}</td>
         <td>${item.count} ops</td>
         <td>${percentage}%</td>
-        <td>${solValue} SOL</td>
+        <td>${solValue} SOL <span style="color:#7dd3fc;font-size:13px;">($${prices && prices.solana ? ((item.value / 1e9) * prices.solana.usd).toFixed(2) : '--'})</span></td>
       </tr>
     `;
   });
@@ -1543,4 +1574,50 @@ function renderMarket() {
 
   html += '</tbody></table>';
   resultsEl.innerHTML = html;
+}
+
+function renderPriceTicker(prices) {
+  const ticker = document.getElementById('price-ticker-content');
+  if (!ticker) return;
+
+  // Asset config: symbol, CoinGecko id, SVG icon URL
+  const assets = [
+    { symbol: 'BTC', id: 'bitcoin', icon: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png' },
+    { symbol: 'SOL', id: 'solana', icon: 'https://assets.coingecko.com/coins/images/4128/large/solana.png' },
+    { symbol: 'ATLAS', id: 'star-atlas', icon: 'https://assets.coingecko.com/coins/images/17659/standard/Icon_Reverse.png?1696517190' },
+    { symbol: 'POLIS', id: 'star-atlas-dao', icon: 'https://assets.coingecko.com/coins/images/17789/standard/POLIS.jpg?1696517312' },
+    { symbol: 'WPAC', id: 'wpac', icon: 'https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png' },
+  ];
+
+  // Calculate item width so 4 out of 5 are always visible and fill the bar
+  const barWidth = document.getElementById('price-ticker-bar').offsetWidth;
+  const itemWidth = Math.floor(barWidth / 4);
+
+  // Build ticker items
+  let itemsHtml = '';
+  assets.forEach(asset => {
+    let price = '--';
+    if (prices && prices[asset.id] && prices[asset.id].usd !== undefined && prices[asset.id].usd !== '--') {
+      price = prices[asset.id].usd;
+      if (asset.symbol === 'BTC') {
+        price = price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      } else if (asset.symbol === 'SOL') {
+        price = price.toFixed(2);
+      } else {
+        price = price.toFixed(4);
+      }
+    }
+    let iconUrl = asset.icon;
+    itemsHtml += `
+      <div class="ticker-item" style="display:flex;align-items:center;gap:8px;min-width:${itemWidth}px;max-width:${itemWidth}px;justify-content:center;">
+        <img src="${iconUrl}" alt="${asset.symbol}" style="width:22px;height:22px;vertical-align:middle;" onerror="this.style.opacity=0.3;">
+        <span style="font-weight:600;letter-spacing:1px;">${asset.symbol}</span>
+        <span style="font-size:15px;color:#e2e8f0;">$${price}</span>
+      </div>
+    `;
+  });
+
+  // Duplicate items for seamless loop
+  ticker.innerHTML = itemsHtml + itemsHtml;
+  ticker.style.display = 'flex';
 }

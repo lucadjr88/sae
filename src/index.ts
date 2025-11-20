@@ -9,6 +9,7 @@ import { getPlanets } from './examples/04-planets.js';
 import { getShipsForFleet } from './examples/05-compose-fleet.js';
 import { getFleetTransactions, getWalletSageTransactions, getWalletSageFeesDetailed } from './examples/06-transactions.js';
 import { getCacheDataOnly, getCacheWithTimestamp, setCache } from './utils/persist-cache.js';
+import fetch from 'node-fetch';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -382,6 +383,38 @@ app.post('/api/diagnostics/fleet-map', async (req, res) => {
   } catch (err: any) {
     console.error('❌ /api/diagnostics/fleet-map error:', err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// CoinGecko prices proxy
+app.get('/api/prices', async (req, res) => {
+  try {
+    const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,solana,star-atlas,star-atlas-dao&vs_currencies=usd');
+    const prices = cgRes.ok ? await cgRes.json() : {};
+    res.json(prices);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch prices' });
+  }
+});
+
+// WPAC price and icon proxy
+app.get('/api/wpac', async (req, res) => {
+  try {
+    const boomRes = await fetch('https://coinboom.net/coin/pactus');
+    if (!boomRes.ok) return res.status(502).json({ error: 'Failed to fetch WPAC from coinboom.net' });
+    const boomText = await boomRes.text();
+    // Extract price using regex
+    const iconMatch = boomText.match(/(https:\/\/storage\.coinboom\.net\/images\/[a-zA-Z0-9\-]+\.webp)/);
+    // Use DOM-like regex to extract the price from the div with 'Wrapped PAC Price USD' and the next div with the price
+    let wpacPrice = null;
+    const priceDivMatch = boomText.match(/<span[^>]*>Wrapped PAC Price USD<\/span><div[^>]*style="font-weight: 600;">\$([0-9]+\.[0-9]+)/);
+    if (priceDivMatch) {
+      wpacPrice = parseFloat(priceDivMatch[1]);
+    }
+    const wpacIcon = iconMatch ? iconMatch[1] : null;
+    res.json({ price: wpacPrice, icon: wpacIcon });
+  } catch (err) {
+    res.status(500).json({ error: 'WPAC fetch error', details: err instanceof Error ? err.message : String(err) });
   }
 });
 

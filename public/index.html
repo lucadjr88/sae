@@ -6,6 +6,7 @@
   <title>Star Atlas Explorer</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="styles.css?v=ui1">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="sidebar" id="sidebar" style="display:none;">
@@ -38,11 +39,35 @@
       </div>
       <div class="form-box centered">
         <input type="text" id="profileId" placeholder="Player Profile ID">
-        <button onclick="analyzeFees()" id="analyzeBtn">Analyze 24h</button>
+        <button onclick="analyzeFees()" id="analyzeBtn">Analyze</button>
       </div>
       <div id="results"></div>
     </div>
   </div>
   <script src="app.js?v=rent8"></script>
-</body>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <div id="price-ticker-bar" style="position:fixed;bottom:0;left:0;width:100%;height:32px;background:#181c24;color:#e2e8f0;font-size:15px;z-index:9999;display:flex;align-items:center;overflow:hidden;border-top:1px solid #23272f;">
+    <div id="price-ticker-outer" style="width:100%;overflow:hidden;">
+      <div id="price-ticker-content" style="display:flex;gap:64px;align-items:center;height:32px;will-change:transform;"></div>
+    </div>
+  </div>
+  <style>
+    @keyframes ticker-scroll {
+      0% { transform: translateX(100%); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translateX(-100%); opacity: 0; }
+    }
+    #price-ticker-content {
+      animation: ticker-scroll 30s linear infinite;
+    }
+    .ticker-item {
+      flex: 0 0 auto;
+      min-width: 120px;
+      justify-content: center;
+      align-items: center;
+      display: flex;
+    }
+  </style>
+  </body>
 </html>

@@ -279,7 +279,7 @@ export async function getWalletSageFeesDetailedStreaming(
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   const connection = newConnection(rpcEndpoint, rpcWebsocket);
   const BATCH_SIZE = 100;
-  const MAX_TRANSACTIONS = 1000; // Reduced to stay under rate limits (was 5000)
+  const MAX_TRANSACTIONS = 3000; // Reduced to stay under rate limits (was 5000)
   
   const excludeAccounts = [
     'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE',
