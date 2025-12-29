@@ -7,6 +7,7 @@ export interface StreamingOptions {
   timeoutMs?: number;
   stream?: boolean;
   onProgress?: (progress: StreamingProgress) => void;
+  enableSubAccountMapping?: boolean; // Nuovo flag per abilitare mappatura sub-accounts
   [key: string]: any;
 }
 
@@ -32,4 +33,10 @@ export interface WalletSageFeesStreamingServices {
   rpcPool: IRpcPool;
   logger?: { log: (...args: any[]) => void };
   metrics?: { emit: (name: string, value: any) => void };
+}
+
+export interface FleetData {
+  cargoHold?: string;
+  fuelTank?: string;
+  ammoBank?: string;
 }

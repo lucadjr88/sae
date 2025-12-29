@@ -1,0 +1,89 @@
+
+added 26 packages, and audited 374 packages in 2s
+
+51 packages are looking for funding
+  run `npm fund` for details
+
+# npm audit report
+
+bigint-buffer  *
+Severity: high
+bigint-buffer Vulnerable to Buffer Overflow via toBigIntLE() Function - https://github.com/advisories/GHSA-3gc7-fjrx-p6mg
+fix available via `npm audit fix --force`
+Will install @staratlas/data-source@0.3.10, which is a breaking change
+node_modules/bigint-buffer
+  @solana/buffer-layout-utils  *
+  Depends on vulnerable versions of bigint-buffer
+  node_modules/@solana/buffer-layout-utils
+    @solana/spl-token  >=0.2.0-alpha.0
+    Depends on vulnerable versions of @solana/buffer-layout-utils
+    node_modules/@solana/spl-token
+      @staratlas/cargo  <=0.3.7 || >=0.4.1
+      Depends on vulnerable versions of @solana/spl-token
+      Depends on vulnerable versions of @staratlas/data-source
+      Depends on vulnerable versions of @staratlas/player-profile
+      node_modules/@staratlas/cargo
+      @staratlas/crafting  <=0.3.7 || >=0.4.1
+      Depends on vulnerable versions of @solana/spl-token
+      Depends on vulnerable versions of @staratlas/data-source
+      Depends on vulnerable versions of @staratlas/player-profile
+      node_modules/@staratlas/crafting
+        @staratlas/sage  >=0.4.1
+        Depends on vulnerable versions of @solana/spl-token
+        Depends on vulnerable versions of @staratlas/cargo
+        Depends on vulnerable versions of @staratlas/crafting
+        Depends on vulnerable versions of @staratlas/crew
+        Depends on vulnerable versions of @staratlas/data-source
+        Depends on vulnerable versions of @staratlas/player-profile
+        Depends on vulnerable versions of @staratlas/points
+        Depends on vulnerable versions of @staratlas/points-store
+        Depends on vulnerable versions of @staratlas/profile-faction
+        node_modules/@staratlas/sage
+      @staratlas/crew  *
+      Depends on vulnerable versions of @solana/spl-token
+      Depends on vulnerable versions of @staratlas/data-source
+      Depends on vulnerable versions of @staratlas/player-profile
+      Depends on vulnerable versions of @staratlas/profile-faction
+      node_modules/@staratlas/crew
+      @staratlas/data-source  >=0.4.1
+      Depends on vulnerable versions of @solana/spl-token
+      node_modules/@staratlas/cargo/node_modules/@staratlas/data-source
+      node_modules/@staratlas/crafting/node_modules/@staratlas/data-source
+      node_modules/@staratlas/crew/node_modules/@staratlas/data-source
+      node_modules/@staratlas/data-source
+      node_modules/@staratlas/player-profile/node_modules/@staratlas/data-source
+      node_modules/@staratlas/points-store/node_modules/@staratlas/data-source
+      node_modules/@staratlas/points/node_modules/@staratlas/data-source
+      node_modules/@staratlas/profile-faction/node_modules/@staratlas/data-source
+      node_modules/@staratlas/sage/node_modules/@staratlas/data-source
+        @staratlas/player-profile  >=0.4.1
+        Depends on vulnerable versions of @staratlas/data-source
+        node_modules/@staratlas/player-profile
+        @staratlas/points-store  <=0.3.7 || >=0.4.1
+        Depends on vulnerable versions of @solana/spl-token
+        Depends on vulnerable versions of @staratlas/data-source
+        Depends on vulnerable versions of @staratlas/player-profile
+        Depends on vulnerable versions of @staratlas/points
+        Depends on vulnerable versions of @staratlas/profile-faction
+        node_modules/@staratlas/points-store
+      @staratlas/factory  >=0.7.0-develop.1
+      Depends on vulnerable versions of @solana/spl-token
+      node_modules/@staratlas/factory
+      @staratlas/points  >=0.4.1
+      Depends on vulnerable versions of @solana/spl-token
+      Depends on vulnerable versions of @staratlas/data-source
+      Depends on vulnerable versions of @staratlas/player-profile
+      node_modules/@staratlas/points
+      @staratlas/profile-faction  *
+      Depends on vulnerable versions of @solana/spl-token
+      Depends on vulnerable versions of @staratlas/data-source
+      Depends on vulnerable versions of @staratlas/player-profile
+      node_modules/@staratlas/profile-faction
+
+13 high severity vulnerabilities
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force

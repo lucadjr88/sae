@@ -16,6 +16,7 @@ export interface TransactionInfo {
   craftingMaterial?: string;
   decodedRecipe?: any;
   meta?: any;
+  fleetAssigned?: boolean; // Flag for fallback association
 }
 
 export interface FleetOperation {

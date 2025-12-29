@@ -3,6 +3,8 @@ import { getAccountTransactions } from './account-transactions.js';
 import { newConnection } from '../utils/anchor-setup.js';
 import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
 import OP_MAP from './op-map.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export async function getWalletSageFeesDetailed(
   rpcEndpoint: string,
@@ -57,6 +59,49 @@ export async function getWalletSageFeesDetailed(
   console.log(`[DEBUG] Specific fleet accounts (after filtering): ${specificFleetAccounts.length}`);
   specificFleetAccounts.forEach((fleet, i) => console.log(`  Specific Fleet ${i}: ${fleet.substring(0, 8)}...`));
   
+  // Build map from account to fleet for sub-accounts (cargoHold, fuelTank, ammoBank)
+  const accountToFleet: { [account: string]: string } = {};
+  const cacheDir = path.join(process.cwd(), 'cache', 'fleets');
+  for (const fleet of specificFleetAccounts) {
+    const cacheFile = path.join(cacheDir, `${fleet}.json`);
+    if (fs.existsSync(cacheFile)) {
+      try {
+        const cacheData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        const data = cacheData.data?.data;
+        if (data) {
+          if (data.cargoHold) accountToFleet[data.cargoHold] = fleet;
+          if (data.fuelTank) accountToFleet[data.fuelTank] = fleet;
+          if (data.ammoBank) accountToFleet[data.ammoBank] = fleet;
+        }
+      } catch (e) {
+        console.warn(`Failed to read cache for fleet ${fleet}:`, e);
+      }
+    }
+  }
+  
+  // Also include rented fleets in the accountToFleet map
+  const rentedCacheDir = path.join(process.cwd(), 'cache', 'rented-fleets');
+  if (fs.existsSync(rentedCacheDir)) {
+    const rentedFiles = fs.readdirSync(rentedCacheDir).filter(file => file.endsWith('.json'));
+    for (const file of rentedFiles) {
+      const cacheFile = path.join(rentedCacheDir, file);
+      try {
+        const cacheData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        const fleet = Object.keys(cacheData)[0];
+        const data = cacheData[fleet]?.data;
+        if (data) {
+          if (data.cargoHold) accountToFleet[data.cargoHold] = fleet;
+          if (data.fuelTank) accountToFleet[data.fuelTank] = fleet;
+          if (data.ammoBank) accountToFleet[data.ammoBank] = fleet;
+        }
+      } catch (e) {
+        console.warn(`Failed to read rented cache for ${file}:`, e);
+      }
+    }
+  }
+  
+  console.log(`[DEBUG] Built accountToFleet map with ${Object.keys(accountToFleet).length} sub-accounts`);
+  
   // Compute cutoff for the analysis window
   const now = Date.now();
   const cutoffTime = now - (hours * 60 * 60 * 1000);
@@ -89,6 +134,65 @@ export async function getWalletSageFeesDetailed(
   
   // Track which fleets have rental operations
   const rentedFleets = new Set<string>();
+  // Helper functions for fallback association of rented fleets
+  function findRentedFleetByHeuristics(tx: any, rentedFleets: Set<string>): string | null {
+    if (!tx.accountKeys || !Array.isArray(tx.accountKeys)) return null;
+    
+    // Check for proximity: fleet key with unknown accounts within 2 positions
+    for (const fleet of rentedFleets) {
+      const fleetIndex = tx.accountKeys.indexOf(fleet);
+      if (fleetIndex !== -1) {
+        // Check if there are unknown accounts nearby
+        const nearbyAccounts = tx.accountKeys.slice(Math.max(0, fleetIndex - 2), fleetIndex + 3);
+        const hasUnknownAccount = nearbyAccounts.some((acc: string) => !specificFleetAccounts.includes(acc));
+        if (hasUnknownAccount) {
+          return fleet;
+        }
+      }
+    }
+    
+    // Check for instruction-based patterns (cargo operations, etc.)
+    const instructions = (tx.instructions || []).join(" ").toLowerCase();
+    if (instructions.includes("cargo") || instructions.includes("deposit") || instructions.includes("withdraw")) {
+      // For cargo operations, check if any rented fleet is in accountKeys
+      for (const fleet of rentedFleets) {
+        if (tx.accountKeys.includes(fleet)) {
+          return fleet;
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  function assignTransactionToFleet(tx: any, fleetKey: string, feesByFleet: any) {
+    if (!feesByFleet[fleetKey]) {
+      feesByFleet[fleetKey] = {
+        totalFee: 0,
+        feePercentage: 0,
+        totalOperations: 0,
+        isRented: true, // Assume rented since this is fallback
+        operations: {},
+        fleetName: fleetKey.substring(0, 8)
+      };
+    }
+    
+    const fleetEntry = feesByFleet[fleetKey];
+    fleetEntry.totalFee += tx.fee;
+    fleetEntry.isRented = true;
+    
+    // Add to a generic "Fallback" operation
+    if (!fleetEntry.operations["Fallback"]) {
+      fleetEntry.operations["Fallback"] = { count: 0, totalFee: 0, avgFee: 0, percentageOfFleet: 0, details: [] };
+    }
+    const op = fleetEntry.operations["Fallback"];
+    op.count++;
+    op.totalFee += tx.fee;
+    op.avgFee = op.totalFee / op.count;
+    op.details!.push(tx.signature);
+    
+    console.log(`[FALLBACK] Associated tx ${tx.signature?.substring(0, 8)} to rented fleet ${fleetKey.substring(0, 8)}`);
+  }
 
   // Complete SAGE instruction mapping from official IDL (SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE)
   // Source: https://github.com/staratlasmeta/star-atlas-decoders
@@ -104,7 +208,6 @@ export async function getWalletSageFeesDetailed(
 
     // Determine operation using MULTIPLE sources with enhanced patterns
     let operation = 'Unknown';
-    let foundMethod = 'none';
 
     // Debug: Print transaction signature, accountKeys, and instructions for first 10 tx
     const isFirstFewTx = recent24h.indexOf(tx) < 10;
@@ -125,13 +228,11 @@ export async function getWalletSageFeesDetailed(
           for (const instr of tx.instructions) {
             if (OP_MAP[instr]) {
               operation = OP_MAP[instr];
-              foundMethod = 'instruction_direct';
               break;
             }
             for (const [key, value] of Object.entries(OP_MAP) as [string, string][]) {
               if (instr.toLowerCase().includes(key.toLowerCase())) {
                 operation = value;
-                foundMethod = 'instruction';
                 break;
               }
             }
@@ -146,14 +247,12 @@ export async function getWalletSageFeesDetailed(
               const ixName = ixMatch[1];
               if (OP_MAP[ixName]) {
                 operation = OP_MAP[ixName];
-                foundMethod = 'log_instruction';
                 break;
               }
             }
             for (const [key, value] of Object.entries(OP_MAP) as [string, string][]) {
               if (log.includes(key)) {
                 operation = value;
-                foundMethod = 'log_direct';
                 break;
               }
             }
@@ -167,50 +266,20 @@ export async function getWalletSageFeesDetailed(
           const combinedLower = (logsLower + ' ' + innerText).trim();
           if (combinedLower.includes('craft')) {
             operation = 'Crafting';
-            foundMethod = 'pattern_craft';
           } else if (combinedLower.includes('mine') || combinedLower.includes('mining')) {
-            if (combinedLower.includes('start')) {
-              operation = 'StartMining';
-            } else if (combinedLower.includes('stop')) {
-              operation = 'StopMining';
-            } else {
               operation = 'Mining';
-            }
-            foundMethod = 'pattern_mining';
           } else if (combinedLower.includes('subwarp')) {
-            if (combinedLower.includes('start') || combinedLower.includes('enter')) {
-              operation = 'StartSubwarp';
-            } else if (combinedLower.includes('stop') || combinedLower.includes('exit') || combinedLower.includes('end')) {
-              operation = 'EndSubwarp';
-            } else {
+            if (combinedLower.includes('subwarp')) {
               operation = 'Subwarp';
             }
-            foundMethod = 'pattern_subwarp';
           } else if (combinedLower.includes('warp')) {
             // Warp normale, NON subwarp
             operation = 'Warp';
-            foundMethod = 'pattern_warp';
           } else if (combinedLower.includes('scan')) {
-            if (combinedLower.includes('start')) {
-              operation = 'StartScan';
-            } else if (combinedLower.includes('stop')) {
-              operation = 'StopScan';
-            } else {
               operation = 'Scan';
-            }
-            foundMethod = 'pattern_scan';
-          } else if (combinedLower.includes('dock')) {
-            operation = combinedLower.includes('undock') ? 'Undock' : 'Dock';
-            foundMethod = 'pattern_dock';
-          } else if (combinedLower.includes('cargo')) {
-            operation = combinedLower.includes('unload') ? 'UnloadCargo' : 'LoadCargo';
-            foundMethod = 'pattern_cargo';
-          } else if (combinedLower.includes('fuel')) {
-            operation = 'Refuel';
-            foundMethod = 'pattern_fuel';
-          } else if (combinedLower.includes('ammo')) {
-            operation = 'Rearm';
-            foundMethod = 'pattern_ammo';
+          } else if (combinedLower.includes('dock') || combinedLower.includes('undock') ||
+                     combinedLower.includes('load') || combinedLower.includes('unload')) {
+            operation = 'Dock/Undock/Load/Unload';
           }
         }
         if (operation === 'Unknown') unknownOperations++;
@@ -219,24 +288,37 @@ export async function getWalletSageFeesDetailed(
         if (operation === 'FleetStateHandler') {
           const logsJoined = (tx.logMessages || []).join(' ');
           if (logsJoined.includes('MoveSubwarp')) {
-            operation = 'StopSubwarp';  // It's completing a subwarp movement
+            operation = 'Subwarp';  // It's completing a subwarp movement
           } else if (logsJoined.includes('MineAsteroid')) {
-            operation = 'StopMining';  // It's completing mining
+            operation = 'Mining';  // It's completing mining
           }
           // Otherwise keep as FleetStateHandler for other state transitions
         }
         
-        // MATCHING semplificato: usa solo la key principale della flotta
+        // MATCHING completo: usa key principale e sub-account (cargoHold, fuelTank, ammoBank)
         let involvedFleet: string | undefined = undefined;
         let involvedFleetName: string | undefined = undefined;
         let matchStrategy = 'none';
         if (tx.accountKeys && tx.accountKeys.length > 0) {
+          // Prima controlla key principali
           for (const fleet of specificFleetAccounts) {
             if (tx.accountKeys.includes(fleet)) {
               involvedFleet = fleet;
+              console.log(`[DEBUG] involvedFleet set to: ${fleet.substring(0, 8)}... for tx ${tx.signature?.substring(0, 8)}...`);
               involvedFleetName = (fleetAccountNames && fleetAccountNames[fleet]) ? fleetAccountNames[fleet] : fleet.substring(0, 8);
               matchStrategy = 'direct';
               break;
+            }
+          }
+          // Poi controlla sub-account
+          if (!involvedFleet) {
+            for (const account of tx.accountKeys) {
+              if (accountToFleet[account]) {
+                involvedFleet = accountToFleet[account];
+                involvedFleetName = (fleetAccountNames && fleetAccountNames[involvedFleet]) ? fleetAccountNames[involvedFleet] : involvedFleet.substring(0, 8);
+                matchStrategy = 'subaccount';
+                break;
+              }
             }
           }
         }
@@ -253,6 +335,12 @@ export async function getWalletSageFeesDetailed(
             }
           }
         }
+        
+        // Debug logging for dock/undock operations
+        if (operation === 'Dock' || operation === 'Undock') {
+          console.log(`[DOCK OPERATION] ${tx.signature.substring(0, 8)}... operation=${operation}, involvedFleet=${involvedFleet || 'none'}, matchStrategy=${matchStrategy}, accountKeys=${tx.accountKeys?.slice(0, 5).join(',')}...`);
+        }
+        
         // Se nessuna flotta trovata, fallback su categoria
         if (!involvedFleet) {
           if (operation.includes('Craft') || operation.includes('craft')) {
@@ -324,6 +412,7 @@ export async function getWalletSageFeesDetailed(
       } else if (combinedLower2.includes('food') || combinedLower2.includes('biomass')) {
         craftingMaterial = 'Food';
       }
+      tx.fleetAssigned = true;
       // Estrai i materiali bruciati dal log
       const burnMatch = combinedLower2.match(/burn[:\s]+([a-z\s0-9]+?)(?:\s|;|$)/);
       if (burnMatch) {
@@ -432,6 +521,22 @@ export async function getWalletSageFeesDetailed(
     }
   }
 
+  
+  // Fallback association for rented fleets with incomplete data
+  // This runs after standard association to catch transactions that involve sub-accounts
+  if (true) { // Enable fallback association for rented fleets
+    console.log(`[FALLBACK] Starting fallback association for ${allTransactions.length} transactions`);
+    for (const tx of allTransactions) {
+      if (!tx.fleetAssigned) {
+        const rentedFleet = findRentedFleetByHeuristics(tx, rentedFleets);
+        if (rentedFleet) {
+          assignTransactionToFleet(tx, rentedFleet, feesByFleet);
+          tx.fleetAssigned = true;
+        }
+      }
+    }
+    console.log(`[FALLBACK] Completed fallback association`);
+  }
   // Compute percentages per fleet & per operation
   Object.values(feesByFleet).forEach(fleetEntry => {
     fleetEntry.feePercentage = fleetEntry.totalFee / (sageFees24h || 1);

@@ -48,7 +48,30 @@ export async function detectRentedFleets(
   }
 
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
-  const signatures = await poolConn.getSignaturesForAddress(new PublicKey(feePayer), { limit: Math.min(1000, sigLimit), ...(rpcOpts || {}) });
+  let signatures: any[] = [];
+  let retries = 5;
+  while (retries >= 0 && signatures.length === 0) {
+    try {
+      signatures = await poolConn.getSignaturesForAddress(new PublicKey(feePayer), { limit: Math.min(1000, sigLimit), ...(rpcOpts || {}) });
+      if (signatures && signatures.length > 0) break;
+    } catch (err) {
+      const errMsg = (err as any)?.message || '';
+      if (retries > 0 && (
+        errMsg.includes('429') ||
+        errMsg.includes('timeout') ||
+        errMsg.includes('Temporary internal error') ||
+        errMsg.includes('502') ||
+        errMsg.includes('503') ||
+        errMsg.includes('504')
+      )) {
+        await new Promise(r => setTimeout(r, 200 * (6 - retries)));
+        retries--;
+        continue;
+      }
+      break;
+    }
+    retries--;
+  }
   console.log('[detectRentedFleets] fetched signatures count=', (signatures && signatures.length) || 0);
 
   const candidateKeys = new Set<string>();
@@ -59,8 +82,34 @@ export async function detectRentedFleets(
   const sigList = signatures.map(s => s.signature);
 
   async function processSignatureBatch(batch: string[]) {
-    const promises = batch.map(sig =>
-      poolConn.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0, ...(rpcOpts || {}) }).catch(() => null)
+    const promises = batch.map(sig => 
+      (async () => {
+        let tx: any = null;
+        let retries = 5;
+        while (retries >= 0 && !tx) {
+          try {
+            tx = await poolConn.getParsedTransaction(sig, { maxSupportedTransactionVersion: 0, ...(rpcOpts || {}) });
+            if (tx) break;
+          } catch (err) {
+            const errMsg = (err as any)?.message || '';
+            if (retries > 0 && (
+              errMsg.includes('429') ||
+              errMsg.includes('timeout') ||
+              errMsg.includes('Temporary internal error') ||
+              errMsg.includes('502') ||
+              errMsg.includes('503') ||
+              errMsg.includes('504')
+            )) {
+              await new Promise(r => setTimeout(r, 200 * (6 - retries)));
+              retries--;
+              continue;
+            }
+            break;
+          }
+          retries--;
+        }
+        return tx;
+      })()
     );
     const results = await Promise.all(promises);
     for (let i = 0; i < results.length; i++) {
@@ -91,38 +140,72 @@ export async function detectRentedFleets(
   const ACC_BATCH = Number(process.env.RENTAL_ACCOUNT_BATCH) || 20;
   for (let i = 0; i < ALL_KEYS.length; i += ACC_BATCH) {
     const batchKeys = ALL_KEYS.slice(i, i + ACC_BATCH).map(k => new PublicKey(k));
-    try {
-      const infos = await poolConn.getMultipleAccountsInfo(batchKeys, { ...(rpcOpts || {}) });
-      for (let j = 0; j < infos.length; j++) {
-        const info = infos[j];
-        const pub = ALL_KEYS[i + j];
-        if (!info) continue;
-        try {
-          if (info.owner.toString() === SAGE_PROGRAM_ID && info.data.length >= 202) {
-            candidateKeys.add(pub);
-          }
-        } catch (e) {
-          // ignore per-account parse errors
+    let infos: any[] = [];
+    let retries = 5;
+    while (retries >= 0 && infos.length === 0) {
+      try {
+        infos = await poolConn.getMultipleAccountsInfo(batchKeys, { ...(rpcOpts || {}) });
+        if (infos && infos.length > 0) break;
+      } catch (err) {
+        const errMsg = (err as any)?.message || '';
+        if (retries > 0 && (
+          errMsg.includes('429') ||
+          errMsg.includes('timeout') ||
+          errMsg.includes('Temporary internal error') ||
+          errMsg.includes('502') ||
+          errMsg.includes('503') ||
+          errMsg.includes('504')
+        )) {
+          await new Promise(r => setTimeout(r, 200 * (6 - retries)));
+          retries--;
+          continue;
         }
+        break;
       }
-    } catch (e) {
-      // ignore batch errors and fall back to individual lookup
-      for (let j = 0; j < batchKeys.length; j++) {
-        const pub = ALL_KEYS[i + j];
-        try {
-          const info = await poolConn.getAccountInfo(new PublicKey(pub), { ...(rpcOpts || {}) });
-          if (!info) continue;
-          if (info.owner.toString() === SAGE_PROGRAM_ID && info.data.length >= 202) candidateKeys.add(pub);
-        } catch (e2) { /* ignore */ }
+      retries--;
+    }
+    for (let j = 0; j < infos.length; j++) {
+      const info = infos[j];
+      const pub = ALL_KEYS[i + j];
+      if (!info) continue;
+      try {
+        if (info.owner.toString() === SAGE_PROGRAM_ID && info.data.length >= 202) {
+          candidateKeys.add(pub);
+        }
+      } catch (e) {
+        // ignore per-account parse errors
       }
     }
   }
 
   const fleets: Array<{ key: string; label: string; owner: string | null; sub?: string | null }> = [];
   for (const k of candidateKeys) {
+    let info: any = null;
+    let retries = 5;
+    while (retries >= 0 && !info) {
+      try {
+        info = await poolConn.getAccountInfo(new PublicKey(k), { ...(rpcOpts || {}) });
+        if (info) break;
+      } catch (err) {
+        const errMsg = (err as any)?.message || '';
+        if (retries > 0 && (
+          errMsg.includes('429') ||
+          errMsg.includes('timeout') ||
+          errMsg.includes('Temporary internal error') ||
+          errMsg.includes('502') ||
+          errMsg.includes('503') ||
+          errMsg.includes('504')
+        )) {
+          await new Promise(r => setTimeout(r, 200 * (6 - retries)));
+          retries--;
+          continue;
+        }
+        break;
+      }
+      retries--;
+    }
+    if (!info) continue;
     try {
-      const info = await poolConn.getAccountInfo(new PublicKey(k), { ...(rpcOpts || {}) });
-      if (!info) continue;
       const ownerBytes = info.data.slice(41, 73);
       const subBytes = info.data.slice(73, 105);
       let owner: string | null = null;

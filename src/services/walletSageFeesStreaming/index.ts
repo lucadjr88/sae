@@ -3,6 +3,7 @@
 
 import type { WalletSageFeesStreamingServices, StreamingOptions, StreamingResult } from './types';
 import { parseTransaction } from './lib/parsers';
+import { buildAccountToFleetMap } from './lib/fleet-association';
 import { RpcPoolAdapterWithFetch } from '../RpcPoolAdapter';
 
 // Orchestrator reale: fetch, parse, aggrega, metriche base
@@ -61,12 +62,28 @@ export async function getWalletSageFeesDetailedStreaming(
     for (const f of fleetAccounts) {
       feesByFleet[f] = { totalFee: 0, feePercentage: 0, totalOperations: 0, isRented: !!fleetRentalStatus[f], operations: {}, fleetName: (fleetNames && fleetNames[f]) ? fleetNames[f] : f.substring(0,8) };
     }
-    // allocate transactions to matching fleet (simple inclusion test)
+    // Build account-to-fleet map if enabled
+    const accountToFleetMap = opts.enableSubAccountMapping ? buildAccountToFleetMap(fleetAccounts) : null;
+    if (accountToFleetMap && logger) {
+      logger.log(`Built account-to-fleet map with ${accountToFleetMap.size} entries`);
+    }
+    // allocate transactions to matching fleet
     for (const tx of items) {
-      const matching = (Array.isArray(tx.accountKeys) && tx.accountKeys.find((k: any) => fleetAccounts.includes(k)));
+      let matching: string | undefined;
+      if (Array.isArray(tx.accountKeys)) {
+        for (const k of tx.accountKeys) {
+          if (accountToFleetMap?.has(k)) {
+            matching = accountToFleetMap.get(k);
+            break;
+          } else if (fleetAccounts.includes(k)) {
+            matching = k;
+            break;
+          }
+        }
+      }
       const key = matching || 'Other Operations';
       if (!feesByFleet[key]) {
-        feesByFleet[key] = { totalFee: 0, feePercentage: 0, totalOperations: 0, isRented: false, operations: {}, fleetName: (fleetNames && fleetNames[key]) ? fleetNames[key] : key };
+        feesByFleet[key] = { totalFee: 0, feePercentage: 0, totalOperations: 0, isRented: !!fleetRentalStatus[key], operations: {}, fleetName: (fleetNames && fleetNames[key]) ? fleetNames[key] : key };
       }
       feesByFleet[key].totalFee += (tx.fee || 0);
       feesByFleet[key].totalOperations = (feesByFleet[key].totalOperations || 0) + 1;

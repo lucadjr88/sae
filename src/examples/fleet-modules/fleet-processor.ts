@@ -1,5 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { byteArrayToString } from "@staratlas/data-source";
+import { getCacheDataOnly } from '../../utils/persist-cache.js';
 import { FleetProcessorInput, FleetProcessorOutput } from './interfaces.js';
 
 export async function processFleets(input: FleetProcessorInput): Promise<FleetProcessorOutput> {
@@ -24,7 +25,30 @@ export async function processFleets(input: FleetProcessorInput): Promise<FleetPr
       const chunkSize = 100;
       for (let i = 0; i < allKeys.length; i += chunkSize) {
         const chunk = allKeys.slice(i, i + chunkSize);
-        const infos = await connection.getMultipleAccountsInfo(chunk);
+        let infos: any[] | null = null;
+        let retries = 3;
+        let delay = 1000;
+
+        while (retries > 0 && infos === null) {
+          try {
+            infos = await connection.getMultipleAccountsInfo(chunk);
+          } catch (error) {
+            retries--;
+            if (retries > 0) {
+              console.warn(`Error fetching accounts info for chunk ${i}-${i + chunkSize - 1}, retrying in ${delay}ms (${retries} retries left):`, error instanceof Error ? error.message : String(error));
+              await new Promise(resolve => setTimeout(resolve, delay));
+              delay *= 2;
+            } else {
+              console.error(`Error fetching accounts info for chunk ${i}-${i + chunkSize - 1} after all retries:`, error);
+              infos = new Array(chunk.length).fill(null); // fill with nulls to continue
+            }
+          }
+        }
+
+        if (!infos) {
+          infos = new Array(chunk.length).fill(null);
+        }
+
         for (let j = 0; j < chunk.length; j++) {
           const info = infos[j];
           const k = chunk[j].toBase58();
@@ -49,9 +73,9 @@ export async function processFleets(input: FleetProcessorInput): Promise<FleetPr
     console.error('Failed to pre-extract owner/subProfile from accounts:', e);
   }
 
-  const fleetsData = fleets
+  const fleetsData = await Promise.all(fleets
     .filter((f: any) => f.type === 'ok')
-    .map((fleet: any) => {
+    .map(async (fleet: any) => {
       const subProfile = fleet.data.data.subProfile;
       const owningProfile = fleet.data.data.owningProfile;
       const keyStr = fleet.key.toString();
@@ -90,19 +114,30 @@ export async function processFleets(input: FleetProcessorInput): Promise<FleetPr
       const isRented = rentedBySubProfile || rentedByWalletHeuristic || rentedBySrsly;
 
       try {
-        const name = byteArrayToString(fleet.data.data.fleetLabel) || '<unnamed>';
+        const name = (fleet.data.data.fleetLabel ? byteArrayToString(fleet.data.data.fleetLabel) : '<unnamed>') || '<unnamed>';
         //console.log(
         //  `[fleets] ${name} | key=${keyStr} | owner=${ownerStr} | sub=${subStr} | flags: subMatch=${subStr===playerProfilePubkey.toString()} ownerMatch=${ownerStr===playerProfilePubkey.toString()} walletHeuristic=${walletHeuristicKeys.has(keyStr)} srslyHeuristic=${srslyHeuristicKeys.has(keyStr)} => isRented=${isRented}`
         //);
       } catch {}
 
+      let callsign = fleet.callsign || (fleet.data.data.fleetLabel ? byteArrayToString(fleet.data.data.fleetLabel) : '<unnamed>');
+      if (callsign === '<unnamed>' && Object.keys(fleet.data.data).length === 0) {
+        // Try to get from cache
+        try {
+          const cachedFleet = await getCacheDataOnly<any>('fleets', fleet.key.toString());
+          if (cachedFleet && cachedFleet.callsign && cachedFleet.callsign !== '<unnamed>') {
+            callsign = cachedFleet.callsign;
+          }
+        } catch {}
+      }
+
       return {
-        callsign: byteArrayToString(fleet.data.data.fleetLabel),
+        callsign,
         key: fleet.key.toString(),
         data: fleet.data.data,
         isRented: isRented
       };
-    });
+    }));
 
   return {
     fleetsData

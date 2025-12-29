@@ -105,11 +105,16 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
       sendUpdate,
       saveProgress,
       cachedData,
-      lastProcessedSignature
+      lastProcessedSignature,
+      refresh
     );
     console.log(`[stream] 💾 Saving to cache for wallet ${walletPubkey.substring(0, 8)}...`);
-    await setCache('wallet-fees-detailed', cacheKey, finalResult);
-    console.log(`[stream] ✅ Cache saved successfully`);
+    if (finalResult.totalSignaturesFetched > 0) {
+      await setCache('wallet-fees-detailed', cacheKey, finalResult);
+      console.log(`[stream] ✅ Cache saved successfully`);
+    } else {
+      console.log(`[stream] ❌ Not saving cache (0 signatures fetched, likely rate limited)`);
+    }
     await new Promise(resolve => setTimeout(resolve, 100));
     res.end();
   } catch (err: any) {

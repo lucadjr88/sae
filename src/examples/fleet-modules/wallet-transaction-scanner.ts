@@ -3,8 +3,9 @@ import { RpcPoolConnection } from '../../utils/rpc/pool-connection.js';
 import { createRpcPoolManager } from '../../utils/rpc/rpc-pool-manager.js';
 import { getCacheDataOnly, setCache } from '../../utils/persist-cache.js';
 import { nlog } from '../../utils/log-normalizer.js';
-import { byteArrayToString } from "@staratlas/data-source";
+import { byteArrayToString, readFromRPC } from "@staratlas/data-source";
 import { SAGE_PROGRAM_ID } from '../fleets-constants.js';
+import { Fleet } from "@staratlas/sage";
 import {
   WALLET_SIG_BATCH,
   WALLET_FETCH_TIMEOUT_MS,
@@ -264,36 +265,51 @@ export async function scanWalletTransactions(input: WalletTransactionScannerInpu
           console.log(`[tx-analysis] verifying ${Math.min(i + VERIFY_CHUNK_SIZE, candidatesArr.length)}/${candidatesArr.length} candidates...`);
         }
 
-        try {
-          const infos = await poolForVerify.getMultipleAccountsInfo(window, {
-            timeoutMs: VERIFY_TIMEOUT_MS,
-            maxRetries: VERIFY_MAX_RETRIES,
-            rateLimitBackoffBaseMs: VERIFY_BACKOFF_BASE_MS,
-            markUnhealthyOn429Threshold: VERIFY_MARK_UNHEALTHY,
-          });
+        let infos: any[] | null = null;
+        let retries = 3;
+        let delay = 1000;
 
-          // Evaluate results
-          for (let j = 0; j < infos.length; j++) {
-            const info = infos[j];
-            const candidate = candidatesArr[i + j];
-            if (!info) continue;
-            try {
-              if (info.owner.toBase58() === SAGE_PROGRAM_ID && info.data.length === 536) {
-                additionalFleetKeys.add(candidate);
-                verifiedCount++;
-              }
-            } catch { /* ignore malformed */ }
+        while (retries > 0 && infos === null) {
+          try {
+            infos = await poolForVerify.getMultipleAccountsInfo(window, {
+              timeoutMs: VERIFY_TIMEOUT_MS,
+              maxRetries: VERIFY_MAX_RETRIES,
+              rateLimitBackoffBaseMs: VERIFY_BACKOFF_BASE_MS,
+              markUnhealthyOn429Threshold: VERIFY_MARK_UNHEALTHY,
+            });
+          } catch (error) {
+            retries--;
+            if (retries > 0) {
+              console.warn(`Error verifying accounts info for chunk ${i}-${i + VERIFY_CHUNK_SIZE - 1}, retrying in ${delay}ms (${retries} retries left):`, error instanceof Error ? error.message : String(error));
+              await new Promise(resolve => setTimeout(resolve, delay));
+              delay *= 2;
+            } else {
+              console.error(`Error verifying accounts info for chunk ${i}-${i + VERIFY_CHUNK_SIZE - 1} after all retries:`, error);
+              infos = new Array(window.length).fill(null); // fill with nulls to continue
+            }
           }
-
-          // small jittered pause between batches to reduce burst
-          const jitter = Math.floor(Math.random() * 100);
-          await new Promise(resolve => setTimeout(resolve, 30 + jitter));
-        } catch (err) {
-          console.warn(`[tx-analysis] Error verifying chunk ${i}-${i + VERIFY_CHUNK_SIZE - 1}: ${err instanceof Error ? err.message : String(err)}`);
-          // backoff a bit on chunk error
-          const jitter = Math.floor(Math.random() * 200);
-          await new Promise(resolve => setTimeout(resolve, 200 + jitter));
         }
+
+        if (!infos) {
+          infos = new Array(window.length).fill(null);
+        }
+
+        // Evaluate results
+        for (let j = 0; j < infos.length; j++) {
+          const info = infos[j];
+          const candidate = candidatesArr[i + j];
+          if (!info) continue;
+          try {
+            if (info.owner.toBase58() === SAGE_PROGRAM_ID && info.data.length === 536) {
+              additionalFleetKeys.add(candidate);
+              verifiedCount++;
+            }
+          } catch { /* ignore malformed */ }
+        }
+
+        // small jittered pause between batches to reduce burst
+        const jitter = Math.floor(Math.random() * 100);
+        await new Promise(resolve => setTimeout(resolve, 30 + jitter));
       }
       console.log(`[tx-analysis] Found ${additionalFleetKeys.size} verified fleet accounts with recent wallet activity (verified ${verifiedCount})`);
 
@@ -301,25 +317,60 @@ export async function scanWalletTransactions(input: WalletTransactionScannerInpu
 
       // Fetch full fleet data for additional fleets
       for (const fleetKey of additionalFleetKeys) {
-        try {
-          // Fetch by direct pubkey via Anchor account fetch
-          const fleetPubkey = new PublicKey(fleetKey);
-          // @ts-ignore - account type name from IDL
-          const accountData = await (sageProgram.account as any).fleet.fetch(fleetPubkey);
-          if (accountData) {
-            const wrapped = {
-              type: 'ok',
-              key: fleetPubkey,
-              data: { data: accountData },
-            } as any;
-            additionalFleets.push(wrapped);
-            knownFleetKeys.add(fleetKey);
-            console.log(`Added rented fleet (wallet heuristic): ${byteArrayToString((accountData as any).fleetLabel)}`);
-            walletHeuristicKeys.add(fleetKey);
-            operatedByWalletKeys.add(fleetKey);
+        let accountData = null;
+        let retries = 3;
+        let delay = 1000; // start with 1s
+
+        while (retries > 0 && !accountData) {
+          try {
+            // Use readFromRPC with RpcPoolConnection instead of Anchor
+            const fleetPubkey = new PublicKey(fleetKey);
+            const result = await readFromRPC(
+              poolConnection as any, // Cast to Connection type expected by readFromRPC
+              sageProgram as any,
+              fleetPubkey,
+              Fleet,
+              'processed'
+            );
+            
+            if (result.type === 'ok') {
+              accountData = result.data.data;
+            }
+          } catch (error) {
+            retries--;
+            if (retries > 0) {
+              console.warn(`Error fetching fleet ${fleetKey}, retrying in ${delay}ms (${retries} retries left):`, error instanceof Error ? error.message : String(error));
+              await new Promise(resolve => setTimeout(resolve, delay));
+              delay *= 2; // exponential backoff
+            } else {
+              console.error(`Error fetching fleet ${fleetKey} after all retries:`, error);
+            }
           }
-        } catch (error) {
-          console.error(`Error fetching fleet ${fleetKey}:`, error);
+        }
+
+        if (accountData) {
+          const wrapped = {
+            type: 'ok',
+            key: new PublicKey(fleetKey),
+            data: { data: accountData },
+          } as any;
+          additionalFleets.push(wrapped);
+          knownFleetKeys.add(fleetKey);
+          console.log(`Added rented fleet (wallet heuristic): ${byteArrayToString((accountData as any).fleetLabel)}`);
+          walletHeuristicKeys.add(fleetKey);
+          operatedByWalletKeys.add(fleetKey);
+        } else {
+          // Add fleet with empty data if fetch failed but it was verified
+          console.warn(`Adding rented fleet with empty data due to fetch failures: ${fleetKey}`);
+          const wrapped = {
+            type: 'ok',
+            key: new PublicKey(fleetKey),
+            data: { data: {} }, // empty data
+          } as any;
+          additionalFleets.push(wrapped);
+          knownFleetKeys.add(fleetKey);
+          walletHeuristicKeys.add(fleetKey);
+          operatedByWalletKeys.add(fleetKey);
         }
       }
 

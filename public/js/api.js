@@ -1,6 +1,71 @@
 
 
 // Implementazione reale spostata da app.js
+export function updateCacheTooltip(cacheHit, cacheTimestamp) {
+	const profileIcon = document.getElementById('profileIcon');
+	const cacheTooltip = document.getElementById('cacheTooltip');
+	const cacheTooltipIcon = document.getElementById('cacheTooltipIcon');
+	const cacheTooltipTitle = document.getElementById('cacheTooltipTitle');
+	const cacheTooltipStatus = document.getElementById('cacheTooltipStatus');
+	const cacheTooltipAge = document.getElementById('cacheTooltipAge');
+	if (profileIcon && cacheTooltip) {
+		profileIcon.classList.remove('cache-fresh', 'cache-stale');
+		profileIcon.title = '';
+		profileIcon.style.opacity = '1';
+		let hideTimeout = null;
+		profileIcon.onmouseenter = () => {
+			if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; }
+			cacheTooltip.classList.add('visible');
+		};
+		profileIcon.onmouseleave = () => {
+			hideTimeout = setTimeout(() => { cacheTooltip.classList.remove('visible'); }, 200);
+		};
+		cacheTooltip.onmouseenter = () => { if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; } };
+		cacheTooltip.onmouseleave = () => { cacheTooltip.classList.remove('visible'); };
+		const cacheUpdateBtn = document.getElementById('cacheUpdateBtn');
+		const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
+		if (cacheHit === 'disk' && cacheTimestamp) {
+			const cacheAge = Date.now() - parseInt(cacheTimestamp);
+			const sixHoursMs = 6 * 60 * 60 * 1000;
+			const ageMinutes = (cacheAge / 60000).toFixed(1);
+			const ageHours = (cacheAge / 3600000).toFixed(1);
+			if (cacheAge < sixHoursMs) {
+				profileIcon.classList.add('cache-fresh');
+				cacheTooltipIcon.textContent = '✅';
+				cacheTooltipTitle.textContent = 'Cache Fresh';
+				cacheTooltipStatus.textContent = 'Data loaded from cache';
+				cacheTooltipAge.textContent = ageHours < 1 ? `Age: ${ageMinutes} minutes` : `Age: ${ageHours} hours`;
+				if (cacheUpdateBtn) cacheUpdateBtn.style.display = '';
+				if (cacheRefreshBtn) cacheRefreshBtn.style.display = 'none';
+			} else {
+				profileIcon.classList.add('cache-stale');
+				cacheTooltipIcon.textContent = '⚠️';
+				cacheTooltipTitle.textContent = 'Cache Stale';
+				cacheTooltipStatus.textContent = 'Cache is older than 6 hours';
+				cacheTooltipAge.textContent = `Age: ${ageHours} hours`;
+				if (cacheUpdateBtn) cacheUpdateBtn.style.display = 'none';
+				if (cacheRefreshBtn) cacheRefreshBtn.style.display = '';
+			}
+		} else {
+			profileIcon.classList.add('cache-fresh');
+			cacheTooltipIcon.textContent = '✨';
+			cacheTooltipTitle.textContent = 'Fresh Data';
+			cacheTooltipStatus.textContent = 'Just fetched from API';
+			cacheTooltipAge.textContent = 'No cached data';
+			if (cacheUpdateBtn) cacheUpdateBtn.style.display = 'none';
+			if (cacheRefreshBtn) cacheRefreshBtn.style.display = '';
+		}
+		const updateBtn = document.getElementById('cacheUpdateBtn');
+		const refreshBtn = document.getElementById('cacheRefreshBtn');
+		const wipeBtn = document.getElementById('cacheWipeBtn');
+		if (updateBtn) { updateBtn.disabled = false; updateBtn.textContent = '⚡ Update Cache'; }
+		if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = '🔄 Force Refresh'; }
+		if (wipeBtn) { wipeBtn.disabled = false; wipeBtn.textContent = '🗑️ Wipe & Reload'; }
+	}
+}
+
+import { setCurrentProfileId, setLastAnalysisParams, setAnalysisStartTime, setProgressInterval, progressInterval } from './state.js';
+
 export async function analyzeFees() {
 	const profileId = document.getElementById('profileId').value.trim();
 	const resultsDiv = document.getElementById('results');
@@ -9,18 +74,19 @@ export async function analyzeFees() {
 		alert('Inserisci un Player Profile ID!');
 		return;
 	}
-	window.currentProfileId = profileId;
+	setCurrentProfileId(profileId);
 	const formBox = document.querySelector('.form-box');
 	if (formBox) formBox.style.display = 'none';
 	window.setSidebarVisible(false);
 	btn.disabled = true;
 	btn.textContent = 'Loading...';
-	window.analysisStartTime = Date.now();
+	setAnalysisStartTime(Date.now());
+	const startTime = Date.now();
 	window.updateProgress('Initializing...');
-	if (window.progressInterval) clearInterval(window.progressInterval);
-	window.progressInterval = setInterval(() => {
-		if (window.analysisStartTime) {
-			const seconds = Math.floor((Date.now() - window.analysisStartTime) / 1000);
+	if (progressInterval) clearInterval(progressInterval);
+	setProgressInterval(setInterval(() => {
+		if (startTime) {
+			const seconds = Math.floor((Date.now() - startTime) / 1000);
 			const resultsDiv = document.getElementById('results');
 			if (resultsDiv) {
 				const loadingDiv = resultsDiv.querySelector('.loading');
@@ -35,7 +101,7 @@ export async function analyzeFees() {
 				}
 			}
 		}
-	}, 1000);
+	}, 1000));
 	try {
 		window.updateProgress('Fetching fleet data...');
 		const fleetsResponse = await fetch('/api/fleets', {
@@ -150,77 +216,18 @@ export async function analyzeFees() {
 			};
 		}
 		if (!data) throw new Error('Analysis failed - no data received');
-		window.lastAnalysisParams = {
+		setLastAnalysisParams({
 			walletPubkey,
 			fleetAccounts: uniqueFleetAccounts,
 			fleetNames,
 			fleetRentalStatus,
 			fleets
-		};
+		});
 		const totalSigs = data.totalSignaturesFetched || 'N/A';
 		const processedTxs = data.transactionCount24h || 0;
 		const cacheMsg = fromCache ? ' (from cache)' : '';
 		window.updateProgress(`Completed: ${processedTxs}/${totalSigs} transactions${cacheMsg}`);
-		const profileIcon = document.getElementById('profileIcon');
-		const cacheTooltip = document.getElementById('cacheTooltip');
-		const cacheTooltipIcon = document.getElementById('cacheTooltipIcon');
-		const cacheTooltipTitle = document.getElementById('cacheTooltipTitle');
-		const cacheTooltipStatus = document.getElementById('cacheTooltipStatus');
-		const cacheTooltipAge = document.getElementById('cacheTooltipAge');
-		if (profileIcon && cacheTooltip) {
-			profileIcon.classList.remove('cache-fresh', 'cache-stale');
-			profileIcon.title = '';
-			profileIcon.style.opacity = '1';
-			let hideTimeout = null;
-			profileIcon.onmouseenter = () => {
-				if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; }
-				cacheTooltip.classList.add('visible');
-			};
-			profileIcon.onmouseleave = () => {
-				hideTimeout = setTimeout(() => { cacheTooltip.classList.remove('visible'); }, 200);
-			};
-			cacheTooltip.onmouseenter = () => { if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; } };
-			cacheTooltip.onmouseleave = () => { cacheTooltip.classList.remove('visible'); };
-			const cacheUpdateBtn = document.getElementById('cacheUpdateBtn');
-			const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
-			if (cacheHit === 'disk' && cacheTimestamp) {
-				const cacheAge = Date.now() - parseInt(cacheTimestamp);
-				const sixHoursMs = 6 * 60 * 60 * 1000;
-				const ageMinutes = (cacheAge / 60000).toFixed(1);
-				const ageHours = (cacheAge / 3600000).toFixed(1);
-				if (cacheAge < sixHoursMs) {
-					profileIcon.classList.add('cache-fresh');
-					cacheTooltipIcon.textContent = '✅';
-					cacheTooltipTitle.textContent = 'Cache Fresh';
-					cacheTooltipStatus.textContent = 'Data loaded from cache';
-					cacheTooltipAge.textContent = ageHours < 1 ? `Age: ${ageMinutes} minutes` : `Age: ${ageHours} hours`;
-					if (cacheUpdateBtn) cacheUpdateBtn.style.display = '';
-					if (cacheRefreshBtn) cacheRefreshBtn.style.display = 'none';
-				} else {
-					profileIcon.classList.add('cache-stale');
-					cacheTooltipIcon.textContent = '⚠️';
-					cacheTooltipTitle.textContent = 'Cache Stale';
-					cacheTooltipStatus.textContent = 'Cache is older than 6 hours';
-					cacheTooltipAge.textContent = `Age: ${ageHours} hours`;
-					if (cacheUpdateBtn) cacheUpdateBtn.style.display = 'none';
-					if (cacheRefreshBtn) cacheRefreshBtn.style.display = '';
-				}
-			} else {
-				profileIcon.classList.add('cache-fresh');
-				cacheTooltipIcon.textContent = '✨';
-				cacheTooltipTitle.textContent = 'Fresh Data';
-				cacheTooltipStatus.textContent = 'Just fetched from API';
-				cacheTooltipAge.textContent = 'No cached data';
-				if (cacheUpdateBtn) cacheUpdateBtn.style.display = 'none';
-				if (cacheRefreshBtn) cacheRefreshBtn.style.display = '';
-			}
-			const updateBtn = document.getElementById('cacheUpdateBtn');
-			const refreshBtn = document.getElementById('cacheRefreshBtn');
-			const wipeBtn = document.getElementById('cacheWipeBtn');
-			if (updateBtn) { updateBtn.disabled = false; updateBtn.textContent = '⚡ Update Cache'; }
-			if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = '🔄 Force Refresh'; }
-			if (wipeBtn) { wipeBtn.disabled = false; wipeBtn.textContent = '🗑️ Wipe & Reload'; }
-		}
+		updateCacheTooltip(cacheHit, cacheTimestamp);
 		const rentedFleetNames = new Set();
 		try {
 			fleets.forEach(f => {
@@ -247,8 +254,10 @@ export async function analyzeFees() {
 		console.error('Analysis error:', error);
 		resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
 	} finally {
-		if (window.progressInterval) { clearInterval(window.progressInterval); window.progressInterval = null; }
+		if (progressInterval) { clearInterval(progressInterval); setProgressInterval(null); }
 		btn.disabled = false;
 		btn.textContent = 'Analyze 24h';
 	}
 }
+
+window.analyzeFees = analyzeFees;

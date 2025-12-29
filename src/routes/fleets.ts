@@ -28,6 +28,24 @@ export async function fleetsHandler(req: Request, res: Response) {
       }
     }
     let result = await getFleets(defaultServerConnection as any, globalPoolConnection as any, WALLET_PATH, profileId);
+    // Include cached rented fleets
+    try {
+      const cachedRentedKeys = await getCacheDataOnly<string[]>('rented-fleets', profileId);
+      if (cachedRentedKeys && Array.isArray(cachedRentedKeys)) {
+        const existingKeys = new Set(result.fleets.map((f: any) => f.key));
+        for (const key of cachedRentedKeys) {
+          if (!existingKeys.has(key)) {
+            const cachedFleet = await getCacheDataOnly<any>('fleets', key);
+            if (cachedFleet && cachedFleet.isRented) {
+              result.fleets.push(cachedFleet);
+              existingKeys.add(key);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[api/fleets] Failed to load cached rented fleets:', e);
+    }
     try {
       const walletAuthority = result.walletAuthority;
       const requestedFeePayer = req.body && req.body.feePayer ? String(req.body.feePayer) : null;
@@ -52,7 +70,7 @@ export async function fleetsHandler(req: Request, res: Response) {
           if (typeof lhm.setCooldownMs === 'function') lhm.setCooldownMs(120000);
         } catch (e) {}
         const localPoolConnection = new RpcPoolConnection(defaultServerConnection, localManager);
-        const scanTimeoutMs = Number(process.env.FEE_PAYER_SCAN_TIMEOUT_MS) || 15000;
+        const scanTimeoutMs = Number(process.env.FEE_PAYER_SCAN_TIMEOUT_MS) || 60000;
         let scanRes: any = { rented: [], owned: [], all: [] };
         try {
           const scanPromise = scanFeePayerForRented(localPoolConnection, scanTarget, profileId, 1000);
@@ -88,8 +106,16 @@ export async function fleetsHandler(req: Request, res: Response) {
     if (result && Array.isArray(result.fleets)) {
       for (const fleet of result.fleets) {
         if (fleet && fleet.key) {
-          await setCache('fleets', fleet.key, fleet);
+          // Don't overwrite cache with bad data
+          if (fleet.callsign !== '<unnamed>' || Object.keys(fleet.data || {}).length > 0) {
+            await setCache('fleets', fleet.key, fleet);
+          }
         }
+      }
+      // Cache list of rented fleet keys for this profile
+      const rentedFleets = result.fleets.filter((f: any) => f.isRented).map((f: any) => f.key);
+      if (rentedFleets.length > 0) {
+        await setCache('rented-fleets', profileId, rentedFleets);
       }
     }
     res.json(result);

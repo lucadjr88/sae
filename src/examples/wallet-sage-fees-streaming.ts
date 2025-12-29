@@ -20,7 +20,8 @@ export async function getWalletSageFeesDetailedStreaming(
   sendUpdate: (data: any) => void,
   saveProgress?: (partialResult: any) => Promise<void>,
   cachedData?: any,
-  lastProcessedSignature?: string
+  lastProcessedSignature?: string,
+  refresh: boolean = false
 ): Promise<any> {
   // --- LOGICA LEGACY ADATTATA ALLA MODULARIZZAZIONE ---
   // Costanti e mapping
@@ -60,7 +61,8 @@ export async function getWalletSageFeesDetailedStreaming(
   let consecutiveErrors = 0;
 
   // Gestione incrementale/cache
-  const isIncrementalUpdate = !!(cachedData && lastProcessedSignature);
+  let isIncrementalUpdate = !!(cachedData && lastProcessedSignature);
+  if (refresh) isIncrementalUpdate = false; // Forza ricalcolo completo per refresh
   let feesByFleet: any = isIncrementalUpdate && cachedData ? { ...cachedData.feesByFleet } : {};
   let feesByOperation: any = isIncrementalUpdate && cachedData ? { ...cachedData.feesByOperation } : {};
   let totalFees24h = isIncrementalUpdate && cachedData ? (cachedData.totalFees24h || 0) : 0;
@@ -73,20 +75,61 @@ export async function getWalletSageFeesDetailedStreaming(
   // Create a single reusable RPC pool connection for crafting details
   const sharedPoolConnection = new RpcPoolConnection(connection);
 
-  // Fase 1: Fetch firme (con batch, delay, rate limiting)
-  sendUpdate({ type: 'progress', stage: 'signatures', message: 'Fetching signatures...', processed: 0, total: 0 });
-  const result = await getAccountTransactions(
-    rpcEndpoint,
-    rpcWebsocket,
-    walletPubkey,
-    MAX_TRANSACTIONS,
-    cutoffTime,
-    MAX_TRANSACTIONS,
-    undefined
-  );
-  const allTransactions = result.transactions;
-  const totalSigs = result.totalSignaturesFetched;
-  sendUpdate({ type: 'progress', stage: 'signatures', message: `Found ${totalSigs} signatures`, processed: totalSigs, total: totalSigs });
+  // Retry logic for signature fetch with conservative settings
+  let retryCount = 0;
+  const MAX_FETCH_RETRIES = 3;
+  let fetchBatchSize = MAX_TRANSACTIONS; // Start with full
+  let fetchDelay = MIN_DELAY; // Start with normal
+  let result: any = null;
+  let allTransactions: any[] = [];
+  let totalSigs = 0;
+
+  while (retryCount < MAX_FETCH_RETRIES) {
+    try {
+      sendUpdate({ type: 'progress', stage: 'signatures', message: `Fetching signatures... (attempt ${retryCount + 1}/${MAX_FETCH_RETRIES})`, processed: 0, total: 0 });
+      result = await getAccountTransactions(
+        rpcEndpoint,
+        rpcWebsocket,
+        walletPubkey,
+        fetchBatchSize,
+        cutoffTime,
+        fetchBatchSize,
+        undefined
+      );
+      allTransactions = result.transactions;
+      totalSigs = result.totalSignaturesFetched;
+      
+      if (totalSigs > 0) {
+        // Success: exit retry loop
+        sendUpdate({ type: 'progress', stage: 'signatures', message: `Found ${totalSigs} signatures`, processed: totalSigs, total: totalSigs });
+        break;
+      } else {
+        // No signatures: likely rate limited, retry with conservative settings
+        retryCount++;
+        if (retryCount < MAX_FETCH_RETRIES) {
+          fetchBatchSize = Math.max(500, fetchBatchSize / 2); // Halve batch size (min 500)
+          fetchDelay = Math.min(MAX_DELAY, fetchDelay * 2); // Double delay (max 5000ms)
+          console.log(`[stream] Fetch retry ${retryCount}/${MAX_FETCH_RETRIES} with batchSize=${fetchBatchSize}, delay=${fetchDelay}ms`);
+          await new Promise(resolve => setTimeout(resolve, fetchDelay * 10)); // Wait longer between retries (up to 50s)
+        }
+      }
+    } catch (err) {
+      retryCount++;
+      if (retryCount >= MAX_FETCH_RETRIES) {
+        console.error('[stream] Fetch failed after retries:', (err as any).message);
+        throw err; // Re-throw to abort
+      }
+      fetchBatchSize = Math.max(500, fetchBatchSize / 2);
+      fetchDelay = Math.min(MAX_DELAY, fetchDelay * 2);
+      console.log(`[stream] Fetch error retry ${retryCount}/${MAX_FETCH_RETRIES}: ${(err as any).message}`);
+      await new Promise(resolve => setTimeout(resolve, fetchDelay * 10));
+    }
+  }
+
+  if (totalSigs === 0) {
+    console.warn('[stream] Unable to fetch any signatures after retries, proceeding with empty data');
+    sendUpdate({ type: 'progress', stage: 'signatures', message: 'No signatures found (rate limited)', processed: 0, total: 0 });
+  }
 
   // Fase 2: Batch processing e parsing avanzato
   for (let i = 0; i < allTransactions.length; i += BATCH_SIZE) {
@@ -175,9 +218,9 @@ export async function getWalletSageFeesDetailedStreaming(
       if (operation === 'FleetStateHandler' && tx.logMessages) {
         const logsJoined = tx.logMessages.join(' ');
         if (logsJoined.includes('MoveSubwarp')) {
-          operation = 'StopSubwarp';
+          operation = 'Subwarp';
         } else if (logsJoined.includes('MineAsteroid')) {
-          operation = 'StopMining';
+          operation = 'Mining';
         }
       }
 
@@ -278,7 +321,7 @@ export async function getWalletSageFeesDetailedStreaming(
         }
 
         try {
-          const candidates = tx.accountKeys.filter(k => k && !excludeAccounts.includes(k) && k.length > 40).slice(0, 6);
+          const candidates = tx.accountKeys.filter((k: string) => k && !excludeAccounts.includes(k) && k.length > 40).slice(0, 6);
           if (candidates.length > 0) {
             // Use shared pool connection instead of creating new one
 
@@ -391,14 +434,14 @@ export async function getWalletSageFeesDetailedStreaming(
       for (const fleet of specificFleetAccounts) {
         if (tx.accountKeys && tx.accountKeys.includes(fleet)) {
           involvedFleetName = fleetAccountNames[fleet] || fleet.substring(0, 8);
+          // DEBUG: Log when fleet is matched
+          console.log(`DEBUG: Matched fleet ${fleet} to name ${involvedFleetName} for tx ${tx.signature}`);
           break;
         }
       }
 
-      // Second try: if cargo/dock operation and no fleet found, assign to first fleet in the list
-      // (cargo operations often use cargo hold account instead of fleet account)
-      //if (!involvedFleetName && (groupedOperation === 'Dock/Undock/Load/Unload' || groupedOperation === 'Subwarp' || groupedOperation === 'Mining' || groupedOperation === 'FleetStateHandler')) {
-      if (!involvedFleetName) {
+      // Second try: if no fleet found, try to match fleet names (but NOT for crafting operations)
+      if (!involvedFleetName && groupedOperation !== 'Crafting') {
         // Try to match any account key with fleet names
         if (tx.accountKeys) {
           for (const acc of tx.accountKeys) {
@@ -408,10 +451,9 @@ export async function getWalletSageFeesDetailedStreaming(
             }
           }
         }
-        // If still not found, use wallet owner's primary fleet if available
-        if (!involvedFleetName && specificFleetAccounts.length > 0) {
-          const primaryFleet = specificFleetAccounts[0];
-          involvedFleetName = fleetAccountNames[primaryFleet] || primaryFleet.substring(0, 8);
+        // If still not found, mark as Unknown instead of assigning to primary fleet
+        if (!involvedFleetName && specificFleetAccounts.length > 0 && groupedOperation !== 'Crafting') {
+          involvedFleetName = 'Unknown';
         }
       }
 
@@ -437,44 +479,60 @@ export async function getWalletSageFeesDetailedStreaming(
 
       // Raggruppa tutte le crafting sotto 'Crafting' per feesByFleet/feesByOperation
       const opKey = isCrafting ? 'Crafting' : groupedOperation;
-      if (!feesByFleet[involvedFleetName]) {
-        feesByFleet[involvedFleetName] = {
-          totalFee: 0,
-          feePercentage: 0,
-          totalOperations: 0,
-          operations: {},
-          isRented: fleetRentalStatus[involvedFleetName] || false
-        };
-      }
-      // Solo se la transazione è effettivamente di questo tipo, crea la voce e incrementa
+      
+      // Skip adding to feesByFleet for category entries (operations without assigned fleets)
+      const categoryNames = [
+        'Crafting Operations',
+        'Starbase Operations', 
+        'Configuration',
+        'Player Profile',
+        'Fleet Rentals',
+        'Universe Management',
+        'Other Operations'
+      ];
+      
+      if (!categoryNames.includes(involvedFleetName)) {
+        if (!feesByFleet[involvedFleetName]) {
+          feesByFleet[involvedFleetName] = {
+            totalFee: 0,
+            feePercentage: 0,
+            totalOperations: 0,
+            operations: {},
+            isRented: fleetRentalStatus[involvedFleetName] || false
+          };
+          // DEBUG: Log when creating new fleet entry
+          console.log(`DEBUG: Created feesByFleet entry for ${involvedFleetName}`);
+        }
+        // Solo se la transazione è effettivamente di questo tipo, crea la voce e incrementa
 
-      feesByFleet[involvedFleetName].totalFee += tx.fee;
-      if (!feesByFleet[involvedFleetName].operations[opKey]) {
-        feesByFleet[involvedFleetName].operations[opKey] = {
-          count: 0,
-          totalFee: 0,
-          avgFee: 0,
-          percentageOfFleet: 0,
-          details: [] // Dettagli per unfold
-        };
-      }
-      feesByFleet[involvedFleetName].operations[opKey].count++;
-      feesByFleet[involvedFleetName].operations[opKey].totalFee += tx.fee;
-      // Salva dettaglio solo per crafting
-      if (isCrafting) {
-        feesByFleet[involvedFleetName].operations[opKey].details.push({
-          action: craftingAction,
-          // force type to action so UI can distinguish start/claim; keep label separately
-          type: craftingAction,
-          displayType: craftingType || 'Crafting',
-          fee: tx.fee,
-          material: craftingMaterial,
-          txid: tx.signature,
-          fleet: involvedFleetName,
-          decodedKind: decodedRecipe ? decodedRecipe.kind : undefined,
-          decodedData: decodedRecipe ? decodedRecipe.data : undefined
-        });
-        // Debug: log when a normalized decode was attached to a detail
+        feesByFleet[involvedFleetName].totalFee += tx.fee;
+        if (!feesByFleet[involvedFleetName].operations[opKey]) {
+          feesByFleet[involvedFleetName].operations[opKey] = {
+            count: 0,
+            totalFee: 0,
+            avgFee: 0,
+            percentageOfFleet: 0,
+            details: [] // Dettagli per unfold
+          };
+        }
+        feesByFleet[involvedFleetName].operations[opKey].count++;
+        feesByFleet[involvedFleetName].operations[opKey].totalFee += tx.fee;
+        // Salva dettaglio solo per crafting
+        if (isCrafting) {
+          feesByFleet[involvedFleetName].operations[opKey].details.push({
+            action: craftingAction,
+            // force type to action so UI can distinguish start/claim; keep label separately
+            type: craftingAction,
+            displayType: craftingType || 'Crafting',
+            fee: tx.fee,
+            material: craftingMaterial,
+            txid: tx.signature,
+            fleet: involvedFleetName,
+            decodedKind: decodedRecipe ? decodedRecipe.kind : undefined,
+            decodedData: decodedRecipe ? decodedRecipe.data : undefined
+          });
+          // Debug: log when a normalized decode was attached to a detail
+        }
       }
       // --- AGGIORNA anche feesByOperation per allineamento UI ---
       if (!feesByOperation[opKey]) {
@@ -553,6 +611,8 @@ export async function getWalletSageFeesDetailedStreaming(
       fleetAccountNamesEcho: fleetAccountNames,
       fleetRentalStatusFinal: fleetRentalStatus
     };
+    // DEBUG: Log feesByFleet before sending update
+    console.log('DEBUG: feesByFleet before sendUpdate:', JSON.stringify(feesByFleet, null, 2));
     sendUpdate(partialResult);
     if (saveProgress) {
       const cachePromise = saveProgress(partialResult).catch(err => {
@@ -639,6 +699,7 @@ export async function getWalletSageFeesDetailedStreaming(
     fleetAccountNamesEcho: fleetAccountNames,
     fleetRentalStatusFinal: fleetRentalStatus
   };
+  //console.log('Final feesByFleet:', JSON.stringify(feesByFleet, null, 2));
   sendUpdate(finalResult);
   return finalResult;
 }

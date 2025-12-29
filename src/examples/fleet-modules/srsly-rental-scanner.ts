@@ -3,8 +3,9 @@ import { RpcPoolConnection } from '../../utils/rpc/pool-connection.js';
 import { getCacheWithTimestamp, setCache } from '../../utils/persist-cache.js';
 import { withRetry } from '../../utils/anchor-setup.js';
 import { nlog } from '../../utils/log-normalizer.js';
-import { byteArrayToString } from "@staratlas/data-source";
+import { byteArrayToString, readFromRPC } from "@staratlas/data-source";
 import { SRSLY_PROGRAM_ID, SAGE_PROGRAM_ID } from '../fleets-constants.js';
+import { Fleet } from "@staratlas/sage";
 import { SrslyRentalScannerInput, SrslyRentalScannerOutput } from './interfaces.js';
 
 export async function scanSrslyRentals(input: SrslyRentalScannerInput): Promise<SrslyRentalScannerOutput> {
@@ -46,8 +47,8 @@ export async function scanSrslyRentals(input: SrslyRentalScannerInput): Promise<
           accounts = await withRetry(() => poolForSrsly.getProgramAccounts(srslyProgramKey, { timeoutMs: 20000, maxRetries: 5, rateLimitBackoffBaseMs: 1000, markUnhealthyOn429Threshold: 10 }));
           const afterMetrics = poolForSrsly.getMetrics();
           console.log(`[SRSLY] Successfully fetched program accounts (attempt ${srslyRetries + 1}) - accounts=${(accounts||[]).length}`);
-          nlog(`[SRSLY] pool metrics before=${JSON.stringify(beforeMetrics.map(m=>({i:m.index,processed:m.processedTxs,fail:m.failures,429:m.errorCounts.rateLimit429})))}`);
-          nlog(`[SRSLY] pool metrics after=${JSON.stringify(afterMetrics.map(m=>({i:m.index,processed:m.processedTxs,fail:m.failures,429:m.errorCounts.rateLimit429})))}`);
+          //nlog(`[SRSLY] pool metrics before=${JSON.stringify(beforeMetrics.map(m=>({i:m.index,processed:m.processedTxs,fail:m.failures,429:m.errorCounts.rateLimit429})))}`);
+          //nlog(`[SRSLY] pool metrics after=${JSON.stringify(afterMetrics.map(m=>({i:m.index,processed:m.processedTxs,fail:m.failures,429:m.errorCounts.rateLimit429})))}`);
 
           // Save to cache for short TTL
           try { await setCache('srsly', 'srsly_program_accounts', accounts || []); } catch (e) {}
@@ -92,7 +93,7 @@ export async function scanSrslyRentals(input: SrslyRentalScannerInput): Promise<
           const matchIndex = bufIncludes(entry.account.data, borrowerBytes);
           return { i: idx, pubkey: pub, dataLen: len, matchIndex };
         });
-        nlog(`[SRSLY] referencing accounts details (first ${details.length}): ${JSON.stringify(details)}`);
+        //nlog(`[SRSLY] referencing accounts details (first ${details.length}): ${JSON.stringify(details)}`);
       } catch (e) {
         nlog('[SRSLY] Failed to serialize referencing account details: ' + (e && (e as any).message ? (e as any).message : String(e)));
       }
@@ -123,11 +124,7 @@ export async function scanSrslyRentals(input: SrslyRentalScannerInput): Promise<
       const chunk = candidates.slice(i, i + chunkSize).map(k => new PublicKey(k));
       try {
         console.log(`[SRSLY] Checking candidate batch ${i}-${Math.min(i+chunkSize-1,candidates.length-1)} (size=${chunk.length}) via pool`);
-        const beforeBatchMetrics = poolForBatch.getMetrics();
         const infos = await poolForBatch.getMultipleAccountsInfo(chunk, { timeoutMs: 10000, maxRetries: 5, rateLimitBackoffBaseMs: 1000, markUnhealthyOn429Threshold: 10 });
-        const afterBatchMetrics = poolForBatch.getMetrics();
-        nlog(`[SRSLY] batch metrics before=${JSON.stringify(beforeBatchMetrics.map(m=>({i:m.index,processed:m.processedTxs,fail:m.failures,429:m.errorCounts.rateLimit429})))}`);
-        nlog(`[SRSLY] batch metrics after=${JSON.stringify(afterBatchMetrics.map(m=>({i:m.index,processed:m.processedTxs,fail:m.failures,429:m.errorCounts.rateLimit429})))}`);
         for (let j = 0; j < chunk.length; j++) {
           const info = infos[j];
           if (!info) continue;
@@ -152,11 +149,41 @@ export async function scanSrslyRentals(input: SrslyRentalScannerInput): Promise<
 
     // Fetch and append these fleets as rented
     console.log(`[SRSLY] Fetching ${discoveredFleetKeys.length} discovered fleets...`);
+    // Use RpcPoolConnection for fleet fetching to handle RPC failures
+    const poolForFleetFetch = new RpcPoolConnection(connection);
     for (const k of discoveredFleetKeys) {
       try {
         const fleetPubkey = new PublicKey(k);
-        // @ts-ignore - account type name from IDL
-        const accountData = await (sageProgram.account as any).fleet.fetch(fleetPubkey);
+        // Use readFromRPC with RpcPoolConnection instead of Anchor
+        let accountData = null;
+        let retries = 3;
+        let delay = 1000; // start with 1s
+
+        while (retries > 0 && !accountData) {
+          try {
+            const result = await readFromRPC(
+              poolForFleetFetch as any, // Cast to Connection type expected by readFromRPC
+              sageProgram as any,
+              fleetPubkey,
+              Fleet,
+              'processed'
+            );
+            
+            if (result.type === 'ok') {
+              accountData = result.data.data;
+            }
+          } catch (error) {
+            retries--;
+            if (retries > 0) {
+              console.warn(`Error fetching fleet ${k}, retrying in ${delay}ms (${retries} retries left):`, error instanceof Error ? error.message : String(error));
+              await new Promise(resolve => setTimeout(resolve, delay));
+              delay *= 2; // exponential backoff
+            } else {
+              console.error(`Error fetching fleet ${k} after all retries:`, error);
+            }
+          }
+        }
+
         if (accountData) {
           const wrapped = {
             type: 'ok',

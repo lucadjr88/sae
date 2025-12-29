@@ -92,6 +92,12 @@ app.post('/api/wallet-sage-fees-detailed', walletSageFeesDetailedHandler);
 import { diagnosticsFleetMapHandler } from './routes/diagnostics.js';
 app.post('/api/diagnostics/fleet-map', diagnosticsFleetMapHandler);
 
+import { debugFleetAssociationCheckHandler } from './routes/debug-fleet-association-check.js';
+app.post('/api/debug/fleet-association-check', debugFleetAssociationCheckHandler);
+
+import { debugTransactionFleetMappingHandler } from './routes/debug-transaction-fleet-mapping.js';
+app.post('/api/debug/transaction-fleet-mapping', debugTransactionFleetMappingHandler);
+
 import { pricesHandler } from './routes/prices.js';
 app.get('/api/prices', pricesHandler);
 

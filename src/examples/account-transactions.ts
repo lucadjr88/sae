@@ -81,7 +81,7 @@ export async function getAccountTransactions(
   let processedCount = 0;
   const startTime = Date.now();
   const BATCH_SIZE = 50;  // Further reduced batch size to minimize rate limits
-  const fetchTimeoutMs = 10000;  // Increased timeout to 10s for rate-limited RPCs
+  const fetchTimeoutMs = 15000;  // Increased timeout to 15s for rate-limited RPCs
   let currentDelay = 250; // ms, significantly increased delay between batches
   const MIN_DELAY = 40;
   const MAX_DELAY = 1500;
@@ -112,7 +112,7 @@ export async function getAccountTransactions(
       withTimeout<{ sig: any, tx: any }>(
         (async () => {
           let tx: any = null;
-          let retries = 2;  // Allow 2 retries per transaction
+          let retries = 5;  // Increased retries to 5 per transaction
           while (retries >= 0 && !tx) {
             try {
               tx = await conn.getParsedTransaction(sig.signature, {
@@ -122,9 +122,17 @@ export async function getAccountTransactions(
               });
               if (tx) break;  // Success, exit retry loop
             } catch (err) {
-              // If rate limited and retries remain, wait and retry
-              if (retries > 0 && (err as any)?.message?.includes('429')) {
-                await sleep(200 * (3 - retries));  // Exponential backoff
+              const errMsg = (err as any)?.message || '';
+              // Retry on rate limit (429), timeout, or other transient errors
+              if (retries > 0 && (
+                errMsg.includes('429') ||
+                errMsg.includes('timeout') ||
+                errMsg.includes('Temporary internal error') ||
+                errMsg.includes('502') ||
+                errMsg.includes('503') ||
+                errMsg.includes('504')
+              )) {
+                await sleep(200 * (6 - retries));  // Exponential backoff: 1000ms, 800ms, 600ms, 400ms, 200ms
                 retries--;
                 continue;
               }
@@ -142,8 +150,15 @@ export async function getAccountTransactions(
     const results = await Promise.all(fetchPromises);
 
     // First pass: collect successful transactions
+    let batchSuccessCount = 0;
     for (const res of results) {
-      if (!res || !res.tx) continue;
+      if (!res || !res.tx) {
+        consecutiveErrors++;
+        continue;
+      }
+
+      batchSuccessCount++;
+      consecutiveErrors = 0;  // Reset on success
 
       const sig: any = res.sig;
       const tx: any = res.tx;
@@ -238,10 +253,9 @@ export async function getAccountTransactions(
     // Adaptive delay: backoff on errors, reduce on success
     if (consecutiveErrors > 0) {
       currentDelay = Math.min(MAX_DELAY, Math.ceil(currentDelay * BACKOFF_MULTIPLIER));
-      consecutiveErrors = 0;
       successStreak = 0;
         const rate = (processedCount / (Date.now() - batchStartTime) * 1000).toFixed(0);
-        nlog(`[wallet-scan] b${batchNum}/${totalBatches}: ${processedCount}/${allSignatures.length} tx, backoff ${currentDelay}ms | ${rate} tx/s`);
+        nlog(`[wallet-scan] b${batchNum}/${totalBatches}: ${processedCount}/${allSignatures.length} tx, backoff ${currentDelay}ms (${consecutiveErrors} consec errs) | ${rate} tx/s`);
     } else {
       successStreak++;
       if (successStreak >= 20 && currentDelay > MIN_DELAY) {
