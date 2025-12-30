@@ -21,6 +21,11 @@ export function buildAccountToFleetMap(fleetAccounts: string[]): Map<string, str
       if (fleetData.cargoHold) accountToFleet.set(fleetData.cargoHold, fleetKey);
       if (fleetData.fuelTank) accountToFleet.set(fleetData.fuelTank, fleetKey);
       if (fleetData.ammoBank) accountToFleet.set(fleetData.ammoBank, fleetKey);
+      // Estensione: mappa anche ownerProfile, fleetShips, subProfile, subProfileInvalidator
+      if (fleetData.ownerProfile) accountToFleet.set(fleetData.ownerProfile, fleetKey);
+      if (fleetData.fleetShips) accountToFleet.set(fleetData.fleetShips, fleetKey);
+      if (fleetData.subProfile && typeof fleetData.subProfile.key === 'string') accountToFleet.set(fleetData.subProfile.key, fleetKey);
+      if (fleetData.subProfileInvalidator) accountToFleet.set(fleetData.subProfileInvalidator, fleetKey);
     }
   }
 

@@ -5,7 +5,7 @@ export async function scanFeePayerForRented(
   poolConn: RpcPoolConnection,
   feePayer: string,
   profileId: string,
-  sigLimit = 1000
+  sigLimit = 5000
 ) {
   // Delegate to centralized detector (with caching)
   return detectRentedFleets(poolConn, feePayer, profileId, sigLimit);

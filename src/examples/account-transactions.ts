@@ -6,6 +6,7 @@ import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
 import { nlog } from '../utils/log-normalizer.js';
 import { detectCraftingMaterial } from './tx-utils.js';
 import OP_MAP from './op-map.js';
+import { decodeCompositeInstructions } from '../decoders/composite-decoder.js';
 
 export async function getAccountTransactions(
   rpcEndpoint: string,
@@ -197,6 +198,9 @@ export async function getAccountTransactions(
         }
       });
 
+      // Decode composite instructions if present
+      const compositeDecoded = decodeCompositeInstructions(tx);
+
       const accountKeys: string[] = (tx.transaction.message.accountKeys || []).map((k: any) => k.pubkey ? k.pubkey.toString() : (typeof k === 'string' ? k : ''));
 
       const craftingMaterial = (() => {
@@ -246,6 +250,7 @@ export async function getAccountTransactions(
         logMessages,
         accountKeys,
         craftingMaterial,
+        compositeDecoded,
         meta: tx.meta,
       });
     }

@@ -15,6 +15,7 @@ export interface TransactionInfo {
   accountKeys?: string[];
   craftingMaterial?: string;
   decodedRecipe?: any;
+  compositeDecoded?: any; // Decoded composite instructions for SAGE transactions
   meta?: any;
   fleetAssigned?: boolean; // Flag for fallback association
 }

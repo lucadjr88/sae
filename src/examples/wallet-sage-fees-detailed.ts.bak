@@ -1,0 +1,39 @@
+import { TransactionInfo } from './types.js';
+import { getAccountTransactions } from './account-transactions.js';
+import { newConnection } from '../utils/anchor-setup.js';
+import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
+import OP_MAP from './op-map.js';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Backup automatico del file originale prima del ripristino
+// Data backup: 2025-12-30
+// Motivazione: Ripristino logica reale getWalletSageFeesDetailed da sae-main_funzionante
+
+export async function getWalletSageFeesDetailed(
+  rpcEndpoint: string,
+  rpcWebsocket: string,
+  walletPubkey: string,
+  fleetAccounts: string[],
+  fleetAccountNames: { [account: string]: string } = {},
+  fleetRentalStatus: { [account: string]: boolean } = {},
+  hours: number = 24,
+  opts?: { refresh?: boolean },
+  poolConnection?: RpcPoolConnection  // Optional pre-configured pool connection
+): Promise<{
+  walletAddress: string;
+  period: string;
+  totalFees24h: number;
+  sageFees24h: number;
+  transactionCount24h: number;
+  totalSignaturesFetched: number;
+  feesByFleet: { [fleetAccount: string]: { totalFee: number; feePercentage: number; totalOperations: number; isRented?: boolean; operations: { [operation: string]: { count: number; totalFee: number; avgFee: number; percentageOfFleet: number; details?: string[] } }; fleetName?: string } };
+  feesByOperation: { [operation: string]: { count: number; totalFee: number; avgFee: number; details?: string[] } };
+  transactions: TransactionInfo[];
+  unknownOperations: number;
+  rentedFleetAccounts: string[];
+  fleetAccountNamesEcho: { [account: string]: string };
+  fleetRentalStatusFinal: { [account: string]: boolean };
+}> {
+  // ...existing code...
+}

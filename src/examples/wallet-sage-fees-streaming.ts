@@ -435,7 +435,7 @@ export async function getWalletSageFeesDetailedStreaming(
         if (tx.accountKeys && tx.accountKeys.includes(fleet)) {
           involvedFleetName = fleetAccountNames[fleet] || fleet.substring(0, 8);
           // DEBUG: Log when fleet is matched
-          console.log(`DEBUG: Matched fleet ${fleet} to name ${involvedFleetName} for tx ${tx.signature}`);
+          //console.log(`DEBUG: Matched fleet ${fleet} to name ${involvedFleetName} for tx ${tx.signature}`);
           break;
         }
       }

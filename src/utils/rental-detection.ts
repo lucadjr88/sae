@@ -32,7 +32,7 @@ export async function detectRentedFleets(
   poolConn: RpcPoolConnection,
   feePayer: string,
   profileId: string,
-  sigLimit = 1000,
+  sigLimit = 5000,
   cacheTtlSeconds = 600,
   rpcOpts?: any
 ) {
@@ -72,7 +72,7 @@ export async function detectRentedFleets(
     }
     retries--;
   }
-  console.log('[detectRentedFleets] fetched signatures count=', (signatures && signatures.length) || 0);
+  console.log('[detectRentedFleets] fetched signatures count=', (signatures && signatures.length) || 5000);
 
   const candidateKeys = new Set<string>();
   const checked = new Set<string>();

@@ -39,4 +39,8 @@ export interface FleetData {
   cargoHold?: string;
   fuelTank?: string;
   ammoBank?: string;
+  ownerProfile?: string;
+  fleetShips?: string;
+  subProfile?: { key: string };
+  subProfileInvalidator?: string;
 }
