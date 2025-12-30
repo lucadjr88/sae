@@ -18,6 +18,7 @@ import fs from 'fs';
 import { getRpcMetrics, pickNextRpcConnection, tryAcquireRpc, releaseRpc, markRpcFailure, markRpcSuccess } from './utils/rpc-pool.js';
 import { getGlobalRpcPoolManager, createRpcPoolManager } from './utils/rpc/rpc-pool-manager.js';
 import { RpcPoolConnection } from './utils/rpc/pool-connection.js';
+import { RpcPoolAdapter, RpcPoolAdapterWithFetch } from './services/RpcPoolAdapter';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { nlog } from './utils/log-normalizer.js';
 import { scanFeePayerForRented } from './utils/fee-payer-scan.js';
@@ -38,6 +39,8 @@ console.log(`RPC Pool initialized with ${rpcPoolManager.getPoolSize()} endpoints
 // Create a shared RPC pool connection for all requests
 export const defaultServerConnection = new Connection(RPC_ENDPOINT, 'confirmed');
 export const globalPoolConnection = new RpcPoolConnection(defaultServerConnection, rpcPoolManager);
+const globalRpcPoolAdapter = new RpcPoolAdapter();
+export const globalRpcPoolAdapterWithFetch = new RpcPoolAdapterWithFetch(globalRpcPoolAdapter);
 
 console.log('SA Explorer Server Configuration:');
 console.log('   RPC Endpoint:', RPC_ENDPOINT.replace(/api-key=[^&]+/, 'api-key=***'));
@@ -92,8 +95,12 @@ app.post('/api/wallet-sage-fees-detailed', walletSageFeesDetailedHandler);
 import { diagnosticsFleetMapHandler } from './routes/diagnostics.js';
 app.post('/api/diagnostics/fleet-map', diagnosticsFleetMapHandler);
 
+
 import { debugFleetAssociationCheckHandler } from './routes/debug-fleet-association-check.js';
 app.post('/api/debug/fleet-association-check', debugFleetAssociationCheckHandler);
+
+import debugFleetBreakdownRouter from './routes/debug-fleet-breakdown';
+app.use('/api/debug/fleet-breakdown', debugFleetBreakdownRouter);
 
 import { debugTransactionFleetMappingHandler } from './routes/debug-transaction-fleet-mapping.js';
 app.post('/api/debug/transaction-fleet-mapping', debugTransactionFleetMappingHandler);

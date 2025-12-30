@@ -34,6 +34,16 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set()) 
       return b[1].totalFee - a[1].totalFee;
     });
 
+  // DEBUG: Log tutte le operazioni per ogni fleet
+  try {
+    sortedFleets.forEach(([fleetAccount, fleetData]) => {
+      const ops = Object.keys(fleetData.operations || {});
+      if (ops.length > 0) {
+        console.log(`[createFleetList] Fleet ${fleetNames[fleetAccount] || fleetAccount} ops:`, ops);
+      }
+    });
+  } catch (e) { console.warn('[createFleetList] DEBUG log error', e); }
+
   let html = '';
   sortedFleets.forEach(([fleetAccount, fleetData]) => {
     const fleetName = fleetNames[fleetAccount] || fleetAccount;
@@ -145,6 +155,14 @@ export function createOperationList(data, fleetNames, rentedFleetNames = new Set
   // Mostra anche le Crafting Operations per dettaglio
   const sortedOperations = Object.entries(data.feesByOperation)
     .sort((a, b) => b[1].totalFee - a[1].totalFee);
+
+  // DEBUG: Log tutte le operazioni disponibili e i dati associati
+  try {
+    console.log('[createOperationList] Operazioni disponibili:', sortedOperations.map(([op, stats]) => op));
+    sortedOperations.forEach(([op, stats]) => {
+      console.log(`[createOperationList] Op: ${op}, count: ${stats.count}, totalFee: ${stats.totalFee}`);
+    });
+  } catch (e) { console.warn('[createOperationList] DEBUG log error', e); }
 
   let html = '';
   sortedOperations.forEach(([operation, opStats]) => {

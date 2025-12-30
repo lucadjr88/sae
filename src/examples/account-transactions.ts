@@ -177,15 +177,28 @@ export async function getAccountTransactions(
         // Logging or stats can go here if needed
       }
 
-      // Extract programIds from transaction instructions
+      // Extract programIds from transaction (same logic as normalizeRawTxToWalletTx)
       const programIds: string[] = [];
       if (tx.transaction && tx.transaction.message && Array.isArray(tx.transaction.message.instructions)) {
         for (const ix of tx.transaction.message.instructions) {
-          if (ix.programId) {
-            programIds.push(ix.programId.toString());
+          if (ix.programId) programIds.push(ix.programId.toString());
+          if (ix.programIdIndex !== undefined && tx.transaction.message.accountKeys) {
+            programIds.push(tx.transaction.message.accountKeys[ix.programIdIndex].toString());
           }
         }
       }
+      if (tx.meta && tx.meta.innerInstructions) {
+        for (const inner of tx.meta.innerInstructions) {
+          for (const ix of inner.instructions || []) {
+            if (ix.programId) programIds.push(ix.programId.toString());
+            if (ix.programIdIndex !== undefined && tx.transaction.message.accountKeys) {
+              programIds.push(tx.transaction.message.accountKeys[ix.programIdIndex].toString());
+            }
+          }
+        }
+      }
+      // Remove duplicates
+      const uniqueProgramIds = Array.from(new Set(programIds));
 
       const instructions: string[] = [];
       const logMessages: string[] = tx.meta?.logMessages || [];
@@ -245,7 +258,7 @@ export async function getAccountTransactions(
         timestamp: sig.blockTime ? new Date(sig.blockTime * 1000).toISOString() : 'Unknown',
         status: sig.err ? 'failed' : 'success',
         fee: tx.meta?.fee || 0,
-        programIds: [...new Set(programIds)],
+        programIds: uniqueProgramIds,
         instructions: [...new Set(instructions)],
         logMessages,
         accountKeys,

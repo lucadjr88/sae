@@ -242,6 +242,9 @@ export async function analyzeFees() {
 			});
 		} catch {}
 		window.displayResults(data, fleetNames, rentedFleetNames);
+		
+		// Load detailed fleet breakdown for pie charts
+		loadFleetBreakdown(walletPubkey, uniqueFleetAccounts, fleetNames, fleetRentalStatus);
 		const sidebar = document.getElementById('sidebar');
 		const sidebarProfileId = document.getElementById('sidebarProfileId');
 		const container = document.querySelector('.container');
@@ -258,6 +261,107 @@ export async function analyzeFees() {
 		btn.disabled = false;
 		btn.textContent = 'Analyze 24h';
 	}
+}
+
+// Load detailed fleet breakdown and display operation pie charts for each fleet
+async function loadFleetBreakdown(walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus) {
+	try {
+		console.log('Loading fleet breakdown...');
+		const response = await fetch('/api/debug/fleet-breakdown', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ 
+				walletPubkey, 
+				fleetAccounts,
+				fleetNames,
+				fleetRentalStatus,
+				enableSubAccountMapping: true
+			})
+		});
+		
+		if (!response.ok) {
+			console.warn('Fleet breakdown endpoint not available');
+			return;
+		}
+		
+		const breakdownData = await response.json();
+		console.log('Fleet breakdown loaded:', breakdownData);
+		
+		// Add fleet operation charts to the UI
+		displayFleetOperationCharts(breakdownData.feesByFleet, fleetNames);
+		
+	} catch (error) {
+		console.error('Error loading fleet breakdown:', error);
+	}
+}
+
+// Display operation pie charts for each fleet
+function displayFleetOperationCharts(feesByFleet, fleetNames) {
+	const resultsDiv = document.getElementById('results');
+	if (!resultsDiv) return;
+	
+	// Find the fleet list section
+	const fleetListSection = resultsDiv.querySelector('.fleet-list-section');
+	if (!fleetListSection) return;
+	
+	// Create a new section for fleet operation charts
+	const chartsSection = document.createElement('div');
+	chartsSection.className = 'fleet-charts-section';
+	chartsSection.innerHTML = '<h2 class="section-title">Fleet Operation Breakdown</h2>';
+	
+	// For each fleet with operations data, create a pie chart
+	Object.entries(feesByFleet).forEach(([fleetKey, fleetData]) => {
+		if (!fleetData.operations || Object.keys(fleetData.operations).length === 0) return;
+		
+		const fleetName = fleetNames[fleetKey] || fleetKey;
+		
+		// Create chart container
+		const chartContainer = document.createElement('div');
+		chartContainer.className = 'fleet-chart-container';
+		chartContainer.innerHTML = `
+			<h3>${fleetName}</h3>
+			<div style="display: flex; gap: 20px; align-items: center;">
+				<canvas id="chart-${fleetKey}" width="200" height="200"></canvas>
+				<div id="legend-${fleetKey}"></div>
+			</div>
+		`;
+		
+		chartsSection.appendChild(chartContainer);
+		
+		// Prepare data for pie chart
+		const operationData = Object.entries(fleetData.operations).map(([opType, opData]) => ({
+			label: opType,
+			value: opData.count,
+			color: getOperationColor(opType)
+		}));
+		
+		// Draw the chart
+		setTimeout(() => {
+			const { drawPieChart } = window;
+			if (drawPieChart) {
+				drawPieChart(`chart-${fleetKey}`, `legend-${fleetKey}`, operationData, window.prices);
+			}
+		}, 100);
+	});
+	
+	// Insert the charts section after the fleet list
+	fleetListSection.parentNode.insertBefore(chartsSection, fleetListSection.nextSibling);
+}
+
+// Get color for operation type
+function getOperationColor(opType) {
+	const colors = {
+		'cargo': '#34d399',
+		'subwarp': '#60a5fa', 
+		'mining': '#f59e0b',
+		'crafting': '#a78bfa',
+		'staking': '#ec4899',
+		'token': '#06b6d4',
+		'system': '#8b5cf6',
+		'compute': '#f97316',
+		'memo': '#10b981'
+	};
+	return colors[opType] || '#9ca3af';
 }
 
 window.analyzeFees = analyzeFees;

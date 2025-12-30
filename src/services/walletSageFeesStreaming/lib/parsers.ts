@@ -1,32 +1,36 @@
-// Funzioni pure di parsing per walletSageFeesStreaming (stub)
 
-
-// import { sageCraftingDecoder } from '../../../decoders/sage-crafting-decoder.js';
+import { normalizeRawTxToWalletTx } from '../../../decoders/normalizeRawTxToWalletTx';
 
 /**
- * Decodifica una transazione usando la logica ufficiale (star-atlas-decoders-main)
- * con fallback legacy su logMessages se necessario.
+ * Decodifica e normalizza una transazione Solana secondo la strategia AI-ottimizzata.
+ * Applica il mapping statico programId→opType e restituisce una struttura coerente.
  */
 export function parseTransaction(raw: any): any {
-  // Decodifica ufficiale: prova a decodificare ogni istruzione
-  let decodedInstruction = undefined;
-  if (raw.instructions && Array.isArray(raw.instructions)) {
-    for (const instr of raw.instructions) {
-      // decodedInstruction = sageCraftingDecoder.decode(instr);
-      if (decodedInstruction) break;
-    }
-  }
-  // Fallback: pattern matching su logMessages se la decodifica ufficiale fallisce
-  if (!decodedInstruction && raw.logMessages && Array.isArray(raw.logMessages)) {
-    // decodedInstruction = sageCraftingDecoder.decode(raw.logMessages);
+  let normalized: any = null;
+  try {
+    normalized = normalizeRawTxToWalletTx(raw);
+  } catch (err) {
+    // fallback legacy se la normalizzazione fallisce
+    normalized = null;
   }
 
-  // Arricchisci la struttura della transazione
+  if (normalized) {
+    return {
+      ...raw,
+      ...normalized,
+      operation: normalized.type || 'Unknown',
+      program: (normalized.programId || (Array.isArray(normalized.programIds) && normalized.programIds[0])) || 'Unknown',
+      fee: raw.fee || 0,
+      signature: raw.signature || null,
+      timestamp: raw.blockTime || null,
+    };
+  }
+
+  // fallback legacy: struttura minima
   return {
     ...raw,
-    decoded: decodedInstruction || null,
-    operation: (decodedInstruction as any)?.name || (decodedInstruction as any)?.type || 'Unknown',
-    program: (decodedInstruction as any)?.program || (raw.programIds && raw.programIds[0]) || 'Unknown',
+    operation: 'Unknown',
+    program: (raw.programIds && raw.programIds[0]) || 'Unknown',
     fee: raw.fee || 0,
     signature: raw.signature || null,
     timestamp: raw.blockTime || null,

@@ -1,59 +1,49 @@
-// Service entrypoint for walletSageFeesStreaming (stub, orchestrator only)
-
-
-import type { WalletSageFeesStreamingServices, StreamingOptions, StreamingResult } from './types';
+import { getWalletSageFeesDetailedStreaming } from './index';
+import type { WalletSageFeesStreamingServices } from './types';
+import * as fs from 'fs';
+import * as path from 'path';
 import { parseTransaction } from './lib/parsers';
-import { buildAccountToFleetMap } from './lib/fleet-association';
-import { RpcPoolAdapterWithFetch } from '../RpcPoolAdapter';
 
-// Orchestrator reale: fetch, parse, aggrega, metriche base
-export async function getWalletSageFeesDetailedStreaming(
+/**
+ * API di debug: restituisce la struttura feesByFleet completa (raw breakdown)
+ * @param services dipendenze backend
+ * @param walletPubkey chiave pubblica wallet
+ * @param opts opzioni streaming (fleetAccounts, fleetNames, ecc)
+ * @returns feesByFleet raw breakdown
+ */
+export async function debugFleetBreakdown(
   services: WalletSageFeesStreamingServices,
   walletPubkey: string,
-  opts: StreamingOptions = {}
-): Promise<StreamingResult> {
-  // Forza la mappatura sub-account sempre attiva di default
-  if (typeof opts.enableSubAccountMapping === 'undefined') {
-    opts.enableSubAccountMapping = true;
-  }
-  const { rpcPool, logger, metrics } = services;
-  const { fleetAccounts = [], fleetNames = {}, fleetRentalStatus = {} } = opts as any;
-  // 1. Fetch transazioni (mock: array vuoto se non implementato)
-  let transactions: any[] = [];
+  opts: any = {}
+) {
+  // For debug, read from cache instead of fetching live
+  const cacheDir = path.resolve('./cache/wallet-txs', walletPubkey);
+  const transactions: any[] = [];
+
   try {
-    let fetcher: any = rpcPool;
-    // Se l'adapter non ha fetchTransactions, wrappalo
-    if (!('fetchTransactions' in rpcPool)) {
-      fetcher = new RpcPoolAdapterWithFetch(rpcPool);
+    if (fs.existsSync(cacheDir)) {
+      const files = fs.readdirSync(cacheDir);
+      for (const file of files.slice(0, 100)) { // Limit to 100 for debug
+        try {
+          const txData = JSON.parse(fs.readFileSync(path.join(cacheDir, file), 'utf8'));
+          transactions.push(txData.data);
+        } catch (e) {
+          // Skip corrupted files
+        }
+      }
     }
-    transactions = await fetcher.fetchTransactions(walletPubkey, opts.limit || 100, { hours: (opts && (opts as any).hours) || 24 });
   } catch (err) {
-    if (logger) logger.log('walletSageFeesStreaming: fetch error', err);
-    if (metrics) metrics.emit('rpc_error_count', 1);
-    return {
-      walletPubkey,
-      period: 'unknown',
-      totalFees: 0,
-      transactionCount: 0,
-      items: [],
-      partial: true,
-      errors: [String(err)]
-    };
+    if (services.logger) services.logger.log('[debugFleetBreakdown] Error reading cache:', err);
   }
-  if (metrics) metrics.emit('items_processed_total', transactions.length);
-  // 2. Parsing puro
+
+  // Process transactions using the same logic as streaming
   const items = transactions.map(parseTransaction);
-  if (logger) {
-    logger.log(`[DEBUG] Parsed ${items.length} transactions`);
-    const cargoTxs = items.filter(tx => tx.type === 'cargo');
-    logger.log(`[DEBUG] Found ${cargoTxs.length} cargo transactions`);
-    if (cargoTxs.length > 0) {
-      logger.log(`[DEBUG] First cargo tx: ${JSON.stringify(cargoTxs[0])}`);
-    }
+  const { fleetAccounts = [], fleetNames = {}, fleetRentalStatus = {} } = opts as any;
+
+  if (services.logger) {
+    services.logger.log(`[debugFleetBreakdown] Read ${transactions.length} transactions from cache`);
+    services.logger.log(`[debugFleetBreakdown] Fleet accounts: ${JSON.stringify(fleetAccounts)}`);
   }
-  // 3. Aggregazione minima: raggruppa per programma/operazione e per fleetAccounts se forniti
-  const totalFees = items.reduce((sum, tx) => sum + (tx.fee || 0), 0);
-  const transactionCount = items.length;
 
   // feesByOperation: aggregate by first programId if available, fallback to 'Unknown'
   const feesByOperation: Record<string, any> = {};
@@ -74,10 +64,27 @@ export async function getWalletSageFeesDetailedStreaming(
     for (const f of fleetAccounts) {
       feesByFleet[f] = { totalFee: 0, feePercentage: 0, totalOperations: 0, isRented: !!fleetRentalStatus[f], operations: {}, fleetName: (fleetNames && fleetNames[f]) ? fleetNames[f] : f.substring(0,8) };
     }
+  }
+
+  const totalFees = items.reduce((sum, tx) => sum + (tx.fee || 0), 0);
+  const transactionCount = items.length;
+
+  if (Array.isArray(fleetAccounts) && fleetAccounts.length > 0) {
     // Build mapping completo account→fleet
     const accountToFleetMap = opts.enableSubAccountMapping ? buildAccountToFleetMap(fleetAccounts) : null;
-    if (accountToFleetMap && logger) {
-      logger.log(`Built account-to-fleet map with ${accountToFleetMap.size} entries`);
+    if (accountToFleetMap && services.logger) {
+      services.logger.log(`Built account-to-fleet map with ${accountToFleetMap.size} entries`);
+      // Log specific mappings for Rainbow Cargo
+      const rainbowCargoKey = '7hhSmvcH43xrScmfvVMX6uqMDQEmFbGDA3XeHqADRyK5';
+      if (accountToFleetMap.has(rainbowCargoKey)) {
+        services.logger.log(`[DEBUG] Rainbow Cargo main account mapped: ${rainbowCargoKey}`);
+      }
+      // Log all mappings for Rainbow Cargo
+      for (const [account, fleet] of accountToFleetMap.entries()) {
+        if (fleet === rainbowCargoKey) {
+          services.logger.log(`[DEBUG] Rainbow Cargo sub-account: ${account} -> ${fleet}`);
+        }
+      }
     }
     // 2. Per ogni transazione, trova tutte le fleet coinvolte
     for (const tx of items) {
@@ -92,10 +99,14 @@ export async function getWalletSageFeesDetailedStreaming(
           }
         }
       }
-      // DEBUG: log per transazioni cargo
-      if (tx.type === 'cargo' && logger) {
-        logger.log(`[DEBUG] Cargo tx ${tx.txid}: accountKeys=${JSON.stringify(tx.accountKeys)}, fleetsMatched=${Array.from(fleetsMatched)}`);
+      // DEBUG: log per transazioni cargo e quelle che non matchano
+      if (tx.type === 'cargo' && services.logger) {
+        services.logger.log(`[DEBUG] Cargo tx ${tx.txid}: accountKeys=${JSON.stringify(tx.accountKeys)}, fleetsMatched=${Array.from(fleetsMatched)}`);
       }
+      if (fleetsMatched.size === 0 && services.logger) {
+        services.logger.log(`[DEBUG] No fleet match for tx ${tx.txid} (${tx.type}): accountKeys=${JSON.stringify(tx.accountKeys)}`);
+      }
+
       // 3. Aggrega tutte le op normalizzate per OGNI fleet coinvolta
       const opNames = Array.isArray(tx.operation)
         ? tx.operation
@@ -136,7 +147,7 @@ export async function getWalletSageFeesDetailedStreaming(
         }
       }
     }
-    // 4. Coerenza: tutte le op normalizzate presenti in almeno una fleet vanno aggiunte (con count 0) anche alle altre fleet reali
+    // 4. Coerenza: tutte le op usate in almeno una fleet vanno aggiunte (con count 0) anche alle altre fleet reali
     // Raccogli tutte le op usate
     const allOpNames = new Set<string>();
     for (const f of Object.values(feesByFleet)) {
@@ -173,38 +184,13 @@ export async function getWalletSageFeesDetailedStreaming(
   // finalize percentages
   Object.values(feesByFleet).forEach((f: any) => { f.feePercentage = totalFees > 0 ? (f.totalFee / totalFees) : 0; });
 
-  // PATCH: Propaga tutte le operazioni normalizzate aggregate in 'All Fleets' anche nelle fleet reali che hanno almeno una tx di quel tipo
-  if (feesByFleet['All Fleets'] && feesByFleet['All Fleets'].operations) {
-    const allOps = Object.keys(feesByFleet['All Fleets'].operations);
-    for (const fleetKey of Object.keys(feesByFleet)) {
-      if (fleetKey === 'All Fleets' || fleetKey === 'Other Operations') continue;
-      const fleetOps = feesByFleet[fleetKey].operations;
-      for (const op of allOps) {
-        if (!fleetOps[op]) {
-          // Se la fleet ha almeno una tx (totalOperations > 0), copia la struttura vuota per coerenza UI
-          if (feesByFleet[fleetKey].totalOperations > 0) {
-            fleetOps[op] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
-          }
-        }
-      }
-    }
-  }
-
-  const result: any = {
+  // Restituisci solo la struttura feesByFleet completa, senza filtri
+  return {
     walletPubkey,
-    period: 'last24h',
-    totalFees24h: totalFees,
-    sageFees24h: totalFees,
-    transactionCount24h: transactionCount,
-    totalSignaturesFetched: transactionCount,
     feesByFleet,
-    feesByOperation,
-    transactions: items,
-    allTransactions: items,
-    totalFees,
-    transactionCount,
-    items,
-    partial: false
+    opts
   };
-  return result as any;
 }
+
+// Import needed for buildAccountToFleetMap
+import { buildAccountToFleetMap } from './lib/fleet-association';

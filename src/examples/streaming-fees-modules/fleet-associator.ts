@@ -22,13 +22,13 @@ export async function associateFleet(input: FleetAssociatorInput): Promise<Fleet
     console.log(`[DEBUG Subwarp] FleetAccountNames keys: ${Object.keys(fleetAccountNames)}`);
   }
 
-  // Prima priorità: match diretto con fleet accounts
-  for (const fleet of fleetAccounts) {
-    if (transaction.accountKeys && transaction.accountKeys.includes(fleet)) {
-      involvedFleetName = fleetAccountNames[fleet] || fleet.substring(0, 8);
-      involvedFleetAccount = fleet;
+  // Prima priorità: match diretto con tutti gli account mappati (fleetAccountNames)
+  for (const acc of Object.keys(fleetAccountNames)) {
+    if (transaction.accountKeys && transaction.accountKeys.includes(acc)) {
+      involvedFleetName = fleetAccountNames[acc] || acc.substring(0, 8);
+      involvedFleetAccount = acc;
       if (operation.includes('Subwarp')) {
-        console.log(`[DEBUG Subwarp] Found in direct match: ${fleet}`);
+        console.log(`[DEBUG Subwarp] Found in direct match: ${acc}`);
       }
       break;
     }

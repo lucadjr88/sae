@@ -1,3 +1,6 @@
+mio profileid: 4PsiXxqZZkRynC96UMZDQ6yDuMTWB1zmn4hr84vQwaz8
+mio walletpubkey: 9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY
+
 # API List - Star Atlas Explorer Backend
 
 Questo documento elenca tutte le API disponibili nel backend di Star Atlas Explorer (SAE), basato su Express.js e TypeScript.
@@ -195,15 +198,19 @@ Il server gira su `http://localhost:3000` e fornisce API per interagire con il g
 - **Note**: Confronta account passati con quelli derivati da getFleets
 
 ### 23. Debug Transaction Fleet Mapping
-- **Metodo**: POST
-- **Endpoint**: `/api/debug/transaction-fleet-mapping`
-- **Descrizione**: Analizza associazione per singola transazione.
-- **Parametri Body**:
-  - `signature` (string, required): Firma transazione
-  - `fleetAccounts` (array, required): Lista account flotta per confronto
-- **Risposta**: JSON con flotta associata, ragione associazione, dettagli transazione
-- **Cache**: No
-- **Note**: Utile per debug perché una transazione è associata a una flotta
+
+### 24. Debug Fleet Breakdown
+**Metodo**: POST
+**Endpoint**: `/api/debug/fleet-breakdown`
+**Descrizione**: Restituisce la struttura completa `feesByFleet` con breakdown dettagliato (incluso campo `operations`) per tutte le chiavi (fleetKey e sub-account).
+**Parametri Body**:
+  - `walletPubkey` (string, required): Chiave pubblica wallet
+  - `fleetAccounts` (array, optional): Lista account flotta
+  - `fleetNames` (object, optional): Nomi flotta
+  - `enableSubAccountMapping` (boolean, optional): Abilita mapping sub-account
+**Risposta**: JSON con struttura raw `feesByFleet` (breakdown completo)
+**Esempio**:
+  `POST /api/debug/fleet-breakdown` con body `{ "walletPubkey": "...", "fleetAccounts": [ ... ], "fleetNames": { ... }, "enableSubAccountMapping": true }`
 
 ## Note Generali
 - **Autenticazione**: Nessuna richiesta specifica menzionata.
