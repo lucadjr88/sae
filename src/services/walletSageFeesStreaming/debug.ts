@@ -3,6 +3,7 @@ import type { WalletSageFeesStreamingServices } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parseTransaction } from './lib/parsers';
+import { extractFleetFromInstruction } from './lib/extract-fleet-official';
 
 /**
  * API di debug: restituisce la struttura feesByFleet completa (raw breakdown)
@@ -59,37 +60,50 @@ export async function debugFleetBreakdown(
 
   // feesByFleet: robusto, sempre tutte le fleet reali, mapping completo, aggregazione op normalizzate
   const feesByFleet: Record<string, any> = {};
-  // 1. Inizializza tutte le fleet reali
-  if (Array.isArray(fleetAccounts) && fleetAccounts.length > 0) {
-    for (const f of fleetAccounts) {
-      feesByFleet[f] = { totalFee: 0, feePercentage: 0, totalOperations: 0, isRented: !!fleetRentalStatus[f], operations: {}, fleetName: (fleetNames && fleetNames[f]) ? fleetNames[f] : f.substring(0,8) };
-    }
-  }
-
   const totalFees = items.reduce((sum, tx) => sum + (tx.fee || 0), 0);
   const transactionCount = items.length;
 
   if (Array.isArray(fleetAccounts) && fleetAccounts.length > 0) {
     // Build mapping completo account→fleet
     const accountToFleetMap = opts.enableSubAccountMapping ? buildAccountToFleetMap(fleetAccounts) : null;
+    
+    // 1. Inizializza solo le fleet reali che hanno dati
+    for (const f of fleetAccounts) {
+      if (accountToFleetMap?.has(f)) {
+        feesByFleet[f] = { 
+          totalFee: 0, 
+          feePercentage: 0, 
+          totalOperations: 0, 
+          isRented: !!fleetRentalStatus[f], 
+          operations: {}, 
+          fleetName: (fleetNames && fleetNames[f]) ? fleetNames[f] : f.substring(0,8) 
+        };
+      }
+    }
+
     if (accountToFleetMap && services.logger) {
       services.logger.log(`Built account-to-fleet map with ${accountToFleetMap.size} entries`);
       // Log specific mappings for Rainbow Cargo
       const rainbowCargoKey = '7hhSmvcH43xrScmfvVMX6uqMDQEmFbGDA3XeHqADRyK5';
       if (accountToFleetMap.has(rainbowCargoKey)) {
-        services.logger.log(`[DEBUG] Rainbow Cargo main account mapped: ${rainbowCargoKey}`);
+        // services.logger.log(`[DEBUG] Rainbow Cargo main account mapped: ${rainbowCargoKey}`);
       }
       // Log all mappings for Rainbow Cargo
       for (const [account, fleet] of accountToFleetMap.entries()) {
         if (fleet === rainbowCargoKey) {
-          services.logger.log(`[DEBUG] Rainbow Cargo sub-account: ${account} -> ${fleet}`);
+          // services.logger.log(`[DEBUG] Rainbow Cargo sub-account: ${account} -> ${fleet}`);
         }
       }
     }
     // 2. Per ogni transazione, trova tutte le fleet coinvolte
     for (const tx of items) {
       const fleetsMatched = new Set<string>();
-      if (Array.isArray(tx.accountKeys)) {
+      // 1. Prova logica ufficiale (Mining/Scan/SDU)
+      const officialFleet = extractFleetFromInstruction(tx.raw);
+      if (officialFleet && fleetAccounts.includes(officialFleet)) {
+        fleetsMatched.add(officialFleet);
+      } else if (Array.isArray(tx.accountKeys)) {
+        // 2. Fallback: logica attuale su accountKeys
         for (const k of tx.accountKeys) {
           if (accountToFleetMap?.has(k)) {
             const fleetKey = accountToFleetMap.get(k);
@@ -101,10 +115,10 @@ export async function debugFleetBreakdown(
       }
       // DEBUG: log per transazioni cargo e quelle che non matchano
       if (tx.type === 'cargo' && services.logger) {
-        services.logger.log(`[DEBUG] Cargo tx ${tx.txid}: accountKeys=${JSON.stringify(tx.accountKeys)}, fleetsMatched=${Array.from(fleetsMatched)}`);
+        // services.logger.log(`[DEBUG] Cargo tx ${tx.txid}: accountKeys=${JSON.stringify(tx.accountKeys)}, fleetsMatched=${Array.from(fleetsMatched)}`);
       }
       if (fleetsMatched.size === 0 && services.logger) {
-        services.logger.log(`[DEBUG] No fleet match for tx ${tx.txid} (${tx.type}): accountKeys=${JSON.stringify(tx.accountKeys)}`);
+        // services.logger.log(`[DEBUG] No fleet match for tx ${tx.txid} (${tx.type}): accountKeys=${JSON.stringify(tx.accountKeys)}`);
       }
 
       // 3. Aggrega tutte le op normalizzate per OGNI fleet coinvolta

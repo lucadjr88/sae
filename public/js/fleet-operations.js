@@ -3,27 +3,20 @@ import { inferMaterialLabel } from '../js/utils.js';
 import { renderCraftingDetailsRows } from './ui/renderDetails.js';
 
 export function createFleetList(data, fleetNames, rentedFleetNames = new Set()) {
+    // Mostra le operazioni originali così come arrivate dal backend, senza raggruppamento per tipo
+    Object.entries(data.feesByFleet).forEach(([fleetAccount, fleetData]) => {
+      // Nessuna normalizzazione: mantieni le operazioni originali
+      // (eventualmente si può aggiungere qui un filtro o ordinamento se serve)
+    });
   const fleetListDiv = document.getElementById('fleetList');
   // Normalize rented fleet names for case-insensitive matching
   const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
 
   // List of category names to exclude from Fleet Breakdown
-  const categories = [
-    'Starbase Operations',
-    'Configuration',
-    'Cargo Management',
-    'Crew Management',
-    'Survey & Discovery',
-    'Player Profile',
-    'Fleet Rentals',
-    'Universe Management',
-    'Game Management',
-    'Other Operations'
-  ];
+
 
   // Filter out categories, keep only actual fleets
   const sortedFleets = Object.entries(data.feesByFleet)
-    .filter(([fleetAccount, fleetData]) => !categories.includes(fleetAccount))
     .sort((a, b) => {
       const aRented = !!(a[1].isRented || rentedLc.has((fleetNames[a[0]] || a[0] || '').toString().toLowerCase()));
       const bRented = !!(b[1].isRented || rentedLc.has((fleetNames[b[0]] || b[0] || '').toString().toLowerCase()));
@@ -77,9 +70,15 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set()) 
     const ops = Object.entries(fleetData.operations);
     const isCraftingCategory = fleetAccount === 'Crafting Operations';
 
+    // Calcola il totale operazioni per la fleet per percentuali
+    const totalFleetOps = ops.reduce((sum, [, s]) => sum + (s.count || 0), 0) || 1;
+
     // Mostra altre operazioni non-crafting
     ops.sort((a, b) => b[1].totalFee - a[1].totalFee).forEach(([op, stats]) => {
-
+      // Assicura che percentageOfFleet sia sempre definito
+      if (typeof stats.percentageOfFleet !== 'number') {
+        stats.percentageOfFleet = (stats.count / totalFleetOps) * 100;
+      }
       // Render operation summary row for non-crafting fleets
       if (!isCraftingCategory) {
         html += `

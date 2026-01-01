@@ -1,18 +1,79 @@
 ---
 applyTo: '**'
 ---
-## Regola
-Per ogni task complesso, inizia sempre proponendo una strategia in uno dei seguenti modi:
-- In un blocco markdown all'inizio della sessione operativa
-- In un file dedicato denominato `implementation_pna_for_<task>.md`
 
-## Obiettivo
-Scomporre il problema in sotto-task atomici per garantire coerenza logica e ridurre il carico cognitivo della sessione.
-Provide project context and coding guidelines that AI should follow when generating code, answering questions, or reviewing changes.
+# Copilot Custom Instructions – SAGE & Crafting Decoders
 
-## Gestione Terminali e Server
-Quando si lavora con server in esecuzione (ad esempio, avviare un'applicazione con `npm run dev` o simili), evita di eseguire comandi successivi nello stesso terminale che potrebbero interrompere il processo in background. Utilizza sempre terminali separati per:
-- Avviare il server in background (usando `isBackground: true` se necessario).
-- Eseguire chiamate API, test o altri comandi che richiedono il server attivo.
+## Project Context
+This repository contains the **official Star Atlas SAGE and Crafting decoders**.
+It integrates Carbon decoders and a Rust binary for fast Borsh deserialization.
+Scope is **decoding only**: no UI, no smart contracts, no on-chain writes.
+/home/luca/Scaricati/sae-main/docs contains info for tests and account
 
-Se devi eseguire comandi che interagiscono con il server (come richieste HTTP), assicurati che il server sia già in esecuzione in un terminale dedicato e non fermarlo accidentalmente concatenando comandi.
+## Primary Goals
+- Accurate decoding of SAGE Starbased, Holosim, and Crafting instructions
+- Correct instruction categorization and metadata extraction
+- High performance and minimal overhead
+- Small, safe, localized changes
+
+## Tech Stack
+- TypeScript (Node.js, ESM)
+- Rust (binary decoder, spawned from TS)
+- Solana (@solana/web3.js, Anchor)
+- Official Carbon decoders
+
+## Coding Style
+- Concise, explicit code
+- Short, focused functions
+- Minimal comments (only for non-obvious logic)
+- Prefer plain objects and maps over classes
+- Avoid unnecessary abstractions
+
+## Architecture Rules
+- Rust is the single source of truth for account decoding
+- Do NOT reimplement Borsh decoding in TypeScript
+- TypeScript handles orchestration, mapping, and I/O only
+- Instruction mappings must stay aligned with official Carbon decoders
+- Do not break public exports unless explicitly requested
+
+## Planning & Strategy (Conditional)
+ONLY for non-trivial or multi-step tasks:
+- Start with a **very short plan** (max 5 bullet points)
+- No prose, no explanations
+- Alternatively, create `implementation_pna_for_<task>.md` ONLY if explicitly requested
+
+Do NOT provide a plan for:
+- small fixes
+- refactors under ~50 lines
+- instruction enum or mapping additions
+
+## Terminal & Server Handling
+- Never run follow-up commands in the same terminal as a running server
+- Use separate terminals for:
+  - background servers
+  - tests, scripts, or HTTP calls
+- Do not chain commands that may stop a running process
+
+## Output Rules (Critical)
+- Do NOT explain what the code does unless explicitly asked
+- Do NOT restate the problem
+- Do NOT provide summaries or conclusions
+- Do NOT include usage examples unless requested
+- Prefer **patch-style diffs** over full file rewrites
+- Touch only files and lines relevant to the request
+- If uncertain, ask **one short clarification question**
+
+## Performance & Bandwidth
+- Minimize token usage
+- Avoid speculative refactors
+- Avoid boilerplate and repeated patterns
+- Focus strictly on the requested change
+
+## User Level
+The user is an **expert developer**.
+Assume full familiarity with:
+- Solana & Anchor
+- Star Atlas SAGE
+- Carbon decoders
+- TypeScript & Node.js
+- Rust & Borsh

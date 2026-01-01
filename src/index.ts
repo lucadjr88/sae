@@ -55,7 +55,7 @@ app.get('/', homepageHandler);
 // Debug endpoint: return local test_result.json to force UI rendering of known dataset
 
 import { debugTestResultHandler } from './routes/debug-test-result.js';
-app.get('/api/debug/test-result', debugTestResultHandler);
+app.get('/api/debug/test/result', debugTestResultHandler);
 
 // Health check
 
@@ -132,3 +132,6 @@ app.get('/api/rpc-metrics', rpcMetricsHandler);
 
 import { extractMaterialActionsHandler } from './routes/extract-material-actions.js';
 app.post('/api/extract-material-actions', extractMaterialActionsHandler);
+
+import debugSageRouter from './routes/debug-sage';
+app.use('/api/debug', debugSageRouter);

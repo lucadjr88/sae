@@ -1,6 +1,7 @@
 import { TransactionInfo } from './types.js';
 import { getAccountTransactions } from './account-transactions.js';
 import { Connection, PublicKey } from '@solana/web3.js';
+import * as fs from 'fs';
 import { decodeRecipe, isRecipeAccount, decodeCraftingProcess, decodeCraftableItem } from '../decoders/crafting-decoder.js';
 import { decodeAccountWithRust } from '../decoders/rust-wrapper.js';
 import { resolveMints } from '../utils/metaplex-metadata.js';
@@ -40,6 +41,37 @@ export async function getWalletSageFeesDetailedStreaming(
     'fueL3hBZjLLLJHiFH9cqZoozTG3XQZ53diwFPwbzNim': 'Fuel',
     'HYDR4EPHJcDPcaLYUcNCtrXUdt1PnaN4MvE655pevBYp': 'Hydrogen',
   };
+
+  // Filter fleetAccounts to only include those with valid cache data (avoid phantom fleets)
+  const CACHE_DIR = './cache/fleets';
+  const validFleetAccounts = (fleetAccounts || []).filter(key => {
+    const filePath = `./cache/fleets/${key}.json`;
+    return fs.existsSync(filePath);
+  });
+
+  const allowedFleetKeys = new Set<string>(validFleetAccounts);
+  const filterFleetBuckets = (buckets: any) => {
+    const filtered: Record<string, any> = {};
+    Object.entries(buckets || {}).forEach(([k, v]) => {
+      if (allowedFleetKeys.has(k)) filtered[k] = v;
+    });
+    return filtered;
+  };
+  const fleetNameToKey = new Map<string, string>();
+  for (const [k, v] of Object.entries(fleetAccountNames || {})) {
+    if (v) {
+      if (!fleetNameToKey.has(v)) fleetNameToKey.set(v, k);
+      const lc = v.toLowerCase();
+      if (!fleetNameToKey.has(lc)) fleetNameToKey.set(lc, k);
+    }
+    if (!fleetNameToKey.has(k)) fleetNameToKey.set(k, k);
+  }
+  const resolveFleetKey = (val?: string): string | undefined => {
+    if (!val) return undefined;
+    if (fleetNameToKey.has(val)) return fleetNameToKey.get(val);
+    const lc = val.toLowerCase();
+    return fleetNameToKey.get(lc);
+  };
   const specificFleetAccounts = fleetAccounts.filter(account => account && !excludeAccounts.includes(account) && account.length > 40);
   const now = Date.now();
   const cutoffTime = now - (hours * 60 * 60 * 1000);
@@ -63,7 +95,7 @@ export async function getWalletSageFeesDetailedStreaming(
   // Gestione incrementale/cache
   let isIncrementalUpdate = !!(cachedData && lastProcessedSignature);
   if (refresh) isIncrementalUpdate = false; // Forza ricalcolo completo per refresh
-  let feesByFleet: any = isIncrementalUpdate && cachedData ? { ...cachedData.feesByFleet } : {};
+  let feesByFleet: any = isIncrementalUpdate && cachedData ? filterFleetBuckets({ ...cachedData.feesByFleet }) : {};
   let feesByOperation: any = isIncrementalUpdate && cachedData ? { ...cachedData.feesByOperation } : {};
   let totalFees24h = isIncrementalUpdate && cachedData ? (cachedData.totalFees24h || 0) : 0;
   let sageFees24h = isIncrementalUpdate && cachedData ? (cachedData.sageFees24h || 0) : 0;
@@ -181,7 +213,7 @@ export async function getWalletSageFeesDetailedStreaming(
         }
       }
 
-      console.log(`[DEBUG] Final operation: ${operation} for tx ${tx.signature.substring(0,8)}... (programIds: ${tx.programIds.join(', ')})`);
+      // console.log(`[DEBUG] Final operation: ${operation} for tx ${tx.signature.substring(0,8)}... (programIds: ${tx.programIds.join(', ')})`);
 
       // Skip ONLY pure non-SAGE transactions (no SAGE program ID at all)
       if (!tx.programIds.includes(SAGE_PROGRAM_ID)) {
@@ -401,10 +433,12 @@ export async function getWalletSageFeesDetailedStreaming(
 
       // Aggregazione per fleet - cerca fleet account o cargo hold
       let involvedFleetName = undefined;
+      let involvedFleetKey: string | undefined = undefined;
 
       // First try: direct fleet account match
       for (const fleet of specificFleetAccounts) {
         if (tx.accountKeys && tx.accountKeys.includes(fleet)) {
+          involvedFleetKey = fleet;
           involvedFleetName = fleetAccountNames[fleet] || fleet.substring(0, 8);
           // DEBUG: Log when fleet is matched
           //console.log(`DEBUG: Matched fleet ${fleet} to name ${involvedFleetName} for tx ${tx.signature}`);
@@ -412,21 +446,17 @@ export async function getWalletSageFeesDetailedStreaming(
         }
       }
 
-      // Second try: if no fleet found, try to match fleet names (ma se ancora nulla, fallback alla prima fleet richiesta come nella repo funzionante)
-      if (!involvedFleetName && groupedOperation !== 'Crafting') {
+      // Second try: if no fleet found, try to match fleet names (no auto-fallback)
+      if (!involvedFleetName && groupedOperation !== 'Crafting' && !isCrafting) {
         // Try to match any account key with fleet names
         if (tx.accountKeys) {
           for (const acc of tx.accountKeys) {
             if (fleetAccountNames[acc]) {
+              involvedFleetKey = acc;
               involvedFleetName = fleetAccountNames[acc];
               break;
             }
           }
-        }
-        // Fallback: se ancora non trovato, assegna alla prima fleet richiesta (come repo funzionante)
-        if (!involvedFleetName && specificFleetAccounts.length > 0 && groupedOperation !== 'Crafting') {
-          const primaryFleet = specificFleetAccounts[0];
-          involvedFleetName = fleetAccountNames[primaryFleet] || primaryFleet.substring(0, 8);
         }
       }
 
@@ -466,22 +496,27 @@ export async function getWalletSageFeesDetailedStreaming(
       ];
       
       if (!categoryNames.includes(involvedFleetName) && !(operation === 'Crafting')) {
-        if (!feesByFleet[involvedFleetName]) {
-          feesByFleet[involvedFleetName] = {
+        const fleetKey = involvedFleetKey || resolveFleetKey(involvedFleetName);
+        if (!fleetKey) {
+          // No valid fleet key resolved; skip fleet aggregation
+          continue;
+        }
+        if (!feesByFleet[fleetKey]) {
+          feesByFleet[fleetKey] = {
             totalFee: 0,
             feePercentage: 0,
             totalOperations: 0,
             operations: {},
-            isRented: fleetRentalStatus[involvedFleetName] || false
+            isRented: fleetRentalStatus[fleetKey] || false
           };
           // DEBUG: Log when creating new fleet entry
-          console.log(`DEBUG: Created feesByFleet entry for ${involvedFleetName}`);
+          // console.log(`DEBUG: Created feesByFleet entry for ${fleetKey}`);
         }
         // Solo se la transazione è effettivamente di questo tipo, crea la voce e incrementa
 
-        feesByFleet[involvedFleetName].totalFee += tx.fee;
-        if (!feesByFleet[involvedFleetName].operations[operation]) {
-          feesByFleet[involvedFleetName].operations[operation] = {
+        feesByFleet[fleetKey].totalFee += tx.fee;
+        if (!feesByFleet[fleetKey].operations[operation]) {
+          feesByFleet[fleetKey].operations[operation] = {
             count: 0,
             totalFee: 0,
             avgFee: 0,
@@ -489,11 +524,11 @@ export async function getWalletSageFeesDetailedStreaming(
             details: [] // Dettagli per unfold
           };
         }
-        feesByFleet[involvedFleetName].operations[operation].count++;
-        feesByFleet[involvedFleetName].operations[operation].totalFee += tx.fee;
+        feesByFleet[fleetKey].operations[operation].count++;
+        feesByFleet[fleetKey].operations[operation].totalFee += tx.fee;
         // Salva dettaglio solo per crafting
         if (isCrafting) {
-          feesByFleet[involvedFleetName].operations[operation].details.push({
+          feesByFleet[fleetKey].operations[operation].details.push({
             action: craftingAction,
             // force type to action so UI can distinguish start/claim; keep label separately
             type: craftingAction,
@@ -501,7 +536,7 @@ export async function getWalletSageFeesDetailedStreaming(
             fee: tx.fee,
             material: craftingMaterial,
             txid: tx.signature,
-            fleet: involvedFleetName,
+            fleet: fleetKey,
             decodedKind: decodedRecipe ? decodedRecipe.kind : undefined,
             decodedData: decodedRecipe ? decodedRecipe.data : undefined
           });
@@ -542,7 +577,6 @@ export async function getWalletSageFeesDetailedStreaming(
     Object.keys(feesByFleet).forEach(fleet => {
       feesByFleet[fleet].feePercentage = sageFees24h > 0 ? (feesByFleet[fleet].totalFee / sageFees24h) * 100 : 0;
 
-
       Object.keys(feesByFleet[fleet].operations).forEach(op => {
         const opData = feesByFleet[fleet].operations[op];
         opData.avgFee = opData.totalFee / opData.count;
@@ -578,7 +612,7 @@ export async function getWalletSageFeesDetailedStreaming(
       sageFees24h,
       transactionCount24h: sageOpCount,
       totalSignaturesFetched: totalSigs,
-      feesByFleet: { ...feesByFleet },
+      feesByFleet: filterFleetBuckets({ ...feesByFleet }),
       feesByOperation: { ...feesByOperation },
       unknownOperations,
       rentedFleetAccounts: Object.keys(fleetRentalStatus).filter(k => fleetRentalStatus[k]),
@@ -586,7 +620,7 @@ export async function getWalletSageFeesDetailedStreaming(
       fleetRentalStatusFinal: fleetRentalStatus
     };
     // DEBUG: Log feesByFleet before sending update
-    console.log('DEBUG: feesByFleet before sendUpdate:', JSON.stringify(feesByFleet, null, 2));
+    // console.log('DEBUG: feesByFleet before sendUpdate:', JSON.stringify(feesByFleet, null, 2));
     sendUpdate(partialResult);
     if (saveProgress) {
       const cachePromise = saveProgress(partialResult).catch(err => {
@@ -665,7 +699,7 @@ export async function getWalletSageFeesDetailedStreaming(
     sageFees24h,
     transactionCount24h: processedTransactions.filter(t => t.programIds.includes(SAGE_PROGRAM_ID)).length,
     totalSignaturesFetched: totalSigs,
-    feesByFleet,
+    feesByFleet: filterFleetBuckets(feesByFleet),
     feesByOperation,
     transactions: processedTransactions,
     unknownOperations,

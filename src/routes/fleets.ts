@@ -104,19 +104,21 @@ export async function fleetsHandler(req: Request, res: Response) {
       console.warn('[api/fleets] Fee-payer scan failed (non-fatal):', e && (e as any).message ? (e as any).message : e);
     }
     if (result && Array.isArray(result.fleets)) {
+      // Filter out phantom fleets (no ships and unnamed)
+      result.fleets = result.fleets.filter((f: any) => {
+        const hasFleetShips = !!(f.data && typeof f.data.fleetShips === 'string' && f.data.fleetShips.length > 0);
+        const hasValidCallsign = f.callsign && f.callsign !== '<unnamed>' && !f.callsign.startsWith('<unnamed');
+        return hasFleetShips || hasValidCallsign;
+      });
+
       for (const fleet of result.fleets) {
         if (fleet && fleet.key) {
-          // Don't overwrite cache with bad data
-          if (fleet.callsign !== '<unnamed>' || Object.keys(fleet.data || {}).length > 0) {
-            await setCache('fleets', fleet.key, fleet);
-          }
+          await setCache('fleets', fleet.key, fleet);
         }
       }
       // Cache list of rented fleet keys for this profile
       const rentedFleets = result.fleets.filter((f: any) => f.isRented).map((f: any) => f.key);
-      if (rentedFleets.length > 0) {
-        await setCache('rented-fleets', profileId, rentedFleets);
-      }
+      await setCache('rented-fleets', profileId, rentedFleets);
     }
     res.json(result);
   } catch (err: any) {

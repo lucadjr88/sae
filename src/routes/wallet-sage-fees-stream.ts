@@ -5,7 +5,7 @@ import { nlog } from '../utils/log-normalizer.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET } from '../config/serverConfig.js';
 
 export async function walletSageFeesStreamHandler(req: Request, res: Response) {
-  const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, hours } = req.body;
+  const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, hours, debug } = req.body;
   console.log(`[api/wallet-sage-fees-stream] Received request at ${new Date().toISOString()} with walletPubkey=${walletPubkey ? walletPubkey.substring(0,8) : 'undefined'}`);
   if (!walletPubkey) {
     return res.status(400).json({ error: 'walletPubkey required' });
@@ -13,6 +13,8 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
 
   const refresh = (req.query.refresh === 'true') || (req.body && req.body.refresh === true);
   const update = (req.query.update === 'true') || (req.body && req.body.update === true);
+  // Modalità debug: se ?debug=json o body.debug=true, rispondi con JSON puro
+  const debugJson = req.query.debug === 'json' || debug === true;
   const keyPayload = JSON.stringify({ a: fleetAccounts || [], n: fleetNames || {}, r: fleetRentalStatus || {}, h: hours || 24 });
   const compositeKey = `${walletPubkey}__${keyPayload}`;
   const cacheKey = crypto.createHash('sha256').update(compositeKey).digest('hex');
@@ -50,15 +52,21 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
       const cacheAgeMs = Date.now() - cached.savedAt;
       const cacheAgeMin = (cacheAgeMs / 60000).toFixed(1);
       console.log(`[stream] ✅ Cache HIT! Age: ${cacheAgeMin} minutes`);
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('X-Cache-Hit', 'disk');
-      res.setHeader('X-Cache-Timestamp', String(cached.savedAt));
-      res.flushHeaders();
-      res.write(`data: ${JSON.stringify({ type: 'complete', ...cached.data, fromCache: true })}\n\n`);
-      res.end();
-      return;
+      if (debugJson) {
+        res.setHeader('Content-Type', 'application/json');
+        res.json({ type: 'complete', ...cached.data, fromCache: true });
+        return;
+      } else {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Cache-Hit', 'disk');
+        res.setHeader('X-Cache-Timestamp', String(cached.savedAt));
+        res.flushHeaders();
+        res.write(`data: ${JSON.stringify({ type: 'complete', ...cached.data, fromCache: true })}\n\n`);
+        res.end();
+        return;
+      }
     } else {
       console.log(`[stream] ❌ Cache MISS - processing fresh data`);
     }
@@ -66,20 +74,27 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
     console.log(`[stream] Refresh requested - bypassing cache`);
   }
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
+  if (!debugJson) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+  }
 
+  let lastResult: any = null;
   const sendUpdate = (data: any) => {
     try {
       nlog(`[stream] -> sendUpdate type=${data.type || 'unknown'} stage=${data.stage || ''} processed=${data.processed || ''}`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (debugJson) {
+        lastResult = data;
+      } else {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        if (typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
+      }
     } catch (e) {
       console.error('[stream] Failed to write SSE chunk', e);
-    }
-    if (typeof (res as any).flush === 'function') {
-      (res as any).flush();
     }
   };
 
@@ -116,10 +131,19 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
       console.log(`[stream] ❌ Not saving cache (0 signatures fetched, likely rate limited)`);
     }
     await new Promise(resolve => setTimeout(resolve, 100));
-    res.end();
+    if (debugJson && lastResult) {
+      res.setHeader('Content-Type', 'application/json');
+      res.json(lastResult);
+    } else {
+      res.end();
+    }
   } catch (err: any) {
     console.error('❌ /api/wallet-sage-fees-stream error:', err.message);
-    sendUpdate({ error: err.message });
-    res.end();
+    if (debugJson) {
+      res.status(500).json({ error: err.message });
+    } else {
+      sendUpdate({ error: err.message });
+      res.end();
+    }
   }
 }

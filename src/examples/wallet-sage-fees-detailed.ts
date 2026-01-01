@@ -3,7 +3,6 @@ import { TransactionInfo } from './types.js';
 import { getAccountTransactions } from './account-transactions.js';
 import { newConnection } from '../utils/anchor-setup.js';
 import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
-import OP_MAP from './op-map.js';
 
 
 // Funzione ripristinata da sae-main_funzionante il 2025-12-30
@@ -57,8 +56,8 @@ export async function getWalletSageFeesDetailed(
     account && !excludeAccounts.includes(account) && account.length > 40
   );
   
-  console.log(`[DEBUG] Specific fleet accounts (after filtering): ${specificFleetAccounts.length}`);
-  specificFleetAccounts.forEach((fleet, i) => console.log(`  Specific Fleet ${i}: ${fleet.substring(0, 8)}...`));
+  // console.log(`[DEBUG] Specific fleet accounts (after filtering): ${specificFleetAccounts.length}`);
+  // specificFleetAccounts.forEach((fleet, i) => console.log(`  Specific Fleet ${i}: ${fleet.substring(0, 8)}...`));
   
   // Compute cutoff for the analysis window
   const now = Date.now();
@@ -121,23 +120,163 @@ export async function getWalletSageFeesDetailed(
       console.log('----------------');
     }
 
-    // ...existing code for operation detection e fleet matching...
-    // (Vedi versione funzionante per dettagli completi)
-    // ...
-    // (Per brevità, qui si assume che la logica sia identica alla versione funzionante)
+    // Use raw instruction names directly from transaction
+    if (tx.instructions && tx.instructions.length > 0) {
+      for (const instr of tx.instructions) {
+        if (instr && instr.trim()) {
+          operation = instr;
+          foundMethod = 'instruction_raw';
+          break;
+        }
+      }
+    }
+    // Fallback: extract from log messages
+    if (operation === 'Unknown' && tx.logMessages) {
+      for (const log of tx.logMessages) {
+        const ixMatch = log.match(/Instruction:\s*(\w+)/i);
+        if (ixMatch) {
+          operation = ixMatch[1];
+          foundMethod = 'log_instruction_raw';
+          break;
+        }
+      }
+    }
+    if (operation === 'Unknown') unknownOperations++;
+    
+    // MATCHING semplificato: usa solo la key principale della flotta
+    let involvedFleet: string | undefined = undefined;
+    let involvedFleetName: string | undefined = undefined;
+    let matchStrategy = 'none';
+    if (tx.accountKeys && tx.accountKeys.length > 0) {
+      for (const fleet of specificFleetAccounts) {
+        if (tx.accountKeys.includes(fleet)) {
+          involvedFleet = fleet;
+          involvedFleetName = (fleetAccountNames && fleetAccountNames[fleet]) ? fleetAccountNames[fleet] : fleet.substring(0, 8);
+          matchStrategy = 'direct';
+          break;
+        }
+      }
+    }
+    // Fallback for Subwarp: if not found and operation is Subwarp, search in fleetAccountNames
+    if (!involvedFleet && operation.includes('Subwarp')) {
+      if (tx.accountKeys) {
+        for (const acc of tx.accountKeys) {
+          if (fleetAccountNames && fleetAccountNames[acc]) {
+            involvedFleet = acc;
+            involvedFleetName = fleetAccountNames[acc];
+            matchStrategy = 'subwarp_fallback';
+            break;
+          }
+        }
+      }
+    }
+    // Se nessuna flotta trovata, fallback su categoria
+    if (!involvedFleet) {
+      if (operation.includes('Craft') || operation.includes('craft')) {
+        involvedFleetName = 'Crafting Operations';
+        matchStrategy = 'category_craft';
+      } else if (operation.includes('Starbase') || operation.includes('starbase')) {
+        involvedFleetName = 'Starbase Operations';
+        matchStrategy = 'category_starbase';
+      } else if (operation.includes('Register') || operation.includes('Deregister') || operation.includes('Update')) {
+        involvedFleetName = 'Configuration';
+        matchStrategy = 'category_config';
+      } else if (operation.includes('Crew') || operation.includes('crew')) {
+        involvedFleetName = 'Crew Management';
+        matchStrategy = 'category_crew';
+      } else if (operation.includes('SDU') || operation.includes('Survey')) {
+        involvedFleetName = 'Survey & Discovery';
+        matchStrategy = 'category_survey';
+      } else if (operation.includes('Profile') || operation.includes('Progression') || operation.includes('Points')) {
+        involvedFleetName = 'Player Profile';
+        matchStrategy = 'category_profile';
+      } else if (operation.includes('Rental') || operation.includes('rental')) {
+        involvedFleetName = 'Fleet Rentals';
+        matchStrategy = 'category_rental';
+      } else if (operation.includes('Sector') || operation.includes('Planet') || operation.includes('Star')) {
+        involvedFleetName = 'Universe Management';
+        matchStrategy = 'category_universe';
+      } else if (operation.includes('Game') || operation.includes('game')) {
+        involvedFleetName = 'Game Management';
+        matchStrategy = 'category_game';
+      } else {
+        involvedFleetName = 'Other Operations';
+        matchStrategy = 'category_other';
+      }
+    }
+
+    // No grouping - use raw operation names
+    let finalOperationForStats = operation;
+    let craftingDetail: string = '';
+    
+    // Update global operation stats with raw operation names
+    if (!feesByOperation[finalOperationForStats]) {
+      feesByOperation[finalOperationForStats] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
+    }
+    const opEntry = feesByOperation[finalOperationForStats];
+    opEntry.count++;
+    opEntry.totalFee += tx.fee;
+    opEntry.avgFee = opEntry.totalFee / opEntry.count;
+    if (craftingDetail) {
+      opEntry.details!.push(craftingDetail);
+    }
+    
+    // Track rental operations - mark fleets with rental ops as rented
+    if (operation.includes('Rental') || operation.toLowerCase().includes('rental') || 
+        operation === 'AddRental' || operation === 'ChangeRental') {
+      if (involvedFleet) {
+        rentedFleets.add(involvedFleet);
+      }
+      // Also check all accounts in the transaction for fleet matches
+      if (tx.accountKeys) {
+        for (const fleet of specificFleetAccounts) {
+          if (tx.accountKeys.includes(fleet)) {
+            rentedFleets.add(fleet);
+            console.log(`[RENTAL] Marked fleet as rented: ${fleet.substring(0, 8)}... (operation: ${operation})`);
+          }
+        }
+      }
+    }
+
+    // Usa la pubkey della flotta come chiave principale (compatibilità legacy)
+    // Usa sempre la chiave pubblica della flotta come chiave 1:1
+    if (involvedFleet) {
+      const fleetKey = involvedFleet;
+      if (!feesByFleet[fleetKey]) {
+        feesByFleet[fleetKey] = {
+          totalFee: 0,
+          feePercentage: 0,
+          totalOperations: 0,
+          isRented: false,
+          operations: {},
+          fleetName: (fleetAccountNames && fleetAccountNames[fleetKey]) ? fleetAccountNames[fleetKey] : fleetKey.substring(0, 8)
+        };
+      }
+      const fleetEntry = feesByFleet[fleetKey];
+      fleetEntry.totalFee += tx.fee;
+      let txRented = false;
+      if (fleetRentalStatus[fleetKey]) txRented = true;
+      if (rentedFleets.has(fleetKey)) txRented = true;
+      fleetEntry.isRented = !!(fleetEntry.isRented || txRented);
+      // Use raw operation name
+      let finalOperation = finalOperationForStats;
+      let operationDetail = craftingDetail;
+      if (!fleetEntry.operations[finalOperation]) {
+        fleetEntry.operations[finalOperation] = { count: 0, totalFee: 0, avgFee: 0, percentageOfFleet: 0, details: [] };
+      }
+      const fleetOp = fleetEntry.operations[finalOperation];
+      fleetOp.count++;
+      fleetOp.totalFee += tx.fee;
+      fleetOp.avgFee = fleetOp.totalFee / fleetOp.count;
+      if (operationDetail) {
+        fleetOp.details!.push(operationDetail);
+      }
+    }
   }
 
   // Compute percentages per fleet & per operation
   Object.values(feesByFleet).forEach(fleetEntry => {
     fleetEntry.feePercentage = fleetEntry.totalFee / (sageFees24h || 1);
-    // Se la flotta ha Subwarp ma details è vuoto, elimina la voce
-    if (
-      fleetEntry.operations['Subwarp'] &&
-      Array.isArray(fleetEntry.operations['Subwarp'].details) &&
-      fleetEntry.operations['Subwarp'].details.length === 0
-    ) {
-      delete fleetEntry.operations['Subwarp'];
-    }
     // Calculate total operations for this fleet
     fleetEntry.totalOperations = Object.values(fleetEntry.operations).reduce((sum: number, op: any) => sum + op.count, 0);
     Object.values(fleetEntry.operations).forEach(op => {

@@ -44,7 +44,7 @@ public/*.cache.json
 
 analysis-*.json
 lutrizio-*.json
-
+docs/personal_data.md
 
 # Exclude large external vendor repos (track via submodule or separate)
 star-atlas-cookbook-master/

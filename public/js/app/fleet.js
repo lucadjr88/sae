@@ -5,23 +5,9 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set(), 
   // Normalize rented fleet names for case-insensitive matching
   const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
 
-  // List of category names to exclude from Fleet Breakdown
-  const categories = [
-    'Starbase Operations',
-    'Configuration',
-    'Cargo Management',
-    'Crew Management',
-    'Survey & Discovery',
-    'Player Profile',
-    'Fleet Rentals',
-    'Universe Management',
-    'Game Management',
-    'Other Operations'
-  ];
 
   // Filter out categories, keep only actual fleets
   const sortedFleets = Object.entries(data.feesByFleet)
-    .filter(([fleetAccount, fleetData]) => !categories.includes(fleetAccount))
     .sort((a, b) => {
       const aRented = !!(a[1].isRented || rentedLc.has((fleetNames[a[0]] || a[0] || '').toString().toLowerCase()));
       const bRented = !!(b[1].isRented || rentedLc.has((fleetNames[b[0]] || b[0] || '').toString().toLowerCase()));
@@ -34,6 +20,7 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set(), 
 
   let html = '';
   sortedFleets.forEach(([fleetAccount, fleetData]) => {
+        // Nessuna normalizzazione: mostra le operazioni raw così come arrivate dal backend
     const fleetName = fleetNames[fleetAccount] || fleetAccount;
     const fleetId = 'fleet-' + fleetAccount.substring(0, 8);
     const isRented = !!(fleetData.isRented || rentedLc.has((fleetName || '').toString().toLowerCase()));
@@ -66,18 +53,30 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set(), 
           <table class="fleet-ops-table">
     `;
 
-    // Raggruppa operazioni di crafting in due categorie: Craft Fuel e Craft Food
-    // (ora già fatto dal backend, basta filtrarle)
+
+    // DEBUG: logga tutte le chiavi delle operazioni per questa fleet
+    console.log(`[DEBUG][${fleetName}] Operazioni disponibili:`, Object.keys(fleetData.operations));
+    // DEBUG: logga l'oggetto completo delle operations per ispezione
+    console.log(`[DEBUG][${fleetName}] Dettaglio operations:`, fleetData.operations);
+
     const ops = Object.entries(fleetData.operations);
     const isCraftingCategory = fleetAccount === 'Crafting Operations';
 
     // Mostra altre operazioni non-crafting
+    // Calcola il totale operazioni per la fleet per percentuali
+    const totalFleetOps = ops.reduce((sum, [, s]) => sum + (s.count || 0), 0) || 1;
+    // Mostra direttamente il nome raw dell'operazione
+    const opLabel = op => op;
+
+    // Ordina e mostra tutte le operazioni, anche con count 0
     ops.sort((a, b) => b[1].totalFee - a[1].totalFee).forEach(([op, stats]) => {
-      // Render operation summary row for non-crafting fleets
+      if (typeof stats.percentageOfFleet !== 'number') {
+        stats.percentageOfFleet = (stats.count / totalFleetOps) * 100;
+      }
       if (!isCraftingCategory) {
         html += `
           <tr>
-            <td>${op}</td>
+            <td>${opLabel(op)}</td>
             <td>${stats.count}x</td>
             <td>${stats.percentageOfFleet.toFixed(1)}%</td>
             <td>${(stats.totalFee / 1e9).toFixed(6)} SOL</td>

@@ -266,29 +266,39 @@ export async function analyzeFees() {
 // Load detailed fleet breakdown and display operation pie charts for each fleet
 async function loadFleetBreakdown(walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus) {
 	try {
-		console.log('Loading fleet breakdown...');
-		const response = await fetch('/api/debug/fleet-breakdown', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ 
-				walletPubkey, 
-				fleetAccounts,
-				fleetNames,
-				fleetRentalStatus,
-				enableSubAccountMapping: true
-			})
-		});
-		
-		if (!response.ok) {
-			console.warn('Fleet breakdown endpoint not available');
-			return;
-		}
-		
-		const breakdownData = await response.json();
-		console.log('Fleet breakdown loaded:', breakdownData);
-		
-		// Add fleet operation charts to the UI
-		displayFleetOperationCharts(breakdownData.feesByFleet, fleetNames);
+		   console.log('Loading fleet breakdown...');
+		   // Filtra fleetAccounts per rimuovere null e non-stringhe
+		   const filteredFleetAccounts = Array.isArray(fleetAccounts)
+			   ? fleetAccounts.filter(f => typeof f === 'string' && !!f)
+			   : [];
+		   const payload = {
+			   walletPubkey,
+			   fleetAccounts: filteredFleetAccounts,
+			   fleetNames,
+			   fleetRentalStatus,
+			   enableSubAccountMapping: true
+		   };
+		   console.log('Fleet breakdown payload:', payload);
+		   const response = await fetch('/api/debug/fleet-breakdown', {
+			   method: 'POST',
+			   headers: { 'Content-Type': 'application/json' },
+			   body: JSON.stringify(payload)
+		   });
+
+		   if (!response.ok) {
+			   let errorText = '';
+			   try {
+				   errorText = await response.text();
+			   } catch (e) {}
+			   console.warn('Fleet breakdown endpoint not available', response.status, errorText);
+			   return;
+		   }
+
+		   const breakdownData = await response.json();
+		   console.log('Fleet breakdown loaded:', breakdownData);
+
+		   // Add fleet operation charts to the UI
+		   displayFleetOperationCharts(breakdownData.feesByFleet, fleetNames);
 		
 	} catch (error) {
 		console.error('Error loading fleet breakdown:', error);

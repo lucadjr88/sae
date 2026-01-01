@@ -1,6 +1,3 @@
-mio profileid: 4PsiXxqZZkRynC96UMZDQ6yDuMTWB1zmn4hr84vQwaz8
-mio walletpubkey: 9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY
-
 # API List - Star Atlas Explorer Backend
 
 Questo documento elenca tutte le API disponibili nel backend di Star Atlas Explorer (SAE), basato su Express.js e TypeScript.
@@ -200,17 +197,110 @@ Il server gira su `http://localhost:3000` e fornisce API per interagire con il g
 ### 23. Debug Transaction Fleet Mapping
 
 ### 24. Debug Fleet Breakdown
-**Metodo**: POST
-**Endpoint**: `/api/debug/fleet-breakdown`
-**Descrizione**: Restituisce la struttura completa `feesByFleet` con breakdown dettagliato (incluso campo `operations`) per tutte le chiavi (fleetKey e sub-account).
-**Parametri Body**:
-  - `walletPubkey` (string, required): Chiave pubblica wallet
-  - `fleetAccounts` (array, optional): Lista account flotta
-  - `fleetNames` (object, optional): Nomi flotta
-  - `enableSubAccountMapping` (boolean, optional): Abilita mapping sub-account
-**Risposta**: JSON con struttura raw `feesByFleet` (breakdown completo)
-**Esempio**:
-  `POST /api/debug/fleet-breakdown` con body `{ "walletPubkey": "...", "fleetAccounts": [ ... ], "fleetNames": { ... }, "enableSubAccountMapping": true }`
+
+---
+
+### 25. Debug SAGE: Lista Transazioni (`/api/debug/tx-list`)
+- **Metodo**: POST
+- **Endpoint**: `/api/debug/tx-list`
+- **Utilità**: Elenca tutte le transazioni SAGE di un wallet o fleet, con filtri temporali e per fleetAccount. Utile per audit, debug, esportazione dati e analisi storica.
+- **Parametri Body**:
+  - `walletPubkey` (string, required)
+  - `fleetAccount` (string, optional)
+  - `fromTimestamp` (number, optional, UNIX epoch)
+  - `toTimestamp` (number, optional, UNIX epoch)
+  - `limit` (number, optional, default 100)
+- **Risposta**: JSON `{ transactions: [ ... ] }` (vedi schema in docs)
+- **Esempio**:
+  ```sh
+  curl -X POST 'http://localhost:3000/api/debug/tx-list' \
+    -H 'Content-Type: application/json' \
+    --data '{"walletPubkey": "9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY", "fromTimestamp": 1703980800, "toTimestamp": 1704067200, "limit": 100}'
+  ```
+- **Note**: Gestisce wallet/fleet senza tx, errori RPC, edge case temporali.
+
+### 26. Debug SAGE: Statistiche Istruzioni (`/api/debug/tx-instructions-summary`)
+- **Metodo**: POST
+- **Endpoint**: `/api/debug/tx-instructions-summary`
+- **Utilità**: Restituisce statistiche aggregate sulle istruzioni SAGE trovate nelle transazioni di un wallet/fleet. Utile per analisi comportamentale, audit, tuning bot.
+- **Parametri Body**:
+  - `walletPubkey` (string, required)
+  - `fleetAccount` (string, optional)
+  - `fromTimestamp` (number, optional)
+  - `toTimestamp` (number, optional)
+- **Risposta**: JSON `{ summary: { istruzione: { count, signatures[] }, ... } }`
+- **Esempio**:
+  ```sh
+  curl -X POST 'http://localhost:3000/api/debug/tx-instructions-summary' \
+    -H 'Content-Type: application/json' \
+    --data '{"walletPubkey": "9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY", "fromTimestamp": 1703980800, "toTimestamp": 1704067200}'
+  ```
+- **Note**: Output aggregato, filtrabile per fleetAccount e periodo.
+
+### 27. Debug SAGE: Mapping Step-by-Step (`/api/debug/tx-mapping-step`)
+- **Metodo**: POST
+- **Endpoint**: `/api/debug/tx-mapping-step`
+- **Utilità**: Mostra il mapping dettagliato delle istruzioni di una o più transazioni, inclusi fallback e mapping falliti. Fondamentale per debug mapping e reverse engineering.
+- **Parametri Body**:
+  - `signatures` (array di string, required)
+  - `mappingVersion` (string, optional)
+- **Risposta**: JSON `{ results: [ { signature, instructions, mappingSteps: [ ... ] }, ... ] }`
+- **Esempio**:
+  ```sh
+  curl -X POST 'http://localhost:3000/api/debug/tx-mapping-step' \
+    -H 'Content-Type: application/json' \
+    --data '{"signatures": ["5k...abc"]}'
+  ```
+- **Note**: Logga errori di mapping, edge case su istruzioni non riconosciute.
+
+### 28. Debug SAGE: Operazioni Raw Fleet (`/api/debug/fleet-ops-raw`)
+- **Metodo**: POST
+- **Endpoint**: `/api/debug/fleet-ops-raw`
+- **Utilità**: Restituisce tutte le operazioni raw associate a una fleet in un intervallo temporale. Utile per debug avanzato, analisi fee, esportazione dati grezzi.
+- **Parametri Body**:
+  - `fleetAccount` (string, required)
+  - `fromTimestamp` (number, optional)
+  - `toTimestamp` (number, optional)
+- **Risposta**: JSON `{ operations: [ ... ] }`
+- **Esempio**:
+  ```sh
+  curl -X POST 'http://localhost:3000/api/debug/fleet-ops-raw' \
+    -H 'Content-Type: application/json' \
+    --data '{"fleetAccount": "..."}'
+  ```
+- **Note**: Output raw, utile per analisi forense e test mapping.
+
+### 29. Debug SAGE: Tabella Mapping (`/api/debug/mapping-table`)
+- **Metodo**: GET
+- **Endpoint**: `/api/debug/mapping-table`
+- **Utilità**: Restituisce la tabella completa del mapping attivo (op-map), filtrabile per categoria o istruzione. Utile per audit, export, verifica copertura mapping.
+- **Parametri Query**:
+  - `category` (string, optional)
+  - `instruction` (string, optional)
+- **Risposta**: JSON `{ mapping: [ ... ] }`
+- **Esempio**:
+  ```sh
+  curl -X GET 'http://localhost:3000/api/debug/mapping-table'
+  ```
+- **Note**: Supporta export CSV/TSV, evidenzia mapping duplicati/non coperti.
+
+### 30. Debug SAGE: Ricerca Transazioni (`/api/debug/tx-search`)
+- **Metodo**: POST
+- **Endpoint**: `/api/debug/tx-search`
+- **Utilità**: Ricerca transazioni per wallet/fleet filtrando su logMessages, istruzioni o accountKeys. Supporta regex e ricerca case-insensitive. Utile per debug mirato, tracciamento pattern, analisi anomalie.
+- **Parametri Body**:
+  - `walletPubkey` (string, required)
+  - `searchString` (string, required)
+  - `fromTimestamp` (number, optional)
+  - `toTimestamp` (number, optional)
+- **Risposta**: JSON `{ transactions: [ ... ] }`
+- **Esempio**:
+  ```sh
+  curl -X POST 'http://localhost:3000/api/debug/tx-search' \
+    -H 'Content-Type: application/json' \
+    --data '{"walletPubkey": "9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY", "searchString": "MineAsteroid"}'
+  ```
+- **Note**: Restituisce match parziali nei log, edge case su wallet vuoti o pattern non trovati.
 
 ## Note Generali
 - **Autenticazione**: Nessuna richiesta specifica menzionata.

@@ -44,42 +44,36 @@ export async function getWalletSageFeesDetailedStreaming(
   // 2. Parsing puro
   const items = transactions.map(parseTransaction);
   if (logger) {
-    logger.log(`[DEBUG] Parsed ${items.length} transactions`);
-    const cargoTxs = items.filter(tx => tx.type === 'cargo');
-    logger.log(`[DEBUG] Found ${cargoTxs.length} cargo transactions`);
-    if (cargoTxs.length > 0) {
-      logger.log(`[DEBUG] First cargo tx: ${JSON.stringify(cargoTxs[0])}`);
-    }
+    // logger.log(`[DEBUG] Parsed ${items.length} transactions`);
   }
   // 3. Aggregazione minima: raggruppa per programma/operazione e per fleetAccounts se forniti
   const totalFees = items.reduce((sum, tx) => sum + (tx.fee || 0), 0);
   const transactionCount = items.length;
 
-  // feesByOperation: aggregate by first programId if available, fallback to 'Unknown'
-  const feesByOperation: Record<string, any> = {};
-  for (const tx of items) {
-    const opName = tx.operation || ((Array.isArray(tx.programIds) && tx.programIds[0]) ? String(tx.programIds[0]) : 'Unknown');
-    if (!feesByOperation[opName]) feesByOperation[opName] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
-    feesByOperation[opName].count++;
-    feesByOperation[opName].totalFee += (tx.fee || 0);
-    feesByOperation[opName].avgFee = feesByOperation[opName].totalFee / feesByOperation[opName].count;
-    // keep some detail for UX (signature or timestamp)
-    if (tx.signature) feesByOperation[opName].details.push(tx.signature);
-  }
+  // NESSUNA AGGREGAZIONE PER OPERAZIONE: solo per fleet
 
-  // feesByFleet: robusto, sempre tutte le fleet reali, mapping completo, aggregazione op normalizzate
+  // feesByFleet: solo aggregazione per fleet, nessun breakdown per tipo
   const feesByFleet: Record<string, any> = {};
-  // 1. Inizializza tutte le fleet reali
   if (Array.isArray(fleetAccounts) && fleetAccounts.length > 0) {
-    for (const f of fleetAccounts) {
-      feesByFleet[f] = { totalFee: 0, feePercentage: 0, totalOperations: 0, isRented: !!fleetRentalStatus[f], operations: {}, fleetName: (fleetNames && fleetNames[f]) ? fleetNames[f] : f.substring(0,8) };
-    }
-    // Build mapping completo account→fleet
     const accountToFleetMap = opts.enableSubAccountMapping ? buildAccountToFleetMap(fleetAccounts) : null;
+    
+    // Inizializza solo le fleet che hanno dati (presenti nella mappa)
+    for (const f of fleetAccounts) {
+      if (accountToFleetMap?.has(f)) {
+        feesByFleet[f] = { 
+          totalFee: 0, 
+          feePercentage: 0, 
+          totalOperations: 0, 
+          isRented: !!fleetRentalStatus[f], 
+          operations: {}, 
+          fleetName: (fleetNames && fleetNames[f]) ? fleetNames[f] : f.substring(0,8) 
+        };
+      }
+    }
+
     if (accountToFleetMap && logger) {
       logger.log(`Built account-to-fleet map with ${accountToFleetMap.size} entries`);
     }
-    // 2. Per ogni transazione, trova tutte le fleet coinvolte
     for (const tx of items) {
       const fleetsMatched = new Set<string>();
       if (Array.isArray(tx.accountKeys)) {
@@ -92,30 +86,32 @@ export async function getWalletSageFeesDetailedStreaming(
           }
         }
       }
-      // DEBUG: log per transazioni cargo
-      if (tx.type === 'cargo' && logger) {
-        logger.log(`[DEBUG] Cargo tx ${tx.txid}: accountKeys=${JSON.stringify(tx.accountKeys)}, fleetsMatched=${Array.from(fleetsMatched)}`);
-      }
-      // 3. Aggrega tutte le op normalizzate per OGNI fleet coinvolta
-      const opNames = Array.isArray(tx.operation)
-        ? tx.operation
-        : [tx.operation || ((Array.isArray(tx.programIds) && tx.programIds[0]) ? String(tx.programIds[0]) : 'Unknown')];
+      // Rimosso logica e log per cargo: output deve essere raw
       if (fleetsMatched.size === 0) {
-        // fallback: Other Operations
         const key = 'Other Operations';
         if (!feesByFleet[key]) {
           feesByFleet[key] = { totalFee: 0, feePercentage: 0, totalOperations: 0, isRented: false, operations: {}, fleetName: key };
         }
         feesByFleet[key].totalFee += (tx.fee || 0);
         feesByFleet[key].totalOperations = (feesByFleet[key].totalOperations || 0) + 1;
-        for (const opName of opNames) {
-          if (!feesByFleet[key].operations[opName]) {
-            feesByFleet[key].operations[opName] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
+        // Raggruppa per tutte le istruzioni raw
+        if (Array.isArray(tx.instructions) && tx.instructions.length > 0) {
+          for (const instr of tx.instructions) {
+            if (!feesByFleet[key].operations[instr]) {
+              feesByFleet[key].operations[instr] = { count: 0, totalFee: 0, details: [] };
+            }
+            feesByFleet[key].operations[instr].count += 1;
+            feesByFleet[key].operations[instr].totalFee += (tx.fee || 0);
+            feesByFleet[key].operations[instr].details.push(tx);
           }
-          feesByFleet[key].operations[opName].count++;
+        } else {
+          const opName = 'Unknown';
+          if (!feesByFleet[key].operations[opName]) {
+            feesByFleet[key].operations[opName] = { count: 0, totalFee: 0, details: [] };
+          }
+          feesByFleet[key].operations[opName].count += 1;
           feesByFleet[key].operations[opName].totalFee += (tx.fee || 0);
-          feesByFleet[key].operations[opName].avgFee = feesByFleet[key].operations[opName].totalFee / feesByFleet[key].operations[opName].count;
-          if (tx.signature) feesByFleet[key].operations[opName].details.push(tx.signature);
+          feesByFleet[key].operations[opName].details.push(tx);
         }
       } else {
         for (const fleetKey of fleetsMatched) {
@@ -124,41 +120,51 @@ export async function getWalletSageFeesDetailedStreaming(
           }
           feesByFleet[fleetKey].totalFee += (tx.fee || 0);
           feesByFleet[fleetKey].totalOperations = (feesByFleet[fleetKey].totalOperations || 0) + 1;
-          for (const opName of opNames) {
-            if (!feesByFleet[fleetKey].operations[opName]) {
-              feesByFleet[fleetKey].operations[opName] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
+          // Raggruppa per tutte le istruzioni raw
+          if (Array.isArray(tx.instructions) && tx.instructions.length > 0) {
+            for (const instr of tx.instructions) {
+              if (!feesByFleet[fleetKey].operations[instr]) {
+                feesByFleet[fleetKey].operations[instr] = { count: 0, totalFee: 0, details: [] };
+              }
+              feesByFleet[fleetKey].operations[instr].count += 1;
+              feesByFleet[fleetKey].operations[instr].totalFee += (tx.fee || 0);
+              feesByFleet[fleetKey].operations[instr].details.push(tx);
             }
-            feesByFleet[fleetKey].operations[opName].count++;
+          } else {
+            const opName = 'Unknown';
+            if (!feesByFleet[fleetKey].operations[opName]) {
+              feesByFleet[fleetKey].operations[opName] = { count: 0, totalFee: 0, details: [] };
+            }
+            feesByFleet[fleetKey].operations[opName].count += 1;
             feesByFleet[fleetKey].operations[opName].totalFee += (tx.fee || 0);
-            feesByFleet[fleetKey].operations[opName].avgFee = feesByFleet[fleetKey].operations[opName].totalFee / feesByFleet[fleetKey].operations[opName].count;
-            if (tx.signature) feesByFleet[fleetKey].operations[opName].details.push(tx.signature);
+            feesByFleet[fleetKey].operations[opName].details.push(tx);
           }
         }
       }
     }
-    // 4. Coerenza: tutte le op normalizzate presenti in almeno una fleet vanno aggiunte (con count 0) anche alle altre fleet reali
-    // Raccogli tutte le op usate
-    const allOpNames = new Set<string>();
-    for (const f of Object.values(feesByFleet)) {
-      Object.keys(f.operations).forEach(op => allOpNames.add(op));
-    }
-    for (const fleetKey of fleetAccounts) {
-      for (const op of allOpNames) {
-        if (!feesByFleet[fleetKey].operations[op]) {
-          feesByFleet[fleetKey].operations[op] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
-        }
-      }
-    }
   } else {
-    // fallback: single catch-all, come prima
+    // fallback: tutte le tx in un'unica fleet
+    // fallback: tutte le tx in un'unica fleet, raggruppate per istruzione raw
     const operations: Record<string, any> = {};
     for (const tx of items) {
-      const opName = tx.operation || ((Array.isArray(tx.programIds) && tx.programIds[0]) ? String(tx.programIds[0]) : 'Unknown');
-      if (!operations[opName]) operations[opName] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
-      operations[opName].count++;
-      operations[opName].totalFee += (tx.fee || 0);
-      operations[opName].avgFee = operations[opName].totalFee / operations[opName].count;
-      if (tx.signature) operations[opName].details.push(tx.signature);
+      if (Array.isArray(tx.instructions) && tx.instructions.length > 0) {
+        for (const instr of tx.instructions) {
+          if (!operations[instr]) {
+            operations[instr] = { count: 0, totalFee: 0, details: [] };
+          }
+          operations[instr].count += 1;
+          operations[instr].totalFee += (tx.fee || 0);
+          operations[instr].details.push(tx);
+        }
+      } else {
+        const opName = 'Unknown';
+        if (!operations[opName]) {
+          operations[opName] = { count: 0, totalFee: 0, details: [] };
+        }
+        operations[opName].count += 1;
+        operations[opName].totalFee += (tx.fee || 0);
+        operations[opName].details.push(tx);
+      }
     }
     feesByFleet['All Fleets'] = {
       totalFee: totalFees,
@@ -173,22 +179,14 @@ export async function getWalletSageFeesDetailedStreaming(
   // finalize percentages
   Object.values(feesByFleet).forEach((f: any) => { f.feePercentage = totalFees > 0 ? (f.totalFee / totalFees) : 0; });
 
-  // PATCH: Propaga tutte le operazioni normalizzate aggregate in 'All Fleets' anche nelle fleet reali che hanno almeno una tx di quel tipo
-  if (feesByFleet['All Fleets'] && feesByFleet['All Fleets'].operations) {
-    const allOps = Object.keys(feesByFleet['All Fleets'].operations);
-    for (const fleetKey of Object.keys(feesByFleet)) {
-      if (fleetKey === 'All Fleets' || fleetKey === 'Other Operations') continue;
-      const fleetOps = feesByFleet[fleetKey].operations;
-      for (const op of allOps) {
-        if (!fleetOps[op]) {
-          // Se la fleet ha almeno una tx (totalOperations > 0), copia la struttura vuota per coerenza UI
-          if (feesByFleet[fleetKey].totalOperations > 0) {
-            fleetOps[op] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
-          }
-        }
-      }
-    }
+  // DEBUG: logga le chiavi delle operazioni per ogni fleet
+  if (logger) {
+    Object.entries(feesByFleet).forEach(([fleet, data]) => {
+      // logger.log(`[DEBUG][ops] Fleet '${fleet}' operation keys:`, Object.keys(data.operations));
+    });
   }
+
+
 
   const result: any = {
     walletPubkey,
@@ -198,7 +196,6 @@ export async function getWalletSageFeesDetailedStreaming(
     transactionCount24h: transactionCount,
     totalSignaturesFetched: transactionCount,
     feesByFleet,
-    feesByOperation,
     transactions: items,
     allTransactions: items,
     totalFees,

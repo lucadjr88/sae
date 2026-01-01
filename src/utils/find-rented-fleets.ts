@@ -106,7 +106,7 @@ export async function findRentedFleetsForWallets({
     const decoded = decodeAccountWithRust(accInfo.data);
     // Heuristica: se decode fallisce, includi comunque (fallback)
     if (!decoded) {
-      console.warn(`[findRentedFleetsForWallets][DEBUG] Decode fallito per fleet ${fleets[i]}, inclusa come fallback.`);
+      // console.warn(`[findRentedFleetsForWallets][DEBUG] Decode fallito per fleet ${fleets[i]}, inclusa come fallback.`);
       inRentFleets.add(fleets[i]);
       continue;
     }
@@ -114,7 +114,7 @@ export async function findRentedFleetsForWallets({
     const status = decoded.status ?? decoded.data?.status;
     const owner = decoded.owner ?? decoded.data?.owner;
     const authority = decoded.authority ?? decoded.data?.authority;
-    console.log(`[findRentedFleetsForWallets][DEBUG] Fleet ${fleets[i]}: status=`, status, ", owner=", owner, ", authority=", authority);
+    // console.log(`[findRentedFleetsForWallets][DEBUG] Fleet ${fleets[i]}: status=`, status, ", owner=", owner, ", authority=", authority);
     if (status === 1 || status === "in_rent" || status === "rented") {
       inRentFleets.add(fleets[i]);
     }

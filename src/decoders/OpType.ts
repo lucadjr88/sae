@@ -17,7 +17,7 @@ export type OpType =
 
 export interface WalletTx {
   accountKeys: string[];
-  type: OpType;
+  type?: OpType;
   amount?: number;
   timestamp?: string;
   txid?: string;
