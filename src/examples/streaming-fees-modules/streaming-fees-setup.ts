@@ -4,7 +4,6 @@
 import { TransactionInfo } from '../types.js';
 import { RpcPoolConnection } from '../../utils/rpc/pool-connection.js';
 import { Connection } from '@solana/web3.js';
-import OP_MAP from '../op-map.js';
 import {
   StreamingFeesSetupInput,
   StreamingFeesSetupOutput,
@@ -63,7 +62,6 @@ export async function setupStreamingFees(input: StreamingFeesSetupInput): Promis
       'fueL3hBZjLLLJHiFH9cqZoozTG3XQZ53diwFPwbzNim': 'Fuel',
       'HYDR4EPHJcDPcaLYUcNCtrXUdt1PnaN4MvE655pevBYp': 'Hydrogen',
     },
-    OP_MAP,
     // Parametri rate limiting
     MIN_DELAY: 70,
     MAX_DELAY: 5000,

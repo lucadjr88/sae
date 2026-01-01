@@ -5,7 +5,6 @@ import { getCacheDataOnly, setCache } from '../utils/persist-cache.js';
 import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
 import { nlog } from '../utils/log-normalizer.js';
 import { detectCraftingMaterial } from './tx-utils.js';
-import OP_MAP from './op-map.js';
 import { decodeCompositeInstructions } from '../decoders/composite-decoder.js';
 
 export async function getAccountTransactions(

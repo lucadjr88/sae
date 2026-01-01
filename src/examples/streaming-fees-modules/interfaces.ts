@@ -46,7 +46,6 @@ export interface StreamingFeesConstants {
   SAGE_PROGRAM_ID: string;
   CRAFT_PROGRAM_ID: string;
   MATERIALS: Record<string, string>;
-  OP_MAP: Record<string, string>;
   // Parametri rate limiting
   MIN_DELAY: number;
   MAX_DELAY: number;
@@ -145,7 +144,6 @@ export interface TransactionBatchProcessorOutput {
 // === INTERFACCE MODULO: SAGE INSTRUCTION PARSER ===
 export interface SageInstructionParserInput {
   transaction: TransactionInfo;
-  opMap: Record<string, string>;
 }
 
 export interface SageInstructionParserOutput {

@@ -41,8 +41,7 @@ export async function processTransactionBatch(input: TransactionBatchProcessorIn
 
       // === FASE 1: PARSING ISTRUZIONI SAGE ===
       const parseResult = await parseSageInstructions({
-        transaction: tx,
-        opMap: context.constants.OP_MAP
+        transaction: tx
       });
 
       // === FASE 2: CRAFTING DETECTION ===

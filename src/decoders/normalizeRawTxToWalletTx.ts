@@ -7,47 +7,7 @@
  * - Ogni errore di parsing o struttura viene loggato e gestito
  */
 
-import { WalletTx, OpType } from './OpType';
-
-// Mapping statico programId → opType (aggiornare SOLO qui e nei test)
-const PROGRAM_ID_TO_OPTYPE: Record<string, OpType> = {
-  // Star Atlas core
-  'Cargo2VNTPPTi9c1vq1Jw5d3BWUNr18MjRtSupAghKEk': 'cargo',
-  'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE': 'subwarp',
-  'Point2iBvz7j5TMVef8nEgpmz4pDr7tU7v3RjAfkQbM': 'mining',
-  // SPL Token
-  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA': 'token',
-  // System Program
-  '11111111111111111111111111111111': 'system',
-  // Compute Budget
-  'ComputeBudget111111111111111111111111111111': 'compute',
-  // Memo
-  'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr': 'memo',
-  // Stake
-  'Stake11111111111111111111111111111111111111': 'stake',
-  // Associated Token
-  'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL': 'associatedToken',
-  // Address Lookup Table
-  'AddressLookupTab1e1111111111111111111111111': 'addressLookup',
-};
-
-// Priority order for operation types (higher number = higher priority)
-const OPTYPE_PRIORITY: Record<OpType, number> = {
-  'cargo': 10,
-  'subwarp': 9,
-  'mining': 8,
-  'fees': 7,
-  'crafting': 6,
-  'staking': 5,
-  'token': 5,
-  'system': 4,
-  'stake': 3,
-  'associatedToken': 2,
-  'compute': 1,
-  'memo': 1,
-  'addressLookup': 1,
-  'altro': 0,
-};
+import { WalletTx } from './OpType';
 
 // Estrae tutti i programId da istruzioni principali e innerInstructions
 function extractProgramIds(rawTx: any): string[] {
@@ -105,30 +65,10 @@ function extractAmount(rawTx: any): number | undefined {
 export function normalizeRawTxToWalletTx(rawTx: any): WalletTx {
   if (!rawTx || typeof rawTx !== 'object') throw new Error('rawTx non valido');
   const programIds = extractProgramIds(rawTx);
-  let type: OpType = 'altro';
-  let maxPriority = 0;
-  
-  for (const pid of programIds) {
-    const opType = PROGRAM_ID_TO_OPTYPE[pid];
-    if (opType) {
-      const priority = OPTYPE_PRIORITY[opType] || 0;
-      if (priority > maxPriority) {
-        type = opType;
-        maxPriority = priority;
-      }
-    }
-  }
-  
-  // Fallback: se non matcha nulla, logga il programId principale per debug
-  if (type === 'altro' && programIds.length > 0 && typeof console !== 'undefined') {
-    // eslint-disable-next-line no-console
-    console.warn('[normalizeRawTxToWalletTx] programId non mappato:', programIds[0]);
-  }
   const accountKeys = extractAccountKeys(rawTx);
   const amount = extractAmount(rawTx);
   return {
     accountKeys,
-    type,
     amount,
     timestamp: rawTx.blockTime ? String(rawTx.blockTime) : undefined,
     txid: rawTx.transaction?.signatures?.[0],

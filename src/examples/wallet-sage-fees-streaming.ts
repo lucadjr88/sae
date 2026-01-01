@@ -1,12 +1,10 @@
 import { TransactionInfo } from './types.js';
 import { getAccountTransactions } from './account-transactions.js';
-import { decodeSageInstruction } from '../decoders/sage-crafting-decoder.js';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { decodeRecipe, isRecipeAccount, decodeCraftingProcess, decodeCraftableItem } from '../decoders/crafting-decoder.js';
 import { decodeAccountWithRust } from '../decoders/rust-wrapper.js';
 import { resolveMints } from '../utils/metaplex-metadata.js';
 import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
-import OP_MAP from './op-map.js';
 import { nlog } from '../utils/log-normalizer.js';
 
 export async function getWalletSageFeesDetailedStreaming(
@@ -33,35 +31,8 @@ export async function getWalletSageFeesDetailedStreaming(
     'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
   ];
 
-  // Program ID to operation type mapping for priority-based classification
-  const PROGRAM_ID_TO_OPTYPE: Record<string, string> = {
-    'Cargo2VNTPPTi9c1vq1Jw5d3BWUNr18MjRtSupAghKEk': 'Cargo',
-    'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE': 'Subwarp',
-    'Point2iBvz7j5TMVef8nEgpmz4pDr7tU7v3RjAfkQbM': 'Mining',
-    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA': 'Token',
-    '11111111111111111111111111111111': 'System',
-    'ComputeBudget111111111111111111111111111111': 'Compute',
-    'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr': 'Memo',
-    'Stake11111111111111111111111111111111111111': 'Stake',
-    'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL': 'AssociatedToken',
-    'AddressLookupTab1e1111111111111111111111111': 'AddressLookup',
-  };
+  // Program ID mapping removed - use raw instruction names only
 
-  // Priority order for operation types (higher number = higher priority)
-  const OPTYPE_PRIORITY: Record<string, number> = {
-    'Cargo': 10,
-    'Subwarp': 9,
-    'Mining': 8,
-    'Crafting': 6,
-    'Token': 5,
-    'System': 4,
-    'Stake': 3,
-    'AssociatedToken': 2,
-    'Compute': 1,
-    'Memo': 1,
-    'AddressLookup': 1,
-    'Unknown': 0,
-  };
   // Minimal materials map to detect crafting token movements
   const MATERIALS: Record<string, string> = {
     'MASS9GqtJz6ABisAxcUn3FeR4phMqH1XfG6LPKJePog': 'Biomass',
@@ -72,7 +43,6 @@ export async function getWalletSageFeesDetailedStreaming(
   const specificFleetAccounts = fleetAccounts.filter(account => account && !excludeAccounts.includes(account) && account.length > 40);
   const now = Date.now();
   const cutoffTime = now - (hours * 60 * 60 * 1000);
-  // OP_MAP is now imported from op-map.js
   const CRAFT_PROGRAM_ID = 'CRAFT2RPXPJWCEix4WpJST3E7NLf79GTqZUL75wngXo5';
   const connection = new Connection(rpcEndpoint, 'confirmed');
 
@@ -175,56 +145,37 @@ export async function getWalletSageFeesDetailedStreaming(
         sageFees24h += tx.fee;
       }
 
-      // Determine operation using priority-based classification from program IDs (like normalizeRawTxToWalletTx)
+      // Determine operation using raw instruction names
       let operation = 'Unknown';
       let isCrafting = false;
       let craftingMaterial = undefined;
       let craftingType = undefined;
       let hasSageInstruction = false;
 
-      // First, determine operation from program IDs with priority
-      if (tx.programIds && Array.isArray(tx.programIds)) {
-        let highestPriority = 0;
-        let priorityOperation = 'Unknown';
-
-        for (const programId of tx.programIds) {
-          const programOpType = PROGRAM_ID_TO_OPTYPE[programId];
-          if (programOpType && OPTYPE_PRIORITY[programOpType] > highestPriority) {
-            highestPriority = OPTYPE_PRIORITY[programOpType];
-            priorityOperation = programOpType;
+      if (tx.instructions && tx.instructions.length > 0) {
+        for (const instr of tx.instructions) {
+          if (typeof instr === 'string' && instr !== 'Unknown') {
+            operation = instr;
+            hasSageInstruction = true;
+            if (instr.toLowerCase().includes('craft')) {
+              isCrafting = true;
+              craftingType = instr;
+            }
+            break;
           }
-        }
-
-        if (priorityOperation !== 'Unknown') {
-          operation = priorityOperation;
-          console.log(`[DEBUG] Operation from program IDs: ${operation} for tx ${tx.signature.substring(0,8)}... (programIds: ${tx.programIds.join(', ')})`);
         }
       }
 
-      // Fallback: try to decode from instructions for crafting and other details
-      if (operation === 'Unknown' && tx.instructions && tx.instructions.length > 0) {
-        for (const instr of tx.instructions) {
-          const decoded = decodeSageInstruction(instr);
-          if (decoded && (decoded.program === 'SAGE-Starbased' || decoded.program === 'Crafting') && decoded.craftType === 'crafting') {
-            isCrafting = true;
+      if (operation === 'Unknown' && tx.logMessages) {
+        for (const log of tx.logMessages) {
+          const ixMatch = log.match(/Instruction:\s*(\w+)/);
+          if (ixMatch) {
+            operation = ixMatch[1];
             hasSageInstruction = true;
-            craftingType = decoded.name || decoded.craftType || 'Crafting';
-            craftingMaterial = decoded.material || craftingMaterial;
-            operation = craftingType;
-            break;
-          }
-          // fallback legacy
-          if (OP_MAP[instr]) {
-            operation = OP_MAP[instr];
-            hasSageInstruction = true;
-            if (operation === 'Crafting') isCrafting = true;
-            console.log(`[DEBUG] Operation from OP_MAP: ${operation} for instruction: ${instr} in tx ${tx.signature.substring(0,8)}...`);
-            break;
-          }
-          if (/craft/i.test(instr)) {
-            operation = 'Crafting';
-            isCrafting = true;
-            hasSageInstruction = true;
+            if (operation.toLowerCase().includes('craft')) {
+              isCrafting = true;
+              craftingType = operation;
+            }
             break;
           }
         }
@@ -239,43 +190,7 @@ export async function getWalletSageFeesDetailedStreaming(
       // Aggiungi la transazione SAGE processata all'array per conteggi e timestamp
       processedTransactions.push(tx);
 
-      // If operation is still Unknown but has SAGE program, count it as SAGE operation
-      // Don't skip it - it's a valid SAGE transaction we just haven't decoded yet
-      // 2. Pattern matching su logMessages (fallback for Unknown operations)
-      if (operation === 'Unknown' && tx.logMessages) {
-        for (const log of tx.logMessages) {
-          const ixMatch = log.match(/Instruction:\s*(\w+)/);
-          if (ixMatch) {
-            const ixName = ixMatch[1];
-            if (OP_MAP[ixName]) {
-              operation = OP_MAP[ixName];
-              hasSageInstruction = true;
-              if (operation.includes('Craft')) isCrafting = true;
-              break;
-            }
-          }
-        }
-      }
-      // 2b. Additional crafting detection
-      if (!isCrafting && tx.logMessages) {
-        for (const log of tx.logMessages) {
-          if (/craft/i.test(log)) {
-            operation = 'Crafting';
-            isCrafting = true;
-            hasSageInstruction = true;
-            break;
-          }
-        }
-      }
-      // 2c. Enhanced FleetStateHandler detection for Subwarp/Mining completion
-      if (operation === 'FleetStateHandler' && tx.logMessages) {
-        const logsJoined = tx.logMessages.join(' ');
-        if (logsJoined.includes('MoveSubwarp')) {
-          operation = 'Subwarp';
-        } else if (logsJoined.includes('MineAsteroid')) {
-          operation = 'Mining';
-        }
-      }
+      // Raw instruction extraction complete - no additional normalization
 
       // 3. Parsing innerInstructions per materiali (migliorato)
       if (isCrafting && tx.meta && Array.isArray((tx.meta as any).innerInstructions)) {
@@ -468,7 +383,7 @@ export async function getWalletSageFeesDetailedStreaming(
         unknownOperations++;
       }
 
-      // Group related operations: Dock/Undock/Cargo operations, Subwarp
+      // Group related operations: Dock/Undock/Cargo operations, Subwarp, Mining, SDU
       let groupedOperation = operation;
       if (operation === 'Dock' || operation === 'Undock' || operation === 'LoadCargo' || operation === 'UnloadCargo') {
         groupedOperation = 'Dock/Undock/Load/Unload';
@@ -476,8 +391,10 @@ export async function getWalletSageFeesDetailedStreaming(
         groupedOperation = 'Cargo';
       } else if (operation === 'StartSubwarp' || operation === 'MoveSubwarp') {
         groupedOperation = 'Subwarp';
-      } else if (operation === 'StartMining' || operation === 'StopMining') {
+      } else if (operation === 'StartMining' || operation === 'StopMining' || operation === 'Mining') {
         groupedOperation = 'Mining';
+      } else if (operation === 'ScanForSurveyDataUnits' || operation === 'SDU' || operation === 'Scan') {
+        groupedOperation = 'SDU';
       } else if (operation === 'FleetStateHandler') {
         groupedOperation = 'FleetStateHandler';
       }
@@ -495,7 +412,7 @@ export async function getWalletSageFeesDetailedStreaming(
         }
       }
 
-      // Second try: if no fleet found, try to match fleet names (but NOT for crafting operations)
+      // Second try: if no fleet found, try to match fleet names (ma se ancora nulla, fallback alla prima fleet richiesta come nella repo funzionante)
       if (!involvedFleetName && groupedOperation !== 'Crafting') {
         // Try to match any account key with fleet names
         if (tx.accountKeys) {
@@ -506,9 +423,10 @@ export async function getWalletSageFeesDetailedStreaming(
             }
           }
         }
-        // If still not found, mark as Unknown instead of assigning to primary fleet
+        // Fallback: se ancora non trovato, assegna alla prima fleet richiesta (come repo funzionante)
         if (!involvedFleetName && specificFleetAccounts.length > 0 && groupedOperation !== 'Crafting') {
-          involvedFleetName = 'Unknown';
+          const primaryFleet = specificFleetAccounts[0];
+          involvedFleetName = fleetAccountNames[primaryFleet] || primaryFleet.substring(0, 8);
         }
       }
 
@@ -533,7 +451,8 @@ export async function getWalletSageFeesDetailedStreaming(
       }
 
       // Raggruppa tutte le crafting sotto 'Crafting' per feesByFleet/feesByOperation
-      const opKey = isCrafting ? 'Crafting' : groupedOperation;
+      operation = groupedOperation;
+      if (isCrafting && groupedOperation === 'Unknown') operation = 'Crafting';
       
       // Skip adding to feesByFleet for category entries (operations without assigned fleets)
       const categoryNames = [
@@ -546,7 +465,7 @@ export async function getWalletSageFeesDetailedStreaming(
         'Other Operations'
       ];
       
-      if (!categoryNames.includes(involvedFleetName)) {
+      if (!categoryNames.includes(involvedFleetName) && !(operation === 'Crafting')) {
         if (!feesByFleet[involvedFleetName]) {
           feesByFleet[involvedFleetName] = {
             totalFee: 0,
@@ -561,8 +480,8 @@ export async function getWalletSageFeesDetailedStreaming(
         // Solo se la transazione è effettivamente di questo tipo, crea la voce e incrementa
 
         feesByFleet[involvedFleetName].totalFee += tx.fee;
-        if (!feesByFleet[involvedFleetName].operations[opKey]) {
-          feesByFleet[involvedFleetName].operations[opKey] = {
+        if (!feesByFleet[involvedFleetName].operations[operation]) {
+          feesByFleet[involvedFleetName].operations[operation] = {
             count: 0,
             totalFee: 0,
             avgFee: 0,
@@ -570,11 +489,11 @@ export async function getWalletSageFeesDetailedStreaming(
             details: [] // Dettagli per unfold
           };
         }
-        feesByFleet[involvedFleetName].operations[opKey].count++;
-        feesByFleet[involvedFleetName].operations[opKey].totalFee += tx.fee;
+        feesByFleet[involvedFleetName].operations[operation].count++;
+        feesByFleet[involvedFleetName].operations[operation].totalFee += tx.fee;
         // Salva dettaglio solo per crafting
         if (isCrafting) {
-          feesByFleet[involvedFleetName].operations[opKey].details.push({
+          feesByFleet[involvedFleetName].operations[operation].details.push({
             action: craftingAction,
             // force type to action so UI can distinguish start/claim; keep label separately
             type: craftingAction,
@@ -590,14 +509,14 @@ export async function getWalletSageFeesDetailedStreaming(
         }
       }
       // --- AGGIORNA anche feesByOperation per allineamento UI ---
-      if (!feesByOperation[opKey]) {
-        feesByOperation[opKey] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
+      if (!feesByOperation[operation]) {
+        feesByOperation[operation] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
       }
-      feesByOperation[opKey].count++;
-      feesByOperation[opKey].totalFee += tx.fee;
+      feesByOperation[operation].count++;
+      feesByOperation[operation].totalFee += tx.fee;
       // Se vuoi dettagli anche qui (es: per crafting):
       if (isCrafting) {
-        feesByOperation[opKey].details.push({
+        feesByOperation[operation].details.push({
           action: craftingAction,
           type: craftingAction,
           displayType: craftingType || 'Crafting',
