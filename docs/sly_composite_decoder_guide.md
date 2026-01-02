@@ -111,20 +111,20 @@ export function decodeCompositeInstructions(txJson: any) {
 ## 4. Build and Deployment
 1. **Compile Rust**:
    ```bash
-   cd /home/luca/Scaricati/sae-main/rust_decoder
+   cd rust_decoder
    cargo build --release
    ```
 2. **Install Binary**:
    ```bash
-   mkdir -p /home/luca/Scaricati/sae-main/bin
-   cp target/release/carbon_crafting_decoder_bin /home/luca/Scaricati/sae-main/bin/carbon_decoder
+   mkdir -p bin
+   cp target/release/carbon_crafting_decoder_bin bin/carbon_decoder
    ```
 3. **Environment Variable**:
-   Ensure `RUST_DECODER_BIN=/home/luca/Scaricati/sae-main/bin/carbon_decoder` is set in your `.env` or shell.
+   Ensure `RUST_DECODER_BIN=./bin/carbon_decoder` is set in your `.env` or shell.
 
 ## 5. Verification
 Use the `test-debug.ts` script to validate:
 ```bash
-npx ts-node /home/luca/Scaricati/sae-main/test-debug.ts --tx <COMPOSITE_TX_HASH>
+npx ts-node test-debug.ts --tx <COMPOSITE_TX_HASH>
 ```
 Check for `engine: "carbon-rust"` in the output to confirm the Rust decoder is being utilized.

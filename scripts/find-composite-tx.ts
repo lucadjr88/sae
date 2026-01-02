@@ -1,8 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
-const cacheDir = '/home/luca/Scaricati/sae-main/cache/wallet-txs/9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY';
+const cacheDir = path.join(__dirname, '../cache/wallet-txs/9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY');
 
 function findComposite() {
   const files = fs.readdirSync(cacheDir);

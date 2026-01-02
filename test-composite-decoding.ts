@@ -3,9 +3,13 @@ import path from 'path';
 import { Connection } from '@solana/web3.js';
 import { decodeCompositeInstructions } from './src/decoders/composite-decoder.js';
 import { RPC_ENDPOINT } from './src/config/serverConfig.js';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const txHash = '126nmkku2upmCTNmRaiZMvQzn6nRA5pEPYNKYk6BWY71FiR9hGBx6oQEDjq3KJ6uVP5C5xp5uMk3xarPWZvaGEhN';
-const cacheFile = `/home/luca/Scaricati/sae-main/cache/wallet-txs/9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY/${txHash}.json`;
+const cacheFile = path.join(__dirname, 'cache/wallet-txs/9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY', `${txHash}.json`);
 
 async function test() {
   console.log(`Testing composite decoding for TX: ${txHash}`);

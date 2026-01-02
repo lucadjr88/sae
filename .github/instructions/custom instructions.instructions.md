@@ -8,7 +8,7 @@ applyTo: '**'
 This repository contains the **official Star Atlas SAGE and Crafting decoders**.
 It integrates Carbon decoders and a Rust binary for fast Borsh deserialization.
 Scope is **decoding only**: no UI, no smart contracts, no on-chain writes.
-/home/luca/Scaricati/sae-main/docs contains info for tests and account
+`docs/` folder contains info for tests and account
 
 ## Primary Goals
 - Accurate decoding of SAGE Starbased, Holosim, and Crafting instructions
