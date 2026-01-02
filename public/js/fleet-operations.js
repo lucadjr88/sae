@@ -25,7 +25,7 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set()) 
 
   // Filter out categories, keep only actual fleets
   const sortedFleets = Object.entries(data.feesByFleet)
-    .filter(([key]) => !excludedCategories.includes(key))
+    //.filter(([key]) => !excludedCategories.includes(key))
     .sort((a, b) => {
       const aRented = !!(a[1].isRented || rentedLc.has((fleetNames[a[0]] || a[0] || '').toString().toLowerCase()));
       const bRented = !!(b[1].isRented || rentedLc.has((fleetNames[b[0]] || b[0] || '').toString().toLowerCase()));
@@ -77,7 +77,7 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set()) 
     // Normalize operation names and aggregate stats for this specific fleet
     const normalizedOpsMap = {};
     Object.entries(fleetData.operations || {}).forEach(([opName, stats]) => {
-      const normName = opName; // normalizeOpName(opName); // Temporarily disabled to see raw ops
+      const normName = normalizeOpName(opName); 
       if (!normalizedOpsMap[normName]) {
         normalizedOpsMap[normName] = { count: 0, totalFee: 0, details: [] };
       }

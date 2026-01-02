@@ -97,18 +97,31 @@ export function inferMaterialLabel(entry, decoded) {
  */
 export function normalizeOpName(opName) {
   const mapping = {
-    'IdleToLoadingBay': 'Dock/Undock/Load/Unload',
+    'IdleToLoadingBayWithdrawCargoFromFleetTransferCargoApproveTransferDepositCargoToFleetLoadingBayToIdle': 'Dock/Undock/Load/Unload',
     'Cargo': 'Dock/Undock/Load/Unload',
     'LoadingBayToIdle': 'Dock/Undock/Load/Unload',
-	'DepositCargoToFleet': 'Dock/Undock/Load/Unload',
+	'DepositCargoToFleetTransferCargoApproveTransfer': 'Dock/Undock/Load/Unload',
 	'WithdrawCargoFromFleet': 'Dock/Undock/Load/Unload',
     'StartMiningAsteroid': 'Mining',
-    'CreateCraftingProcess': 'Crafting',
-    'BurnCraftingConsumables': 'Crafting',
-	'StartSubwarp': 'Subwarp',
-    'FleetStateHandler_subwarp': 'Subwarp',
-    'FleetStateHandler_mining': 'Mining',
-    'FleetStateHandler_loading_bay': 'Dock/Undock/Load/Unload'
-  };
+    'CreateCraftingProcessGetAccountDataSizeInitializeImmutableOwnerInitializeAccount3DepositCraftingIngredientRemoveCargoApproveTransferLegitimizeRecipeIngredientStartCraftingProcess': 'Crafting',
+    'BurnCraftingConsumablesBurnConsumableIngredientBurnCloseAccountClaimCraftingOutputsClaimRecipeOutputTransferLegitimizeCargoApproveCloseCraftingProcessIncrementPoints': 'Crafting',
+	'FleetStateHandler_subwarpIncrementPointsConsumeCargoApproveBurnIdleToLoadingBayWithdrawCargoFromFleetTransferCargoTransferDepositCargoToFleetLoadingBayToIdle': 'Dock/Undock/Load/Unload',
+    'FleetStateHandler_subwarpIncrementPointsConsumeCargoApproveBurn': 'Subwarp',
+    'FleetStateHandler_miningConsumeCargoApproveBurnTransferLegitimizeCargoStopMiningAsteroidIncrementPoints': 'Mining',
+    'FleetStateHandler_loading_bay': 'Dock/Undock/Load/Unload',
+	'ScanForSurveyDataUnitsIncrementPointsConsumeCargoApproveBurn': 'Scan SDU',
+	'ScanForSurveyDataUnitsIncrementPointsConsumeCargoApproveBurnTransferLegitimizeCargo': 'Scan SDU',
+	'FleetStateHandler_subwarpIncrementPointsConsumeCargoApproveBurnIdleToLoadingBayDepositCargoToFleetTransferCargoTransferLoadingBayToIdle': 'Dock/Undock/Load/Unload',
+	'FleetStateHandler_subwarpIncrementPointsConsumeCargoApproveBurnIdleToLoadingBayWithdrawCargoFromFleetTransferCargoTransferLoadingBayToIdle': 'Dock/Undock/Load/Unload',
+	'IdleToLoadingBay': 'Dock/Undock/Load/Unload',
+	'WithdrawCargoFromFleetTransferCargoApproveTransfer': 'Dock/Undock/Load/Unload',
+	'StartSubwarp': 'Subwarp'
+
+
+
+
+
+
+};
   return mapping[opName] || opName;
 }

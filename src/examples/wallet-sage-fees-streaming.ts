@@ -520,88 +520,73 @@ export async function getWalletSageFeesDetailedStreaming(
         }
 
         feesByFleet[fleetKey].totalFee += tx.fee;
-
-        // Se abbiamo più istruzioni (es. composite), le esplodiamo tutte
-        const opsToAggregate = (tx.instructions && tx.instructions.length > 0) ? tx.instructions : [operation];
-
-        for (let op of opsToAggregate) {
-          // Raffinamento FleetStateHandler per ogni istruzione
-          if (op === 'FleetStateHandler' && tx.logMessages) {
-            const logsJoined = tx.logMessages.join(' ');
-            const logsLower = logsJoined.toLowerCase();
-            if (logsLower.includes('movesubwarp') || logsLower.includes('stopsubwarp') || logsLower.includes('subwarp')) {
-              op = 'FleetStateHandler_subwarp';
-            } else if (logsLower.includes('mineasteroid') || logsLower.includes('stopmining') || logsLower.includes('mining')) {
-              op = 'FleetStateHandler_mining';
-            } else if (logsLower.includes('loadingbaytoidle') || logsLower.includes('idletoloadingbay')) {
-              op = 'FleetStateHandler_loading_bay';
-            }
-          }
-
-          if (!feesByFleet[fleetKey].operations[op]) {
-            feesByFleet[fleetKey].operations[op] = {
-              count: 0,
-              totalFee: 0,
-              avgFee: 0,
-              percentageOfFleet: 0,
-              details: [] // Dettagli per unfold
-            };
-          }
-          feesByFleet[fleetKey].operations[op].count++;
-          feesByFleet[fleetKey].operations[op].totalFee += tx.fee;
-
-          // Salva dettaglio solo per crafting (solo se l'operazione è quella principale o contiene 'craft')
-          if (isCrafting && (op === operation || op.toLowerCase().includes('craft'))) {
-            feesByFleet[fleetKey].operations[op].details.push({
-              action: craftingAction,
-              type: craftingAction,
-              displayType: craftingType || 'Crafting',
-              fee: tx.fee,
-              material: craftingMaterial,
-              txid: tx.signature,
-              fleet: fleetKey,
-              decodedKind: decodedRecipe ? decodedRecipe.kind : undefined,
-              decodedData: decodedRecipe ? decodedRecipe.data : undefined
-            });
-          }
-        }
       }
 
-      // --- AGGIORNA anche feesByOperation per allineamento UI ---
-      const opsToAggregateGlobal = (tx.instructions && tx.instructions.length > 0) ? tx.instructions : [operation];
-      for (let op of opsToAggregateGlobal) {
-        // Raffinamento FleetStateHandler per ogni istruzione
+      // --- Compute composite operation once per tx ---
+      const refineOp = (op: string): string => {
         if (op === 'FleetStateHandler' && tx.logMessages) {
           const logsJoined = tx.logMessages.join(' ');
           const logsLower = logsJoined.toLowerCase();
-          if (logsLower.includes('movesubwarp') || logsLower.includes('stopsubwarp') || logsLower.includes('subwarp')) {
-            op = 'FleetStateHandler_subwarp';
-          } else if (logsLower.includes('mineasteroid') || logsLower.includes('stopmining') || logsLower.includes('mining')) {
-            op = 'FleetStateHandler_mining';
-          } else if (logsLower.includes('loadingbaytoidle') || logsLower.includes('idletoloadingbay')) {
-            op = 'FleetStateHandler_loading_bay';
-          }
+          if (logsLower.includes('movesubwarp') || logsLower.includes('stopsubwarp') || logsLower.includes('subwarp')) return 'FleetStateHandler_subwarp';
+          if (logsLower.includes('mineasteroid') || logsLower.includes('stopmining') || logsLower.includes('mining')) return 'FleetStateHandler_mining';
+          if (logsLower.includes('loadingbaytoidle') || logsLower.includes('idletoloadingbay')) return 'FleetStateHandler_loading_bay';
         }
+        return op;
+      };
 
-        if (!feesByOperation[op]) {
-          feesByOperation[op] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
+      const opsToAggregate = (tx.instructions && tx.instructions.length > 0) ? tx.instructions : [operation];
+      const refinedOps = opsToAggregate.map(refineOp).filter(Boolean);
+      const compositeOperation = refinedOps.length > 0 ? Array.from(new Set(refinedOps)).join('') : refineOp(operation);
+      const opKey = compositeOperation || refineOp(operation);
+
+      // Update feesByFleet with composite operation
+      if (fleetKey) {
+        if (!feesByFleet[fleetKey].operations[opKey]) {
+          feesByFleet[fleetKey].operations[opKey] = {
+            count: 0,
+            totalFee: 0,
+            avgFee: 0,
+            percentageOfFleet: 0,
+            details: []
+          };
         }
-        feesByOperation[op].count++;
-        feesByOperation[op].totalFee += tx.fee;
+        feesByFleet[fleetKey].operations[opKey].count++;
+        feesByFleet[fleetKey].operations[opKey].totalFee += tx.fee;
 
-        if (isCrafting && (op === operation || op.toLowerCase().includes('craft'))) {
-          feesByOperation[op].details.push({
+        if (isCrafting && (opKey === operation || opKey.toLowerCase().includes('craft'))) {
+          feesByFleet[fleetKey].operations[opKey].details.push({
             action: craftingAction,
             type: craftingAction,
             displayType: craftingType || 'Crafting',
             fee: tx.fee,
             material: craftingMaterial,
             txid: tx.signature,
-            fleet: involvedFleetName,
+            fleet: fleetKey,
             decodedKind: decodedRecipe ? decodedRecipe.kind : undefined,
             decodedData: decodedRecipe ? decodedRecipe.data : undefined
           });
         }
+      }
+
+      // --- AGGIORNA feesByOperation con same composite operation ---
+      if (!feesByOperation[opKey]) {
+        feesByOperation[opKey] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
+      }
+      feesByOperation[opKey].count++;
+      feesByOperation[opKey].totalFee += tx.fee;
+
+      if (isCrafting && (opKey === operation || opKey.toLowerCase().includes('craft'))) {
+        feesByOperation[opKey].details.push({
+          action: craftingAction,
+          type: craftingAction,
+          displayType: craftingType || 'Crafting',
+          fee: tx.fee,
+          material: craftingMaterial,
+          txid: tx.signature,
+          fleet: involvedFleetName,
+          decodedKind: decodedRecipe ? decodedRecipe.kind : undefined,
+          decodedData: decodedRecipe ? decodedRecipe.data : undefined
+        });
       }
     }
 
