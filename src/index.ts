@@ -18,7 +18,7 @@ import fs from 'fs';
 import { getRpcMetrics, pickNextRpcConnection, tryAcquireRpc, releaseRpc, markRpcFailure, markRpcSuccess } from './utils/rpc-pool.js';
 import { getGlobalRpcPoolManager, createRpcPoolManager } from './utils/rpc/rpc-pool-manager.js';
 import { RpcPoolConnection } from './utils/rpc/pool-connection.js';
-import { RpcPoolAdapter, RpcPoolAdapterWithFetch } from './services/RpcPoolAdapter';
+import { RpcPoolAdapter, RpcPoolAdapterWithFetch } from './services/RpcPoolAdapter.js';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { nlog } from './utils/log-normalizer.js';
 import { scanFeePayerForRented } from './utils/fee-payer-scan.js';
