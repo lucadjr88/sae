@@ -1,6 +1,6 @@
 
 import { Request, Response, Router } from 'express';
-import { debugFleetBreakdown } from '../services/walletSageFeesStreaming/debug';
+import { debugFleetBreakdown } from '../services/walletSageFeesStreaming/debug.js';
 import { getGlobalRpcPoolManager } from '../utils/rpc/rpc-pool-manager.js';
 import { globalRpcPoolAdapterWithFetch } from '../index.js';
 

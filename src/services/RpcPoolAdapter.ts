@@ -1,9 +1,9 @@
 import { IRpcPool } from './IRpcPool.js';
-import { getGlobalRpcPoolManager } from '../utils/rpc/rpc-pool-manager';
-import { getAccountTransactions } from '../examples/account-transactions';
-import { newConnection } from '../utils/anchor-setup';
-import { RpcPoolConnection } from '../utils/rpc/pool-connection';
-import { RPC_ENDPOINT, RPC_WEBSOCKET } from '../config/serverConfig';
+import { getGlobalRpcPoolManager } from '../utils/rpc/rpc-pool-manager.js';
+import { getAccountTransactions } from '../examples/account-transactions.js';
+import { newConnection } from '../utils/anchor-setup.js';
+import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
+import { RPC_ENDPOINT, RPC_WEBSOCKET } from '../config/serverConfig.js';
 
 export class RpcPoolAdapter implements IRpcPool {
   private pool = getGlobalRpcPoolManager();

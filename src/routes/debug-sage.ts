@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { getSageTransactions, summarizeInstructions, mapTxInstructions, getFleetOpsRaw, getOpMapTable, searchTransactions } from '../services/debugSageService';
+import { getSageTransactions, summarizeInstructions, mapTxInstructions, getFleetOpsRaw, getOpMapTable, searchTransactions } from '../services/debugSageService.js';
 
 const router = express.Router();
 
