@@ -7,7 +7,7 @@
  * - Ogni errore di parsing o struttura viene loggato e gestito
  */
 
-import { WalletTx } from './OpType';
+import { WalletTx } from './OpType.js';
 
 // Estrae tutti i programId da istruzioni principali e innerInstructions
 function extractProgramIds(rawTx: any): string[] {

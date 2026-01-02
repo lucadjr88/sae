@@ -1,9 +1,9 @@
-import { getWalletSageFeesDetailedStreaming } from './index';
-import type { WalletSageFeesStreamingServices } from './types';
+import { getWalletSageFeesDetailedStreaming } from './index.js';
+import type { WalletSageFeesStreamingServices } from './types.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseTransaction } from './lib/parsers';
-import { extractFleetFromInstruction } from './lib/extract-fleet-official';
+import { parseTransaction } from './lib/parsers.js';
+import { extractFleetFromInstruction } from './lib/extract-fleet-official.js';
 
 /**
  * API di debug: restituisce la struttura feesByFleet completa (raw breakdown)

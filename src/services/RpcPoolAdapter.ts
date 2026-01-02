@@ -1,4 +1,4 @@
-import { IRpcPool } from './IRpcPool';
+import { IRpcPool } from './IRpcPool.js';
 import { getGlobalRpcPoolManager } from '../utils/rpc/rpc-pool-manager';
 import { getAccountTransactions } from '../examples/account-transactions';
 import { newConnection } from '../utils/anchor-setup';

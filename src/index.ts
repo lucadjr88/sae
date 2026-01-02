@@ -99,7 +99,7 @@ app.post('/api/diagnostics/fleet-map', diagnosticsFleetMapHandler);
 import { debugFleetAssociationCheckHandler } from './routes/debug-fleet-association-check.js';
 app.post('/api/debug/fleet-association-check', debugFleetAssociationCheckHandler);
 
-import debugFleetBreakdownRouter from './routes/debug-fleet-breakdown';
+import debugFleetBreakdownRouter from './routes/debug-fleet-breakdown.js';
 app.use('/api/debug/fleet-breakdown', debugFleetBreakdownRouter);
 
 import { debugTransactionFleetMappingHandler } from './routes/debug-transaction-fleet-mapping.js';
@@ -133,5 +133,5 @@ app.get('/api/rpc-metrics', rpcMetricsHandler);
 import { extractMaterialActionsHandler } from './routes/extract-material-actions.js';
 app.post('/api/extract-material-actions', extractMaterialActionsHandler);
 
-import debugSageRouter from './routes/debug-sage';
+import debugSageRouter from './routes/debug-sage.js';
 app.use('/api/debug', debugSageRouter);

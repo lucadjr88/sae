@@ -1,7 +1,7 @@
 import express from 'express';
 import { json, urlencoded } from 'express';
-import { PUBLIC_DIR } from './config/serverConfig';
-import { router } from './routes/index';
+import { PUBLIC_DIR } from './config/serverConfig.js';
+import { router } from './routes/index.js';
 
 export function createApp({ rpcPool, services }: any) {
   const app = express();

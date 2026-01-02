@@ -1,5 +1,5 @@
-import { normalizeRawTxToWalletTx } from './normalizeRawTxToWalletTx';
-import { WalletTx } from './OpType';
+import { normalizeRawTxToWalletTx } from './normalizeRawTxToWalletTx.js';
+import { WalletTx } from './OpType.js';
 
 describe('normalizeRawTxToWalletTx', () => {
   it('normalizza una tx cargo', () => {

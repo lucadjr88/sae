@@ -1,10 +1,10 @@
 // Service entrypoint for walletSageFeesStreaming (stub, orchestrator only)
 
 
-import type { WalletSageFeesStreamingServices, StreamingOptions, StreamingResult } from './types';
-import { parseTransaction } from './lib/parsers';
-import { buildAccountToFleetMap } from './lib/fleet-association';
-import { extractFleetFromInstruction } from './lib/extract-fleet-official';
+import type { WalletSageFeesStreamingServices, StreamingOptions, StreamingResult } from './types.js';
+import { parseTransaction } from './lib/parsers.js';
+import { buildAccountToFleetMap } from './lib/fleet-association.js';
+import { extractFleetFromInstruction } from './lib/extract-fleet-official.js';
 import { RpcPoolAdapterWithFetch } from '../RpcPoolAdapter';
 
 // Orchestrator reale: fetch, parse, aggrega, metriche base

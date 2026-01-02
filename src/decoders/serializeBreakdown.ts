@@ -1,4 +1,4 @@
-import { SubAccountBreakdown } from './scanWalletTxsForSubAccounts';
+import { SubAccountBreakdown } from './scanWalletTxsForSubAccounts.js';
 
 export function serializeBreakdown(breakdown: SubAccountBreakdown, format: 'json'|'csv' = 'json'): string {
   if (format === 'json') {

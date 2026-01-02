@@ -1,7 +1,7 @@
 // Logica per costruire la mappa accountToFleet
 
 import type { FleetData } from '../types';
-import { loadFleetData } from './fleet-loader';
+import { loadFleetData } from './fleet-loader.js';
 
 /**
  * Costruisce una mappa da account a chiave flotta, includendo sub-accounts.

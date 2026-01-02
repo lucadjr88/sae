@@ -2,10 +2,10 @@
 
 import fs from 'fs';
 import path from 'path';
-import { normalizeRawTxToWalletTx } from './normalizeRawTxToWalletTx';
+import { normalizeRawTxToWalletTx } from './normalizeRawTxToWalletTx.js';
 
 // NB: Usa la definizione WalletTx e OpType centralizzata in OpType.ts
-import { WalletTx, OpType } from './OpType';
+import { WalletTx, OpType } from './OpType.js';
 export interface BreakdownSubAccountOpsParams {
   fleetKey: string;
   subAccounts: string[];
