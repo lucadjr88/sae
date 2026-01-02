@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../star-atlas-decoders-main"
+		},
+		{
+			"path": "../../sae-main_funzionante"
+		}
+	],
+	"settings": {}
+}

@@ -3,7 +3,11 @@ import { TransactionInfo } from './types.js';
 import { getAccountTransactions } from './account-transactions.js';
 import { newConnection } from '../utils/anchor-setup.js';
 import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
+import { SAGE_INSTRUCTION_MAP } from '../decoders/sage-instruction-map.js';
 
+const SAGE_SPECIFIC_INSTRUCTIONS = new Set(SAGE_INSTRUCTION_MAP.map(i => i.name));
+// Rimuovi FleetStateHandler dai prioritari per forzare il check degli altri o la raffinazione
+SAGE_SPECIFIC_INSTRUCTIONS.delete('FleetStateHandler');
 
 // Funzione ripristinata da sae-main_funzionante il 2025-12-30
 export async function getWalletSageFeesDetailed(
@@ -121,12 +125,36 @@ export async function getWalletSageFeesDetailed(
     }
 
     // Use raw instruction names directly from transaction
-    if (tx.instructions && tx.instructions.length > 0) {
-      for (const instr of tx.instructions) {
-        if (instr && instr.trim()) {
-          operation = instr;
-          foundMethod = 'instruction_raw';
-          break;
+    if (tx.compositeDecoded && tx.compositeDecoded.isComposite) {
+      const decodedNames = tx.compositeDecoded.instructions
+        .filter((ix: any) => ix.success && ix.instructionName)
+        .map((ix: any) => ix.instructionName);
+      
+      if (decodedNames.length > 0) {
+        operation = decodedNames[0];
+        foundMethod = 'composite_rust_decoder';
+      }
+    }
+
+    if (operation === 'Unknown' && tx.instructions && tx.instructions.length > 0) {
+      // Cerca prima istruzioni SAGE specifiche (es. StopMiningAsteroid)
+      const specificIx = tx.instructions.find(ix => SAGE_SPECIFIC_INSTRUCTIONS.has(ix));
+      if (specificIx) {
+        operation = specificIx;
+        foundMethod = 'instruction_sage_specific';
+      } else {
+        // Fallback alla prima istruzione non-generic se possibile
+        for (const instr of tx.instructions) {
+          if (instr && instr.trim() && !['ComputeBudget', 'Approve', 'Burn', 'Transfer', 'IncrementPoints'].includes(instr)) {
+            operation = instr;
+            foundMethod = 'instruction_raw_filtered';
+            break;
+          }
+        }
+        // Se ancora Unknown, prendi la prima in assoluto
+        if (operation === 'Unknown') {
+          operation = tx.instructions[0];
+          foundMethod = 'instruction_raw_first';
         }
       }
     }
@@ -135,12 +163,36 @@ export async function getWalletSageFeesDetailed(
       for (const log of tx.logMessages) {
         const ixMatch = log.match(/Instruction:\s*(\w+)/i);
         if (ixMatch) {
-          operation = ixMatch[1];
-          foundMethod = 'log_instruction_raw';
-          break;
+          const ixName = ixMatch[1];
+          if (SAGE_SPECIFIC_INSTRUCTIONS.has(ixName)) {
+            operation = ixName;
+            foundMethod = 'log_instruction_sage_specific';
+            break;
+          }
+          if (operation === 'Unknown') {
+            operation = ixName;
+            foundMethod = 'log_instruction_raw';
+          }
         }
       }
     }
+
+    // Raffinamento FleetStateHandler: se l'operazione è FleetStateHandler, guarda i log per capire cosa sta succedendo
+    if (operation === 'FleetStateHandler' && tx.logMessages) {
+      const logsJoined = tx.logMessages.join(' ');
+      const logsLower = logsJoined.toLowerCase();
+      if (logsLower.includes('movesubwarp') || logsLower.includes('stopsubwarp') || logsLower.includes('subwarp')) {
+        operation = 'FleetStateHandler_subwarp';
+        foundMethod = 'fleet_state_refinement_subwarp';
+      } else if (logsLower.includes('mineasteroid') || logsLower.includes('stopmining') || logsLower.includes('mining')) {
+        operation = 'FleetStateHandler_mining';
+        foundMethod = 'fleet_state_refinement_mining';
+      } else if (logsLower.includes('loadingbaytoidle') || logsLower.includes('idletoloadingbay')) {
+        operation = 'FleetStateHandler_loading_bay';
+        foundMethod = 'fleet_state_refinement_loading_bay';
+      }
+    }
+
     if (operation === 'Unknown') unknownOperations++;
     
     // MATCHING semplificato: usa solo la key principale della flotta
@@ -258,18 +310,25 @@ export async function getWalletSageFeesDetailed(
       if (fleetRentalStatus[fleetKey]) txRented = true;
       if (rentedFleets.has(fleetKey)) txRented = true;
       fleetEntry.isRented = !!(fleetEntry.isRented || txRented);
-      // Use raw operation name
-      let finalOperation = finalOperationForStats;
-      let operationDetail = craftingDetail;
-      if (!fleetEntry.operations[finalOperation]) {
-        fleetEntry.operations[finalOperation] = { count: 0, totalFee: 0, avgFee: 0, percentageOfFleet: 0, details: [] };
-      }
-      const fleetOp = fleetEntry.operations[finalOperation];
-      fleetOp.count++;
-      fleetOp.totalFee += tx.fee;
-      fleetOp.avgFee = fleetOp.totalFee / fleetOp.count;
-      if (operationDetail) {
-        fleetOp.details!.push(operationDetail);
+      
+      // Aggregate ALL instructions found in the transaction
+      const instructionsToAggregate = tx.instructions && tx.instructions.length > 0 
+        ? tx.instructions 
+        : [operation];
+
+      for (const finalOperation of instructionsToAggregate) {
+        if (!fleetEntry.operations[finalOperation]) {
+          fleetEntry.operations[finalOperation] = { count: 0, totalFee: 0, avgFee: 0, percentageOfFleet: 0, details: [] };
+        }
+        const fleetOp = fleetEntry.operations[finalOperation];
+        fleetOp.count++;
+        // We attribute the full fee to each instruction in the composite (simplified)
+        // or we could divide it, but usually users want to see the count of each op
+        fleetOp.totalFee += tx.fee;
+        fleetOp.avgFee = fleetOp.totalFee / fleetOp.count;
+        if (craftingDetail) {
+          fleetOp.details!.push(craftingDetail);
+        }
       }
     }
   }

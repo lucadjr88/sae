@@ -74,10 +74,11 @@ export function parseSageTransaction(tx: TransactionInfo, OP_MAP: Record<string,
   // 2c. Enhanced FleetStateHandler detection for Subwarp/Mining completion
   if (operation === 'FleetStateHandler' && tx.logMessages) {
     const logsJoined = tx.logMessages.join(' ');
-    if (logsJoined.includes('MoveSubwarp')) {
-      operation = 'StopSubwarp';
-    } else if (logsJoined.includes('MineAsteroid')) {
-      operation = 'StopMining';
+    const logsLower = logsJoined.toLowerCase();
+    if (logsLower.includes('movesubwarp') || logsLower.includes('stopsubwarp') || logsLower.includes('subwarp')) {
+      operation = 'FleetStateHandler_subwarp';
+    } else if (logsLower.includes('mineasteroid') || logsLower.includes('stopmining') || logsLower.includes('mining')) {
+      operation = 'FleetStateHandler_mining';
     }
   }
 

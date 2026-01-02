@@ -5,7 +5,7 @@ import { nlog } from '../utils/log-normalizer.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET } from '../config/serverConfig.js';
 
 export async function walletSageFeesStreamHandler(req: Request, res: Response) {
-  const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, hours, debug } = req.body;
+  const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, hours, debug, enableSubAccountMapping } = req.body;
   console.log(`[api/wallet-sage-fees-stream] Received request at ${new Date().toISOString()} with walletPubkey=${walletPubkey ? walletPubkey.substring(0,8) : 'undefined'}`);
   if (!walletPubkey) {
     return res.status(400).json({ error: 'walletPubkey required' });
@@ -15,7 +15,7 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
   const update = (req.query.update === 'true') || (req.body && req.body.update === true);
   // Modalità debug: se ?debug=json o body.debug=true, rispondi con JSON puro
   const debugJson = req.query.debug === 'json' || debug === true;
-  const keyPayload = JSON.stringify({ a: fleetAccounts || [], n: fleetNames || {}, r: fleetRentalStatus || {}, h: hours || 24 });
+  const keyPayload = JSON.stringify({ a: fleetAccounts || [], n: fleetNames || {}, r: fleetRentalStatus || {}, h: hours || 24, s: !!enableSubAccountMapping });
   const compositeKey = `${walletPubkey}__${keyPayload}`;
   const cacheKey = crypto.createHash('sha256').update(compositeKey).digest('hex');
   console.log(`[stream] Cache key hash: ${cacheKey.substring(0, 16)}...`);
@@ -117,6 +117,7 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
       fleetNames || {},
       fleetRentalStatus || {},
       hours || 24,
+      !!enableSubAccountMapping,
       sendUpdate,
       saveProgress,
       cachedData,

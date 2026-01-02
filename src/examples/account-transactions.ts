@@ -112,6 +112,13 @@ export async function getAccountTransactions(
       withTimeout<{ sig: any, tx: any }>(
         (async () => {
           let tx: any = null;
+
+          // Check cache first unless refresh is forced
+          if (!opts?.refresh) {
+            tx = await getCacheDataOnly(`wallet-txs/${accountPubkey}`, sig.signature);
+            if (tx) return { sig, tx };
+          }
+
           let retries = 5;  // Increased retries to 5 per transaction
           while (retries >= 0 && !tx) {
             try {
@@ -212,6 +219,13 @@ export async function getAccountTransactions(
 
       // Decode composite instructions if present
       const compositeDecoded = decodeCompositeInstructions(tx);
+      if (compositeDecoded && compositeDecoded.instructions) {
+        compositeDecoded.instructions.forEach((ix: any) => {
+          if (ix.success && ix.instructionName) {
+            instructions.push(ix.instructionName);
+          }
+        });
+      }
 
       const accountKeys: string[] = (tx.transaction.message.accountKeys || []).map((k: any) => k.pubkey ? k.pubkey.toString() : (typeof k === 'string' ? k : ''));
 

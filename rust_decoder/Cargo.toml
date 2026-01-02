@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-carbon-crafting-decoder = { path = "./../star-atlas-decoders-main/carbon-decoders/crafting-decoder" }
-carbon-sage-starbased-decoder = { path = "./../star-atlas-decoders-main/carbon-decoders/sage-starbased-decoder" }
-carbon-sage-holosim-decoder = { path = "./../star-atlas-decoders-main/carbon-decoders/sage-holosim-decoder" }
+carbon-crafting-decoder = { path = "../../star-atlas-decoders-main/carbon-decoders/crafting-decoder" }
+carbon-sage-starbased-decoder = { path = "../../star-atlas-decoders-main/carbon-decoders/sage-starbased-decoder" }
+carbon-sage-holosim-decoder = { path = "../../star-atlas-decoders-main/carbon-decoders/sage-holosim-decoder" }
 solana-account = "2.2.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

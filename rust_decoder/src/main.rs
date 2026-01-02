@@ -12,8 +12,9 @@ use carbon_crafting_decoder::CraftingDecoder;
 
 // Instruction decoders
 use carbon_crafting_decoder::instructions::CraftingInstruction;
-use carbon_sage_starbased_decoder::instructions::SageInstruction;
+use carbon_sage_starbased_decoder::instructions::SageInstruction as StarbasedInstruction;
 use carbon_sage_starbased_decoder::SageDecoder as SageStarbasedDecoder;
+use carbon_sage_holosim_decoder::SageDecoder as SageHolosimDecoder;
 
 // Core traits
 use carbon_core::account::AccountDecoder;
@@ -100,16 +101,93 @@ fn decode_sage_instruction(hex: &str) -> serde_json::Value {
     json!({"decoded":null,"program":"Unknown","error":"Invalid instruction format"})
 }
 
+/// Decodes an array of SAGE instructions passed as a JSON string
+fn decode_composite_instructions(instructions_json: &str) -> serde_json::Value {
+    let v: serde_json::Value = serde_json::from_str(instructions_json).unwrap_or(json!([]));
+    let mut decoded_results = Vec::new();
+    let starbased_decoder = SageStarbasedDecoder;
+    let holosim_decoder = SageHolosimDecoder;
+
+    if let Some(ix_list) = v.as_array() {
+        for ix_val in ix_list {
+            let program_id_str = ix_val["programId"].as_str().unwrap_or("");
+            let data_hex = ix_val["data"].as_str().unwrap_or("");
+            
+            if let (Ok(program_id), Some(data)) = (Pubkey::from_str(program_id_str), hex_to_bytes(data_hex)) {
+                let solana_ix = Instruction {
+                    program_id,
+                    accounts: vec![], 
+                    data,
+                };
+
+                let mut decoded_val = None;
+
+                if program_id_str == "SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE" {
+                    if let Some(decoded) = starbased_decoder.decode_instruction(&solana_ix) {
+                        let data_val = serde_json::to_value(&decoded.data).unwrap_or(json!({}));
+                        let name = if data_val.is_string() {
+                            data_val.as_str().unwrap_or("Unknown").to_string()
+                        } else if data_val.is_object() {
+                            data_val.as_object().unwrap().keys().next().unwrap_or(&"Unknown".to_string()).clone()
+                        } else {
+                            format!("{:?}", decoded.data)
+                        };
+
+                        decoded_val = Some(json!({
+                            "name": name,
+                            "data": decoded.data,
+                            "success": true
+                        }));
+                    }
+                } else if program_id_str == "SAGE9G967S9mYvSWS99sS99sS99sS99sS99sS99sS99" {
+                    if let Some(decoded) = holosim_decoder.decode_instruction(&solana_ix) {
+                        let data_val = serde_json::to_value(&decoded.data).unwrap_or(json!({}));
+                        let name = if data_val.is_string() {
+                            data_val.as_str().unwrap_or("Unknown").to_string()
+                        } else if data_val.is_object() {
+                            data_val.as_object().unwrap().keys().next().unwrap_or(&"Unknown".to_string()).clone()
+                        } else {
+                            format!("{:?}", decoded.data)
+                        };
+
+                        decoded_val = Some(json!({
+                            "name": name,
+                            "data": decoded.data,
+                            "success": true
+                        }));
+                    }
+                }
+
+                if let Some(val) = decoded_val {
+                    decoded_results.push(val);
+                } else {
+                    decoded_results.push(json!({"error": "Unknown or undecodable instruction", "success": false, "programId": program_id_str}));
+                }
+            }
+        }
+    }
+    json!(decoded_results)
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: carbon_crafting_decoder <hex-data> [--instruction]");
+        eprintln!("Usage: carbon_crafting_decoder <hex-data> [--instruction] [--mode composite]");
         eprintln!("  If --instruction is not provided, decodes as account data");
         eprintln!("  If --instruction is provided, decodes as instruction data");
+        eprintln!("  If --mode composite is provided, decodes an array of instructions from JSON");
         std::process::exit(2);
     }
     
     let hex = &args[1];
+    
+    // Check for composite mode
+    if args.contains(&"--mode".to_string()) && args.contains(&"composite".to_string()) {
+        let output = decode_composite_instructions(hex);
+        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        return;
+    }
+
     let is_instruction = args.len() > 2 && args[2] == "--instruction";
     
     let data = match hex_to_bytes(hex) {

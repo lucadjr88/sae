@@ -384,13 +384,14 @@ export async function refreshAnalysis() {
     const response = await fetch('/api/wallet-sage-fees-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+        body: JSON.stringify({
         walletPubkey: walletPubkey,
         fleetAccounts: uniqueFleetAccounts,
         fleetNames: fleetNames,
         fleetRentalStatus: fleetRentalStatus,
         hours: 24,
-        refresh: true
+          refresh: true,
+          enableSubAccountMapping: false
       })
     });
 

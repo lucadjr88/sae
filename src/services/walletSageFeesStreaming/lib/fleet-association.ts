@@ -36,11 +36,9 @@ export function buildAccountToFleetMap(fleetAccounts: string[]): Map<string, str
       if (fleetData.cargoHold) accountToFleet.set(fleetData.cargoHold, fleetKey);
       if (fleetData.fuelTank) accountToFleet.set(fleetData.fuelTank, fleetKey);
       if (fleetData.ammoBank) accountToFleet.set(fleetData.ammoBank, fleetKey);
-      // Estensione: mappa anche ownerProfile, fleetShips, subProfile, subProfileInvalidator
-      if (fleetData.ownerProfile) accountToFleet.set(fleetData.ownerProfile, fleetKey);
+      // Estensione: mappa anche fleetShips. 
+      // ownerProfile e subProfile sono rimossi perché condivisi tra più flotte e causano mis-attribuzione (es. crafting)
       if (fleetData.fleetShips) accountToFleet.set(fleetData.fleetShips, fleetKey);
-      if (fleetData.subProfile && typeof fleetData.subProfile.key === 'string') accountToFleet.set(fleetData.subProfile.key, fleetKey);
-      if (fleetData.subProfileInvalidator) accountToFleet.set(fleetData.subProfileInvalidator, fleetKey);
     } else {
       // Se la cache manca, non mappiamo nulla per questa flotta.
       // Questo eviterà che compaia nel breakdown se non è una flotta valida.

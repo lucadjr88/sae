@@ -1,5 +1,6 @@
 import { spawnSync } from 'child_process';
 import fs from 'fs';
+import path from 'path';
 import { normalizeRustDecode } from './rust-normalizer.js';
 
 /**
@@ -45,4 +46,35 @@ export function decodeAccountWithRust(data: Buffer | Uint8Array): any | null {
   }
 }
 
-export default { decodeAccountWithRust };
+/**
+ * Calls the Rust Carbon decoder for a batch of instructions.
+ * @param instructions Array of { programId: string, data: string (hex) }
+ */
+export function decodeCompositeWithRust(instructions: any[]): any[] | null {
+  try {
+    const rootDir = process.cwd();
+    const binPath = process.env.RUST_DECODER_BIN || path.join(rootDir, 'bin', 'carbon_decoder');
+    const candidates = [
+      binPath,
+      path.join(rootDir, 'bin', 'carbon_crafting_decoder'),
+      path.join(rootDir, 'bin', 'carbon_crafting_decoder_bin')
+    ];
+    const found = candidates.find((p) => fs.existsSync(p));
+    if (!found) return null;
+
+    const payload = JSON.stringify(instructions);
+    
+    const res = spawnSync(found, [payload, '--mode', 'composite'], { 
+      encoding: 'utf8', 
+      maxBuffer: 10 * 1024 * 1024 
+    });
+    
+    if (res.error || res.status !== 0) return null;
+    const out = (res.stdout || '').trim();
+    return out ? JSON.parse(out) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export default { decodeAccountWithRust, decodeCompositeWithRust };

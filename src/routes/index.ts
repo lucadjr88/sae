@@ -9,7 +9,7 @@ export function router({ rpcPool, services }: any) {
   r.use('/wallet', walletRouter({ rpcPool, services }));
   r.use('/fleets', fleetsRouter);
   r.use('/wallet-sage-fees-detailed', walletSageFeesDetailedRouter);
-  r.use('/wallet-sage-fees-stream', walletSageFeesStreamRouter);
+  r.use('/wallet-sage-fees-stream', walletSageFeesStreamRouter({ services }));
   // mount other routers similarly
   return r;
 }

@@ -103,30 +103,23 @@ export async function debugFleetBreakdown(
       if (officialFleet && fleetAccounts.includes(officialFleet)) {
         fleetsMatched.add(officialFleet);
       } else if (Array.isArray(tx.accountKeys)) {
-        // 2. Fallback: logica attuale su accountKeys
+        // 2. Solo account mappati esplicitamente alla fleet (evita match falsi)
         for (const k of tx.accountKeys) {
           if (accountToFleetMap?.has(k)) {
             const fleetKey = accountToFleetMap.get(k);
             if (fleetKey) fleetsMatched.add(fleetKey);
-          } else if (fleetAccounts.includes(k)) {
-            fleetsMatched.add(k);
           }
         }
-      }
-      // DEBUG: log per transazioni cargo e quelle che non matchano
-      if (tx.type === 'cargo' && services.logger) {
-        // services.logger.log(`[DEBUG] Cargo tx ${tx.txid}: accountKeys=${JSON.stringify(tx.accountKeys)}, fleetsMatched=${Array.from(fleetsMatched)}`);
-      }
-      if (fleetsMatched.size === 0 && services.logger) {
-        // services.logger.log(`[DEBUG] No fleet match for tx ${tx.txid} (${tx.type}): accountKeys=${JSON.stringify(tx.accountKeys)}`);
       }
 
       // 3. Aggrega tutte le op normalizzate per OGNI fleet coinvolta
       const opNames = Array.isArray(tx.operation)
         ? tx.operation
         : [tx.operation || ((Array.isArray(tx.programIds) && tx.programIds[0]) ? String(tx.programIds[0]) : 'Unknown')];
+
+
       if (fleetsMatched.size === 0) {
-        // fallback: Other Operations
+        // fallback: Other Operations (o Crafting dedicato)
         const key = 'Other Operations';
         if (!feesByFleet[key]) {
           feesByFleet[key] = { totalFee: 0, feePercentage: 0, totalOperations: 0, isRented: false, operations: {}, fleetName: key };
@@ -168,9 +161,11 @@ export async function debugFleetBreakdown(
       Object.keys(f.operations).forEach(op => allOpNames.add(op));
     }
     for (const fleetKey of fleetAccounts) {
-      for (const op of allOpNames) {
-        if (!feesByFleet[fleetKey].operations[op]) {
-          feesByFleet[fleetKey].operations[op] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
+      if (feesByFleet[fleetKey]) {
+        for (const op of allOpNames) {
+          if (!feesByFleet[fleetKey].operations[op]) {
+            feesByFleet[fleetKey].operations[op] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
+          }
         }
       }
     }

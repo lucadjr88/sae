@@ -2,6 +2,7 @@
 import { formatTimestamp } from './ui-helpers.js';
 import { drawPieChart } from './charts.js';
 import { createFleetList, createOperationList, createOtherOperationsList } from './fleet-operations.js';
+import { normalizeOpName } from './utils.js';
 
 export function displayPartialResults(update, fleets, fleetRentalStatus) {
   const resultsDiv = document.getElementById('results');
@@ -30,13 +31,11 @@ export function displayPartialResults(update, fleets, fleetRentalStatus) {
       <div class="summary">
         <div class="summary-item">
           <span class="label">Total Fees:</span>
-          <span class="value">${(update.totalFees24h / 1e9).toFixed(6)} SOL</span>
-                  <span class="value">${(update.totalFees24h / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((update.totalFees24h / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></span>
+          <span class="value">${(update.totalFees24h / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((update.totalFees24h / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></span>
         </div>
         <div class="summary-item">
           <span class="label">SAGE Fees:</span>
-          <span class="value">${(update.sageFees24h / 1e9).toFixed(6)} SOL</span>
-                  <span class="value">${(update.sageFees24h / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((update.sageFees24h / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></span>
+          <span class="value">${(update.sageFees24h / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((update.sageFees24h / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></span>
         </div>
         <div class="summary-item">
           <span class="label">Transactions:</span>
@@ -47,36 +46,37 @@ export function displayPartialResults(update, fleets, fleetRentalStatus) {
 
   // Show fleet breakdown if available
   if (update.feesByFleet && Object.keys(update.feesByFleet).length > 0) {
+
     const sortedFleets = Object.entries(update.feesByFleet)
       .sort((a, b) => b[1].totalFee - a[1].totalFee);
 
-    html += '<h3>Fleet Breakdown (partial)</h3><div class="fleet-list">';
+    if (sortedFleets.length > 0) {
+      html += '<h3>Fleet Breakdown (partial)</h3><div class="fleet-list">';
 
-    const totalFee = Object.values(update.feesByFleet).reduce((sum, f) => sum + (f.totalFee || 0), 0);
-    sortedFleets.forEach(([fleetName, fleetData]) => {
-      const isRented = !!fleetData.isRented;
-      const nameClass = isRented ? 'rented-name' : '';
-      const badge = isRented ? '<span class="rented-badge">RENTED</span>' : '';
-      const pct = totalFee ? ((fleetData.totalFee / totalFee) * 100).toFixed(1) : '0.0';
-      html += `
-        <div class="fleet-item">
-          <div class="fleet-header">
-            <span class="fleet-name ${nameClass}">${fleetName}</span>
-            ${badge}
-            <span class="fleet-fee">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</span>
-                        <span class="fleet-fee">${(fleetData.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((fleetData.totalFee / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></span>
-            <span class="fleet-pct">${pct}%</span>
+      const totalFee = Object.values(update.feesByFleet).reduce((sum, f) => sum + (f.totalFee || 0), 0);
+      sortedFleets.forEach(([fleetName, fleetData]) => {
+        const isRented = !!fleetData.isRented;
+        const nameClass = isRented ? 'rented-name' : '';
+        const badge = isRented ? '<span class="rented-badge">RENTED</span>' : '';
+        const pct = totalFee ? ((fleetData.totalFee / totalFee) * 100).toFixed(1) : '0.0';
+        html += `
+          <div class="fleet-item">
+            <div class="fleet-header">
+              <span class="fleet-name ${nameClass}">${fleetName}</span>
+              ${badge}
+              <span class="fleet-fee">${(fleetData.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((fleetData.totalFee / 1e9) * window.prices.solana.usd).toFixed(2) : '--'})</span></span>
+              <span class="fleet-pct">${pct}%</span>
+            </div>
           </div>
-        </div>
-      `;
-    });
+        `;
+      });
 
-    html += '</div>';
+      html += '</div>';
+    }
   }
 
   html += '</div>';
   resultsDiv.innerHTML = html;
-  // No toggle: crafting categories are always included by default.
 }
 
 export function displayResults(data, fleetNames, rentedFleetNames = new Set(), fleets = []) {
@@ -87,25 +87,38 @@ export function displayResults(data, fleetNames, rentedFleetNames = new Set(), f
   // Include all fleets, even those with 0 fees
   const completeFeesByFleet = { ...data.feesByFleet };
   fleets.forEach(f => {
-    const name = f.callsign;
-    if (!completeFeesByFleet[name]) {
-      completeFeesByFleet[name] = {
-        totalFee: 0,
-        feePercentage: 0,
-        totalOperations: 0,
-        isRented: f.isRented,
-        operations: {}
-      };
-    }
+    const aliases = [f.key, f.data && f.data.fleetShips].filter(Boolean);
+    aliases.forEach(name => {
+      if (!completeFeesByFleet[name]) {
+        completeFeesByFleet[name] = {
+          totalFee: 0,
+          feePercentage: 0,
+          totalOperations: 0,
+          isRented: f.isRented,
+          operations: {}
+        };
+      }
+    });
   });
 
   const sortedFleets = Object.entries(completeFeesByFleet)
     .sort((a, b) => b[1].totalFee - a[1].totalFee)
     .slice(0, 5); // Top 5 fleets
 
+  // Normalize operation names and aggregate stats
+  const normalizedFeesByOperation = {};
+  Object.entries(data.feesByOperation || {}).forEach(([opName, stats]) => {
+    const normName = normalizeOpName(opName);
+    if (!normalizedFeesByOperation[normName]) {
+      normalizedFeesByOperation[normName] = { totalFee: 0, count: 0 };
+    }
+    normalizedFeesByOperation[normName].totalFee += stats.totalFee;
+    normalizedFeesByOperation[normName].count += stats.count;
+  });
+
   // Build sorted operation entries and ensure crafting-related categories
   // are always present in the operation chart so they are visible.
-  const opEntries = Object.entries(data.feesByOperation)
+  const opEntries = Object.entries(normalizedFeesByOperation)
     .sort((a, b) => b[1].totalFee - a[1].totalFee);
   // Default: top 10 operations
   const topN = opEntries.slice(0, 10);
@@ -169,7 +182,10 @@ export function displayResults(data, fleetNames, rentedFleetNames = new Set(), f
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-label">Transactions</div>
-        <div class="stat-value">${data.transactionCount24h}</div>
+        <div class="stat-value" style="${data.unknownOperations > 0 ? 'color: #ef4444;' : ''}">
+          ${data.transactionCount24h}
+          ${data.unknownOperations > 0 ? `<span style="font-size: 0.6em; margin-left: 4px; opacity: 0.8;">(${data.unknownOperations})</span>` : ''}
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Total Fees</div>

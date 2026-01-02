@@ -90,3 +90,25 @@ export function inferMaterialLabel(entry, decoded) {
 	if (preferred) return preferred.toString().charAt(0).toUpperCase() + preferred.toString().slice(1);
 	return '';
 }
+
+/**
+ * Normalizes operation names for frontend display.
+ * Regroups multiple technical operation names into human-friendly categories.
+ */
+export function normalizeOpName(opName) {
+  const mapping = {
+    'IdleToLoadingBay': 'Dock/Undock/Load/Unload',
+    'Cargo': 'Dock/Undock/Load/Unload',
+    'LoadingBayToIdle': 'Dock/Undock/Load/Unload',
+	'DepositCargoToFleet': 'Dock/Undock/Load/Unload',
+	'WithdrawCargoFromFleet': 'Dock/Undock/Load/Unload',
+    'StartMiningAsteroid': 'Mining',
+    'CreateCraftingProcess': 'Crafting',
+    'BurnCraftingConsumables': 'Crafting',
+	'StartSubwarp': 'Subwarp',
+    'FleetStateHandler_subwarp': 'Subwarp',
+    'FleetStateHandler_mining': 'Mining',
+    'FleetStateHandler_loading_bay': 'Dock/Undock/Load/Unload'
+  };
+  return mapping[opName] || opName;
+}

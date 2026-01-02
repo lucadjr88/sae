@@ -60,11 +60,12 @@ export function parseSageTransaction(tx, OP_MAP, SAGE_PROGRAM_ID) {
     // 2c. Enhanced FleetStateHandler detection for Subwarp/Mining completion
     if (operation === 'FleetStateHandler' && tx.logMessages) {
         const logsJoined = tx.logMessages.join(' ');
-        if (logsJoined.includes('MoveSubwarp')) {
-            operation = 'StopSubwarp';
+        const logsLower = logsJoined.toLowerCase();
+        if (logsLower.includes('movesubwarp') || logsLower.includes('stopsubwarp') || logsLower.includes('subwarp')) {
+            operation = 'FleetStateHandler_subwarp';
         }
-        else if (logsJoined.includes('MineAsteroid')) {
-            operation = 'StopMining';
+        else if (logsLower.includes('mineasteroid') || logsLower.includes('stopmining') || logsLower.includes('mining')) {
+            operation = 'FleetStateHandler_mining';
         }
     }
     // 3. Parsing innerInstructions per materiali (migliorato)

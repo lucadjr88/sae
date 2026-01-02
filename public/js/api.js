@@ -1,6 +1,8 @@
 
 
 // Implementazione reale spostata da app.js
+import { normalizeOpName } from './utils.js';
+
 export function updateCacheTooltip(cacheHit, cacheTimestamp) {
 	const profileIcon = document.getElementById('profileIcon');
 	const cacheTooltip = document.getElementById('cacheTooltip');
@@ -146,7 +148,8 @@ export async function analyzeFees() {
 				fleetAccounts: uniqueFleetAccounts,
 				fleetNames: fleetNames,
 				fleetRentalStatus: fleetRentalStatus,
-				hours: 24 
+				hours: 24,
+				enableSubAccountMapping: false
 			})
 		});
 		if (!response.ok) throw new Error('Streaming request failed');
@@ -276,7 +279,7 @@ async function loadFleetBreakdown(walletPubkey, fleetAccounts, fleetNames, fleet
 			   fleetAccounts: filteredFleetAccounts,
 			   fleetNames,
 			   fleetRentalStatus,
-			   enableSubAccountMapping: true
+			   enableSubAccountMapping: false
 		   };
 		   console.log('Fleet breakdown payload:', payload);
 		   const response = await fetch('/api/debug/fleet-breakdown', {
@@ -338,8 +341,17 @@ function displayFleetOperationCharts(feesByFleet, fleetNames) {
 		
 		chartsSection.appendChild(chartContainer);
 		
-		// Prepare data for pie chart
-		const operationData = Object.entries(fleetData.operations).map(([opType, opData]) => ({
+		// Prepare data for pie chart with normalized operation names
+		const normalizedOps = {};
+		Object.entries(fleetData.operations || {}).forEach(([opType, opData]) => {
+			const normName = normalizeOpName(opType);
+			if (!normalizedOps[normName]) {
+				normalizedOps[normName] = { count: 0 };
+			}
+			normalizedOps[normName].count += opData.count;
+		});
+
+		const operationData = Object.entries(normalizedOps).map(([opType, opData]) => ({
 			label: opType,
 			value: opData.count,
 			color: getOperationColor(opType)
@@ -360,18 +372,23 @@ function displayFleetOperationCharts(feesByFleet, fleetNames) {
 
 // Get color for operation type
 function getOperationColor(opType) {
+	const norm = (opType || '').toLowerCase();
 	const colors = {
 		'cargo': '#34d399',
+		'dock/undock/load/unload': '#34d399',
 		'subwarp': '#60a5fa', 
 		'mining': '#f59e0b',
+		'startminingasteroid': '#f59e0b',
 		'crafting': '#a78bfa',
+		'createcraftingprocess': '#a78bfa',
+		'burncraftingconsumables': '#a78bfa',
 		'staking': '#ec4899',
 		'token': '#06b6d4',
 		'system': '#8b5cf6',
 		'compute': '#f97316',
 		'memo': '#10b981'
 	};
-	return colors[opType] || '#9ca3af';
+	return colors[norm] || '#9ca3af';
 }
 
 window.analyzeFees = analyzeFees;

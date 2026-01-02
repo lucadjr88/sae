@@ -34,7 +34,7 @@ export class RpcPoolAdapterWithFetch extends RpcPoolAdapter {
     // Sostituisci l'istanza interna con quella passata
     (this as any).pool = pool;
   }
-  async fetchTransactions(walletPubkey: string, limit: number = 100, opts?: { hours?: number }): Promise<any[]> {
+  async fetchTransactions(walletPubkey: string, limit: number = 100, opts?: { hours?: number, refresh?: boolean }): Promise<any[]> {
     try {
       // Compute cutoff based on hours option (convert to unix ms)
       const hours = (opts && typeof opts.hours === 'number') ? opts.hours : 24;
@@ -49,7 +49,7 @@ export class RpcPoolAdapterWithFetch extends RpcPoolAdapter {
         limit,
         sinceUnixMs,
         5000,
-        undefined,
+        { refresh: opts?.refresh },
         poolConn
       );
       return res.transactions || [];

@@ -16,6 +16,7 @@ export async function getWalletSageFeesDetailedStreaming(
   fleetAccountNames: { [account: string]: string } = {},
   fleetRentalStatus: { [account: string]: boolean } = {},
   hours: number = 24,
+  enableSubAccountMapping: boolean = false,
   sendUpdate: (data: any) => void,
   saveProgress?: (partialResult: any) => Promise<void>,
   cachedData?: any,
@@ -73,6 +74,31 @@ export async function getWalletSageFeesDetailedStreaming(
     return fleetNameToKey.get(lc);
   };
   const specificFleetAccounts = fleetAccounts.filter(account => account && !excludeAccounts.includes(account) && account.length > 40);
+
+  // Build sub-account to fleet mapping only if enabled
+  const accountToFleet = new Map<string, string>();
+  for (const fleetKey of specificFleetAccounts) {
+    accountToFleet.set(fleetKey, fleetKey);
+    if (!enableSubAccountMapping) continue;
+    try {
+      const filePath = `./cache/fleets/${fleetKey}.json`;
+      if (fs.existsSync(filePath)) {
+        const cacheData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const fleetData = cacheData.data?.data;
+        if (fleetData) {
+          if (fleetData.cargoHold) accountToFleet.set(fleetData.cargoHold, fleetKey);
+          if (fleetData.fuelTank) accountToFleet.set(fleetData.fuelTank, fleetKey);
+          if (fleetData.ammoBank) accountToFleet.set(fleetData.ammoBank, fleetKey);
+          if (fleetData.fleetShips) accountToFleet.set(fleetData.fleetShips, fleetKey);
+          if (fleetData.ownerProfile) accountToFleet.set(fleetData.ownerProfile, fleetKey);
+          if (fleetData.subProfile && fleetData.subProfile.key && fleetData.subProfile.key !== '11111111111111111111111111111111') {
+            accountToFleet.set(fleetData.subProfile.key, fleetKey);
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   const now = Date.now();
   const cutoffTime = now - (hours * 60 * 60 * 1000);
   const CRAFT_PROGRAM_ID = 'CRAFT2RPXPJWCEix4WpJST3E7NLf79GTqZUL75wngXo5';
@@ -126,7 +152,7 @@ export async function getWalletSageFeesDetailedStreaming(
         fetchBatchSize,
         cutoffTime,
         fetchBatchSize,
-        undefined
+        { refresh }
       );
       allTransactions = result.transactions;
       totalSigs = result.totalSignaturesFetched;
@@ -185,16 +211,21 @@ export async function getWalletSageFeesDetailedStreaming(
       let hasSageInstruction = false;
 
       if (tx.instructions && tx.instructions.length > 0) {
-        for (const instr of tx.instructions) {
-          if (typeof instr === 'string' && instr !== 'Unknown') {
-            operation = instr;
-            hasSageInstruction = true;
-            if (instr.toLowerCase().includes('craft')) {
-              isCrafting = true;
-              craftingType = instr;
-            }
-            break;
+        // Priorità alle istruzioni SAGE (nomi che iniziano con maiuscola e non sono generici)
+        const sageIx = tx.instructions.find((ix: string) => 
+          typeof ix === 'string' && 
+          ix !== 'Unknown' && 
+          !['ComputeBudget', 'Approve', 'Burn', 'Transfer', 'IncrementPoints'].includes(ix)
+        );
+        if (sageIx) {
+          operation = sageIx;
+          hasSageInstruction = true;
+          if (sageIx.toLowerCase().includes('craft')) {
+            isCrafting = true;
+            craftingType = sageIx;
           }
+        } else {
+          operation = tx.instructions[0] || 'Unknown';
         }
       }
 
@@ -219,7 +250,21 @@ export async function getWalletSageFeesDetailedStreaming(
       if (!tx.programIds.includes(SAGE_PROGRAM_ID)) {
         continue;
       }
+      // Raffinamento FleetStateHandler
+      if (operation === 'FleetStateHandler' && tx.logMessages) {
+        const logsJoined = tx.logMessages.join(' ');
+        const logsLower = logsJoined.toLowerCase();
+        if (logsLower.includes('movesubwarp') || logsLower.includes('stopsubwarp') || logsLower.includes('subwarp')) {
+          operation = 'FleetStateHandler_subwarp';
+        } else if (logsLower.includes('mineasteroid') || logsLower.includes('stopmining') || logsLower.includes('mining')) {
+          operation = 'FleetStateHandler_mining';
+        } else if (logsLower.includes('loadingbaytoidle') || logsLower.includes('idletoloadingbay')) {
+          operation = 'FleetStateHandler_loading_bay';
+        }
+      }
+
       // Aggiungi la transazione SAGE processata all'array per conteggi e timestamp
+      (tx as any).operation = operation;
       processedTransactions.push(tx);
 
       // Raw instruction extraction complete - no additional normalization
@@ -415,57 +460,35 @@ export async function getWalletSageFeesDetailedStreaming(
         unknownOperations++;
       }
 
-      // Group related operations: Dock/Undock/Cargo operations, Subwarp, Mining, SDU
+      // No grouping - use raw operation names as requested
       let groupedOperation = operation;
-      if (operation === 'Dock' || operation === 'Undock' || operation === 'LoadCargo' || operation === 'UnloadCargo') {
-        groupedOperation = 'Dock/Undock/Load/Unload';
-      } else if (operation === 'Cargo' || /cargo/i.test(operation)) {
-        groupedOperation = 'Cargo';
-      } else if (operation === 'StartSubwarp' || operation === 'MoveSubwarp') {
-        groupedOperation = 'Subwarp';
-      } else if (operation === 'StartMining' || operation === 'StopMining' || operation === 'Mining') {
-        groupedOperation = 'Mining';
-      } else if (operation === 'ScanForSurveyDataUnits' || operation === 'SDU' || operation === 'Scan') {
-        groupedOperation = 'SDU';
-      } else if (operation === 'FleetStateHandler') {
-        groupedOperation = 'FleetStateHandler';
-      }
 
       // Aggregazione per fleet - cerca fleet account o cargo hold
       let involvedFleetName = undefined;
       let involvedFleetKey: string | undefined = undefined;
 
-      // First try: direct fleet account match
-      for (const fleet of specificFleetAccounts) {
-        if (tx.accountKeys && tx.accountKeys.includes(fleet)) {
-          involvedFleetKey = fleet;
-          involvedFleetName = fleetAccountNames[fleet] || fleet.substring(0, 8);
-          // DEBUG: Log when fleet is matched
-          //console.log(`DEBUG: Matched fleet ${fleet} to name ${involvedFleetName} for tx ${tx.signature}`);
-          break;
-        }
-      }
-
-      // Second try: if no fleet found, try to match fleet names (no auto-fallback)
-      if (!involvedFleetName && groupedOperation !== 'Crafting' && !isCrafting) {
-        // Try to match any account key with fleet names
-        if (tx.accountKeys) {
-          for (const acc of tx.accountKeys) {
-            if (fleetAccountNames[acc]) {
-              involvedFleetKey = acc;
-              involvedFleetName = fleetAccountNames[acc];
-              break;
-            }
+      // First try: use the accountToFleet map for all account keys in the transaction
+      if (tx.accountKeys) {
+        for (const acc of tx.accountKeys) {
+          const matchedFleetKey = accountToFleet.get(acc);
+          if (matchedFleetKey) {
+            involvedFleetKey = matchedFleetKey;
+            involvedFleetName = fleetAccountNames[matchedFleetKey] || matchedFleetKey.substring(0, 8);
+            break;
           }
         }
       }
 
-      // Third try: categorize non-fleet operations (crafting, starbase, system ops)
+      // Second try: categorize non-fleet operations (crafting, starbase, system ops)
       if (!involvedFleetName) {
         if (isCrafting || groupedOperation === 'Crafting' || operation.includes('Craft')) {
           involvedFleetName = 'Crafting Operations';
         } else if (operation.includes('Starbase')) {
           involvedFleetName = 'Starbase Operations';
+        } else if (operation.includes('Cargo')) {
+          involvedFleetName = 'Cargo Management';
+        } else if (operation.includes('Survey') || operation.includes('Scan')) {
+          involvedFleetName = 'Survey & Discovery';
         } else if (operation.includes('Register') || operation.includes('Deregister') || operation.includes('Update') || operation.includes('Init')) {
           involvedFleetName = 'Configuration';
         } else if (operation.includes('Profile') || operation.includes('Progression') || operation.includes('Points')) {
@@ -484,23 +507,8 @@ export async function getWalletSageFeesDetailedStreaming(
       operation = groupedOperation;
       if (isCrafting && groupedOperation === 'Unknown') operation = 'Crafting';
       
-      // Skip adding to feesByFleet for category entries (operations without assigned fleets)
-      const categoryNames = [
-        'Crafting Operations',
-        'Starbase Operations', 
-        'Configuration',
-        'Player Profile',
-        'Fleet Rentals',
-        'Universe Management',
-        'Other Operations'
-      ];
-      
-      if (!categoryNames.includes(involvedFleetName) && !(operation === 'Crafting')) {
-        const fleetKey = involvedFleetKey || resolveFleetKey(involvedFleetName);
-        if (!fleetKey) {
-          // No valid fleet key resolved; skip fleet aggregation
-          continue;
-        }
+      const fleetKey = involvedFleetKey || resolveFleetKey(involvedFleetName);
+      if (fleetKey) {
         if (!feesByFleet[fleetKey]) {
           feesByFleet[fleetKey] = {
             totalFee: 0,
@@ -509,67 +517,100 @@ export async function getWalletSageFeesDetailedStreaming(
             operations: {},
             isRented: fleetRentalStatus[fleetKey] || false
           };
-          // DEBUG: Log when creating new fleet entry
-          // console.log(`DEBUG: Created feesByFleet entry for ${fleetKey}`);
         }
-        // Solo se la transazione è effettivamente di questo tipo, crea la voce e incrementa
 
         feesByFleet[fleetKey].totalFee += tx.fee;
-        if (!feesByFleet[fleetKey].operations[operation]) {
-          feesByFleet[fleetKey].operations[operation] = {
-            count: 0,
-            totalFee: 0,
-            avgFee: 0,
-            percentageOfFleet: 0,
-            details: [] // Dettagli per unfold
-          };
+
+        // Se abbiamo più istruzioni (es. composite), le esplodiamo tutte
+        const opsToAggregate = (tx.instructions && tx.instructions.length > 0) ? tx.instructions : [operation];
+
+        for (let op of opsToAggregate) {
+          // Raffinamento FleetStateHandler per ogni istruzione
+          if (op === 'FleetStateHandler' && tx.logMessages) {
+            const logsJoined = tx.logMessages.join(' ');
+            const logsLower = logsJoined.toLowerCase();
+            if (logsLower.includes('movesubwarp') || logsLower.includes('stopsubwarp') || logsLower.includes('subwarp')) {
+              op = 'FleetStateHandler_subwarp';
+            } else if (logsLower.includes('mineasteroid') || logsLower.includes('stopmining') || logsLower.includes('mining')) {
+              op = 'FleetStateHandler_mining';
+            } else if (logsLower.includes('loadingbaytoidle') || logsLower.includes('idletoloadingbay')) {
+              op = 'FleetStateHandler_loading_bay';
+            }
+          }
+
+          if (!feesByFleet[fleetKey].operations[op]) {
+            feesByFleet[fleetKey].operations[op] = {
+              count: 0,
+              totalFee: 0,
+              avgFee: 0,
+              percentageOfFleet: 0,
+              details: [] // Dettagli per unfold
+            };
+          }
+          feesByFleet[fleetKey].operations[op].count++;
+          feesByFleet[fleetKey].operations[op].totalFee += tx.fee;
+
+          // Salva dettaglio solo per crafting (solo se l'operazione è quella principale o contiene 'craft')
+          if (isCrafting && (op === operation || op.toLowerCase().includes('craft'))) {
+            feesByFleet[fleetKey].operations[op].details.push({
+              action: craftingAction,
+              type: craftingAction,
+              displayType: craftingType || 'Crafting',
+              fee: tx.fee,
+              material: craftingMaterial,
+              txid: tx.signature,
+              fleet: fleetKey,
+              decodedKind: decodedRecipe ? decodedRecipe.kind : undefined,
+              decodedData: decodedRecipe ? decodedRecipe.data : undefined
+            });
+          }
         }
-        feesByFleet[fleetKey].operations[operation].count++;
-        feesByFleet[fleetKey].operations[operation].totalFee += tx.fee;
-        // Salva dettaglio solo per crafting
-        if (isCrafting) {
-          feesByFleet[fleetKey].operations[operation].details.push({
+      }
+
+      // --- AGGIORNA anche feesByOperation per allineamento UI ---
+      const opsToAggregateGlobal = (tx.instructions && tx.instructions.length > 0) ? tx.instructions : [operation];
+      for (let op of opsToAggregateGlobal) {
+        // Raffinamento FleetStateHandler per ogni istruzione
+        if (op === 'FleetStateHandler' && tx.logMessages) {
+          const logsJoined = tx.logMessages.join(' ');
+          const logsLower = logsJoined.toLowerCase();
+          if (logsLower.includes('movesubwarp') || logsLower.includes('stopsubwarp') || logsLower.includes('subwarp')) {
+            op = 'FleetStateHandler_subwarp';
+          } else if (logsLower.includes('mineasteroid') || logsLower.includes('stopmining') || logsLower.includes('mining')) {
+            op = 'FleetStateHandler_mining';
+          } else if (logsLower.includes('loadingbaytoidle') || logsLower.includes('idletoloadingbay')) {
+            op = 'FleetStateHandler_loading_bay';
+          }
+        }
+
+        if (!feesByOperation[op]) {
+          feesByOperation[op] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
+        }
+        feesByOperation[op].count++;
+        feesByOperation[op].totalFee += tx.fee;
+
+        if (isCrafting && (op === operation || op.toLowerCase().includes('craft'))) {
+          feesByOperation[op].details.push({
             action: craftingAction,
-            // force type to action so UI can distinguish start/claim; keep label separately
             type: craftingAction,
             displayType: craftingType || 'Crafting',
             fee: tx.fee,
             material: craftingMaterial,
             txid: tx.signature,
-            fleet: fleetKey,
+            fleet: involvedFleetName,
             decodedKind: decodedRecipe ? decodedRecipe.kind : undefined,
             decodedData: decodedRecipe ? decodedRecipe.data : undefined
           });
-          // Debug: log when a normalized decode was attached to a detail
         }
       }
-      // --- AGGIORNA anche feesByOperation per allineamento UI ---
-      if (!feesByOperation[operation]) {
-        feesByOperation[operation] = { count: 0, totalFee: 0, avgFee: 0, details: [] };
-      }
-      feesByOperation[operation].count++;
-      feesByOperation[operation].totalFee += tx.fee;
-      // Se vuoi dettagli anche qui (es: per crafting):
-      if (isCrafting) {
-        feesByOperation[operation].details.push({
-          action: craftingAction,
-          type: craftingAction,
-          displayType: craftingType || 'Crafting',
-          fee: tx.fee,
-          material: craftingMaterial,
-          txid: tx.signature,
-          fleet: involvedFleetName,
-          decodedKind: decodedRecipe ? decodedRecipe.kind : undefined,
-          decodedData: decodedRecipe ? decodedRecipe.data : undefined
-        });
-      }
-
-      // Dopo aver processato tutte le transazioni, aggiorna il totale operazioni per ogni flotta
-      Object.values(feesByFleet).forEach(fleetData => {
-        const ops = Object.values((fleetData as any).operations) as any[];
-        (fleetData as any).totalOperations = ops.reduce((sum, op) => sum + (op.count || 0), 0);
-      });
     }
+
+    // Dopo aver processato il batch, aggiorna il totale operazioni per ogni flotta
+    Object.values(feesByFleet).forEach(fleetData => {
+      const ops = Object.values((fleetData as any).operations) as any[];
+      (fleetData as any).totalOperations = ops.reduce((sum, op) => sum + (op.count || 0), 0);
+    });
+
     // Aggiornamento percentuali
     Object.keys(feesByOperation).forEach(op => {
       feesByOperation[op].avgFee = feesByOperation[op].totalFee / feesByOperation[op].count;
@@ -691,18 +732,19 @@ export async function getWalletSageFeesDetailedStreaming(
 
   // Aggregazione e ordinamento finale
   processedTransactions.sort((a, b) => (b.blockTime || 0) - (a.blockTime || 0));
+  const sageTransactions = processedTransactions.filter(t => t.programIds.includes(SAGE_PROGRAM_ID));
   const finalResult = {
     type: 'complete',
     walletAddress: walletPubkey,
     period: `Last ${hours} hours`,
     totalFees24h,
     sageFees24h,
-    transactionCount24h: processedTransactions.filter(t => t.programIds.includes(SAGE_PROGRAM_ID)).length,
+    transactionCount24h: sageTransactions.length,
     totalSignaturesFetched: totalSigs,
     feesByFleet: filterFleetBuckets(feesByFleet),
     feesByOperation,
     transactions: processedTransactions,
-    unknownOperations,
+    unknownOperations: sageTransactions.filter(t => (t as any).operation === 'Unknown').length,
     rentedFleetAccounts: Object.keys(fleetRentalStatus).filter(k => fleetRentalStatus[k]),
     fleetAccountNamesEcho: fleetAccountNames,
     fleetRentalStatusFinal: fleetRentalStatus

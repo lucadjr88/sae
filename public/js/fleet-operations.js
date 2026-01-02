@@ -1,22 +1,31 @@
 // public/js/fleet-operations.js
-import { inferMaterialLabel } from '../js/utils.js';
+import { inferMaterialLabel, normalizeOpName } from '../js/utils.js';
 import { renderCraftingDetailsRows } from './ui/renderDetails.js';
 
 export function createFleetList(data, fleetNames, rentedFleetNames = new Set()) {
-    // Mostra le operazioni originali così come arrivate dal backend, senza raggruppamento per tipo
-    Object.entries(data.feesByFleet).forEach(([fleetAccount, fleetData]) => {
-      // Nessuna normalizzazione: mantieni le operazioni originali
-      // (eventualmente si può aggiungere qui un filtro o ordinamento se serve)
-    });
   const fleetListDiv = document.getElementById('fleetList');
   // Normalize rented fleet names for case-insensitive matching
   const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
 
   // List of category names to exclude from Fleet Breakdown
-
+  const excludedCategories = [
+    'Starbase Operations',
+    'Configuration',
+    'Cargo Management',
+    'Crew Management',
+    'Survey & Discovery',
+    'Player Profile',
+    'Fleet Rentals',
+    'Universe Management',
+    'Game Management',
+    'Other Operations',
+    'Crafting',
+    'Crafting Operations'
+  ];
 
   // Filter out categories, keep only actual fleets
   const sortedFleets = Object.entries(data.feesByFleet)
+    .filter(([key]) => !excludedCategories.includes(key))
     .sort((a, b) => {
       const aRented = !!(a[1].isRented || rentedLc.has((fleetNames[a[0]] || a[0] || '').toString().toLowerCase()));
       const bRented = !!(b[1].isRented || rentedLc.has((fleetNames[b[0]] || b[0] || '').toString().toLowerCase()));
@@ -65,20 +74,33 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set()) 
           <table class="fleet-ops-table">
     `;
 
-    // Raggruppa operazioni di crafting in due categorie: Craft Fuel e Craft Food
-    // (ora già fatto dal backend, basta filtrarle)
-    const ops = Object.entries(fleetData.operations);
+    // Normalize operation names and aggregate stats for this specific fleet
+    const normalizedOpsMap = {};
+    Object.entries(fleetData.operations || {}).forEach(([opName, stats]) => {
+      const normName = opName; // normalizeOpName(opName); // Temporarily disabled to see raw ops
+      if (!normalizedOpsMap[normName]) {
+        normalizedOpsMap[normName] = { count: 0, totalFee: 0, details: [] };
+      }
+      normalizedOpsMap[normName].count += stats.count;
+      normalizedOpsMap[normName].totalFee += stats.totalFee;
+      if (stats.details && Array.isArray(stats.details)) {
+        normalizedOpsMap[normName].details = normalizedOpsMap[normName].details.concat(stats.details);
+      }
+    });
+
+    const ops = Object.entries(normalizedOpsMap).filter(([, stats]) => stats.count > 0);
     const isCraftingCategory = fleetAccount === 'Crafting Operations';
 
     // Calcola il totale operazioni per la fleet per percentuali
     const totalFleetOps = ops.reduce((sum, [, s]) => sum + (s.count || 0), 0) || 1;
 
-    // Mostra altre operazioni non-crafting
+    // Mostra le operazioni della flotta
     ops.sort((a, b) => b[1].totalFee - a[1].totalFee).forEach(([op, stats]) => {
       // Assicura che percentageOfFleet sia sempre definito
       if (typeof stats.percentageOfFleet !== 'number') {
         stats.percentageOfFleet = (stats.count / totalFleetOps) * 100;
       }
+      
       // Render operation summary row for non-crafting fleets
       if (!isCraftingCategory) {
         html += `
@@ -92,8 +114,8 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set()) 
         `;
       }
 
-      // Se è Crafting Operations o se l'operazione ha dettagli, mostra i dettagli
-      if (stats.details && Array.isArray(stats.details) && stats.details.length > 0 && !/craft/i.test(op)) {
+      // Se l'operazione ha dettagli (es. crafting), mostrali sempre
+      if (stats.details && Array.isArray(stats.details) && stats.details.length > 0) {
         const maxDetails = 50;
         html += `
           <tr>
@@ -102,7 +124,6 @@ export function createFleetList(data, fleetNames, rentedFleetNames = new Set()) 
                 <table class="fleet-ops-table">
                   <tbody>
         `;
-        // TODO: renderCraftingDetailsRows(stats.details, maxDetails);
         html += renderCraftingDetailsRows(stats.details, maxDetails);
         html += `
                   </tbody>
@@ -136,23 +157,43 @@ export function createOperationList(data, fleetNames, rentedFleetNames = new Set
     const isRented = !!(fleetData.isRented || rentedLc.has((fleetName || '').toString().toLowerCase()));
 
     Object.entries(fleetData.operations || {}).forEach(([opName, opStats]) => {
-      if (!operationFleetMap[opName]) {
-        operationFleetMap[opName] = [];
+      const normName = normalizeOpName(opName);
+      if (!operationFleetMap[normName]) {
+        operationFleetMap[normName] = [];
       }
-      operationFleetMap[opName].push({
-        fleetAccount,
-        fleetName,
-        isRented,
-        count: opStats.count,
-        totalFee: opStats.totalFee,
-        percentageOfFleet: opStats.percentageOfFleet
-      });
+      const existingFleetEntry = operationFleetMap[normName].find(e => e.fleetAccount === fleetAccount);
+      if (existingFleetEntry) {
+        existingFleetEntry.count += opStats.count;
+        existingFleetEntry.totalFee += opStats.totalFee;
+      } else {
+        operationFleetMap[normName].push({
+          fleetAccount,
+          fleetName,
+          isRented,
+          count: opStats.count,
+          totalFee: opStats.totalFee,
+          percentageOfFleet: opStats.percentageOfFleet
+        });
+      }
     });
   });
 
-  // Sort operations by total fee (from data.feesByOperation)
-  // Mostra anche le Crafting Operations per dettaglio
-  const sortedOperations = Object.entries(data.feesByOperation)
+  // Normalize data.feesByOperation and aggregate stats
+  const normalizedFeesByOperation = {};
+  Object.entries(data.feesByOperation || {}).forEach(([opName, stats]) => {
+    const normName = normalizeOpName(opName);
+    if (!normalizedFeesByOperation[normName]) {
+      normalizedFeesByOperation[normName] = { count: 0, totalFee: 0, details: [] };
+    }
+    normalizedFeesByOperation[normName].count += stats.count;
+    normalizedFeesByOperation[normName].totalFee += stats.totalFee;
+    if (stats.details && Array.isArray(stats.details)) {
+      normalizedFeesByOperation[normName].details = normalizedFeesByOperation[normName].details.concat(stats.details);
+    }
+  });
+
+  // Sort operations by total fee
+  const sortedOperations = Object.entries(normalizedFeesByOperation)
     .sort((a, b) => b[1].totalFee - a[1].totalFee);
 
   // DEBUG: Log tutte le operazioni disponibili e i dati associati
@@ -281,22 +322,40 @@ export function createOtherOperationsList(data, fleetNames, rentedFleetNames = n
     const isRented = !!(fleetData.isRented || rentedLc.has((fleetName || '').toString().toLowerCase()));
 
     Object.entries(fleetData.operations || {}).forEach(([opName, opStats]) => {
-      if (!operationFleetMap[opName]) {
-        operationFleetMap[opName] = [];
+      const normName = normalizeOpName(opName);
+      if (!operationFleetMap[normName]) {
+        operationFleetMap[normName] = [];
       }
-      operationFleetMap[opName].push({
-        fleetAccount,
-        fleetName,
-        isRented,
-        count: opStats.count,
-        totalFee: opStats.totalFee,
-        percentageOfFleet: opStats.percentageOfFleet
-      });
+      const existingFleetEntry = operationFleetMap[normName].find(e => e.fleetAccount === fleetAccount);
+      if (existingFleetEntry) {
+        existingFleetEntry.count += opStats.count;
+        existingFleetEntry.totalFee += opStats.totalFee;
+      } else {
+        operationFleetMap[normName].push({
+          fleetAccount,
+          fleetName,
+          isRented,
+          count: opStats.count,
+          totalFee: opStats.totalFee,
+          percentageOfFleet: opStats.percentageOfFleet
+        });
+      }
     });
   });
 
+  // Normalize data.feesByOperation for otherOperations
+  const normalizedFeesByOperation = {};
+  Object.entries(data.feesByOperation || {}).forEach(([opName, stats]) => {
+    const normName = normalizeOpName(opName);
+    if (!normalizedFeesByOperation[normName]) {
+      normalizedFeesByOperation[normName] = { count: 0, totalFee: 0 };
+    }
+    normalizedFeesByOperation[normName].count += stats.count;
+    normalizedFeesByOperation[normName].totalFee += stats.totalFee;
+  });
+
   // Get operations from excluded fleets that are NOT in the included operations set
-  const otherOperations = Object.entries(data.feesByOperation)
+  const otherOperations = Object.entries(normalizedFeesByOperation)
     .filter(([operation, opStats]) => !includedOperations.has(operation) && operationFleetMap[operation])
     .sort((a, b) => b[1].totalFee - a[1].totalFee);
 

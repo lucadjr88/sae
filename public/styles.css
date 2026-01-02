@@ -98,6 +98,17 @@ body::before {
     rgba(255,255,255,0.05) 100%);
 }
 
+.app-version {
+  position: fixed;
+  top: 8px;
+  right: 12px;
+  font-size: 10px;
+  color: rgba(184, 192, 204, 0.5);
+  font-family: 'Roboto Mono', monospace;
+  z-index: 1000;
+  pointer-events: none;
+}
+
 body::after {
   content: '';
   position: absolute;
