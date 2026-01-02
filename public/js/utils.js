@@ -96,30 +96,23 @@ export function inferMaterialLabel(entry, decoded) {
  * Regroups multiple technical operation names into human-friendly categories.
  */
 export function normalizeOpName(opName) {
-  const mapping = {
-    'IdleToLoadingBayWithdrawCargoFromFleetTransferCargoApproveTransferDepositCargoToFleetLoadingBayToIdle': 'Dock/Undock/Load/Unload',
-    'Cargo': 'Dock/Undock/Load/Unload',
-    'LoadingBayToIdle': 'Dock/Undock/Load/Unload',
-	'DepositCargoToFleetTransferCargoApproveTransfer': 'Dock/Undock/Load/Unload',
-	'WithdrawCargoFromFleet': 'Dock/Undock/Load/Unload',
+	if (opName && opName.includes('loading_bay') || opName.includes('LoadingBay')) return 'Dock/Undock/Load/Unload';
+	const mapping = {
     'StartMiningAsteroid': 'Mining',
     'CreateCraftingProcessGetAccountDataSizeInitializeImmutableOwnerInitializeAccount3DepositCraftingIngredientRemoveCargoApproveTransferLegitimizeRecipeIngredientStartCraftingProcess': 'Crafting',
     'BurnCraftingConsumablesBurnConsumableIngredientBurnCloseAccountClaimCraftingOutputsClaimRecipeOutputTransferLegitimizeCargoApproveCloseCraftingProcessIncrementPoints': 'Crafting',
-	'FleetStateHandler_subwarpIncrementPointsConsumeCargoApproveBurnIdleToLoadingBayWithdrawCargoFromFleetTransferCargoTransferDepositCargoToFleetLoadingBayToIdle': 'Dock/Undock/Load/Unload',
-    'FleetStateHandler_subwarpIncrementPointsConsumeCargoApproveBurn': 'Subwarp',
+	'FleetStateHandler_subwarpIncrementPointsConsumeCargoApproveBurn': 'Subwarp',
     'FleetStateHandler_miningConsumeCargoApproveBurnTransferLegitimizeCargoStopMiningAsteroidIncrementPoints': 'Mining',
-    'FleetStateHandler_loading_bay': 'Dock/Undock/Load/Unload',
-	'ScanForSurveyDataUnitsIncrementPointsConsumeCargoApproveBurn': 'Scan SDU',
+    'ScanForSurveyDataUnitsIncrementPointsConsumeCargoApproveBurn': 'Scan SDU',
 	'ScanForSurveyDataUnitsIncrementPointsConsumeCargoApproveBurnTransferLegitimizeCargo': 'Scan SDU',
-	'FleetStateHandler_subwarpIncrementPointsConsumeCargoApproveBurnIdleToLoadingBayDepositCargoToFleetTransferCargoTransferLoadingBayToIdle': 'Dock/Undock/Load/Unload',
-	'FleetStateHandler_subwarpIncrementPointsConsumeCargoApproveBurnIdleToLoadingBayWithdrawCargoFromFleetTransferCargoTransferLoadingBayToIdle': 'Dock/Undock/Load/Unload',
-	'IdleToLoadingBay': 'Dock/Undock/Load/Unload',
+	'StartSubwarp': 'Subwarp',
+	'FleetStateHandlerIncrementPointsWarpToCoordinateConsumeCargoApproveBurn': 'Warp',
+	'WarpToCoordinateConsumeCargoApproveBurn': 'Warp',
+	'CreateStarbaseUpgradeResourceProcessCreateCraftingProcessGetAccountDataSizeInitializeImmutableOwnerInitializeAccount3DepositCraftingIngredientRemoveCargoApproveTransferLegitimizeRecipeIngredientStartCraftingProcess': 'Starbase Upgrade',
+	'SubmitStarbaseUpgradeResourceClaimNonConsumableIngredientTransferCloseAccountLegitimizeCargoApproveConsumeCargoBurnIncrementPointsContributeToRedemptionSpendPointsCloseUpgradeProcessCloseCraftingProcess': 'Starbase Upgrade',
+	'SubmitStarbaseUpgradeResourceClaimNonConsumableIngredientTransferCloseAccountLegitimizeCargoApproveConsumeCargoBurnIncrementPointsStartRedemptionSpendPointsCloseUpgradeProcessCloseCraftingProcess': 'Starbase Upgrade',
+	'DepositCargoToFleetTransferCargoApproveTransfer': 'Dock/Undock/Load/Unload',
 	'WithdrawCargoFromFleetTransferCargoApproveTransfer': 'Dock/Undock/Load/Unload',
-	'StartSubwarp': 'Subwarp'
-
-
-
-
 
 
 };
