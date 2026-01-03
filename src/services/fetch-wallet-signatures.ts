@@ -1,4 +1,4 @@
-import { getAccountTransactions } from '../examples/account-transactions';
+import { getAccountTransactions } from '../examples/account-transactions.js';
 import { BATCH_SETTINGS } from '../config/wallet-fees-streaming-config.js';
 
 export interface FetchWalletSignaturesOpts {
