@@ -15,6 +15,7 @@ logs/
 
 # Caches and generated data
 cache/
+!public/js/cache/
 backups/
 
 # Rust targets
