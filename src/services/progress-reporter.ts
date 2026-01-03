@@ -1,5 +1,5 @@
-import { PartialResult } from '../types/wallet-fees-streaming-types';
-import { filterFleetBuckets } from '../config/wallet-fees-streaming-config';
+import { PartialResult } from '../types/wallet-fees-streaming-types.js';
+import { filterFleetBuckets } from '../config/wallet-fees-streaming-config.js';
 
 export function buildPartialResult(opts: {
   i: number;

@@ -5,7 +5,7 @@ import type { WalletSageFeesStreamingServices, StreamingOptions, StreamingResult
 import { parseTransaction } from './lib/parsers.js';
 import { buildAccountToFleetMap } from './lib/fleet-association.js';
 import { extractFleetFromInstruction } from './lib/extract-fleet-official.js';
-import { RpcPoolAdapterWithFetch } from '../RpcPoolAdapter';
+import { RpcPoolAdapterWithFetch } from '../RpcPoolAdapter.js';
 
 // Orchestrator reale: fetch, parse, aggrega, metriche base
 export async function getWalletSageFeesDetailedStreaming(

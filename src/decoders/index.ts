@@ -1,4 +1,4 @@
-import type { IDecoder } from '../services/IDecoder';
+import type { IDecoder } from '../services/IDecoder.js';
 // import sageCraftingDecoder from './sage-crafting-decoder';
 
 const decoders: IDecoder[] = [];

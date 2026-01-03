@@ -1,4 +1,4 @@
-import { AggregatorState, TxMeta, CraftingExtra } from '../types/wallet-fees-streaming-types';
+import { AggregatorState, TxMeta, CraftingExtra } from '../types/wallet-fees-streaming-types.js';
 
 export function accumulate(
   tx: any,

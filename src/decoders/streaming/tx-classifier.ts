@@ -1,5 +1,5 @@
-import { TxMeta } from '../../types/wallet-fees-streaming-types';
-import { excludeAccounts, MATERIALS } from '../../config/wallet-fees-streaming-config';
+import { TxMeta } from '../../types/wallet-fees-streaming-types.js';
+import { excludeAccounts, MATERIALS } from '../../config/wallet-fees-streaming-config.js';
 
 export interface ClassifyTxContext {
   accountToFleet: Map<string, string>;

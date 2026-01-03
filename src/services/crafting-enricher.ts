@@ -1,8 +1,8 @@
-import { CraftingExtra } from '../types/wallet-fees-streaming-types';
-import { decodeRecipe, isRecipeAccount, decodeCraftingProcess, decodeCraftableItem } from '../decoders/crafting-decoder';
-import { decodeAccountWithRust } from '../decoders/rust-wrapper';
-import { resolveMints } from '../utils/metaplex-metadata';
-import { RpcPoolConnection } from '../utils/rpc/pool-connection';
+import { CraftingExtra } from '../types/wallet-fees-streaming-types.js';
+import { decodeRecipe, isRecipeAccount, decodeCraftingProcess, decodeCraftableItem } from '../decoders/crafting-decoder.js';
+import { decodeAccountWithRust } from '../decoders/rust-wrapper.js';
+import { resolveMints } from '../utils/metaplex-metadata.js';
+import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
 import { PublicKey } from '@solana/web3.js';
 
 export interface EnrichCraftingContext {
