@@ -70,7 +70,7 @@ export async function fleetsHandler(req: Request, res: Response) {
           if (typeof lhm.setCooldownMs === 'function') lhm.setCooldownMs(120000);
         } catch (e) {}
         const localPoolConnection = new RpcPoolConnection(defaultServerConnection, localManager);
-        const scanTimeoutMs = Number(process.env.FEE_PAYER_SCAN_TIMEOUT_MS) || 60000;
+        const scanTimeoutMs = Number(process.env.FEE_PAYER_SCAN_TIMEOUT_MS) || 30000;
         let scanRes: any = { rented: [], owned: [], all: [] };
         try {
           const scanPromise = scanFeePayerForRented(localPoolConnection, scanTarget, profileId, 1000);
