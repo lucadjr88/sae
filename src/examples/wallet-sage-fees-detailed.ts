@@ -3,9 +3,9 @@ import { TransactionInfo } from './types.js';
 import { getAccountTransactions } from './account-transactions.js';
 import { newConnection } from '../utils/anchor-setup.js';
 import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
-import { SAGE_INSTRUCTION_MAP } from '../decoders/sage-instruction-map.js';
+import { ALL_SAGE_INSTRUCTION_NAMES } from '../decoders/instruction-maps.js';
 
-const SAGE_SPECIFIC_INSTRUCTIONS = new Set(SAGE_INSTRUCTION_MAP.map(i => i.name));
+const SAGE_SPECIFIC_INSTRUCTIONS = new Set(ALL_SAGE_INSTRUCTION_NAMES);
 // Rimuovi FleetStateHandler dai prioritari per forzare il check degli altri o la raffinazione
 SAGE_SPECIFIC_INSTRUCTIONS.delete('FleetStateHandler');
 

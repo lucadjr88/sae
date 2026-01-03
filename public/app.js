@@ -1,7 +1,7 @@
 
 // public/app.js
 import './js/ui-helpers.js';
-import './js/cache-manager.js';
+import './js/cache/cache-operations.js';
 import './js/results-display.js';
 import './js/fleet-operations.js';
 import './js/charts.js';

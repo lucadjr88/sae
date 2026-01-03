@@ -1,8 +1,6 @@
+import { ALL_SAGE_INSTRUCTION_NAMES } from '../../../decoders/instruction-maps.js';
 
-
-import { SAGE_INSTRUCTION_MAP } from '../../../decoders/sage-instruction-map.js';
-
-const SAGE_SPECIFIC_INSTRUCTIONS = new Set(SAGE_INSTRUCTION_MAP.map(i => i.name));
+const SAGE_SPECIFIC_INSTRUCTIONS = new Set(ALL_SAGE_INSTRUCTION_NAMES);
 SAGE_SPECIFIC_INSTRUCTIONS.delete('FleetStateHandler');
 
 /**

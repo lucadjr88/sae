@@ -1,7 +1,7 @@
 // public/js/event-setup.js
 import { updatePriceTicker } from './app/ticker.js';
 import { renderPriceTicker } from './app/renderPriceTicker.js';
-import { updateCache, refreshAnalysis, wipeAndReload } from './cache-manager.js';
+import { updateCache, refreshAnalysis, wipeAndReload } from './cache/cache-operations.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   // Price ticker fetch and update

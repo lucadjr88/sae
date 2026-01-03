@@ -5,14 +5,13 @@ import { decodeInstructionFromLogs } from './instruction-decoder.js';
  * Supports:
  * - Crafting Program
  * - SAGE Starbased Program
- * - SAGE Holosim Program
  * 
  * This decoder integrates with the official Carbon decoders via Rust binary
  */
 
 
 import { decodeAccountWithRust } from './rust-wrapper.js';
-import { CRAFTING_PROGRAM, SAGE_STARBASED_PROGRAM, SAGE_HOLOSIM_PROGRAM } from './program-constants.js';
+import { CRAFTING_PROGRAM, SAGE_STARBASED_PROGRAM } from './program-constants.js';
 
 
 

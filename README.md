@@ -4,6 +4,11 @@
 
 This directory contains the **official** decoders for Star Atlas SAGE and Crafting programs, integrated with the Carbon decoder framework from `star-atlas-decoders-main`.
 
+## Instruction Datasets
+
+SAGE instruction metadata is stored in modular datasets under `src/decoders/sage/data/` (e.g. `starbased.ts`, `crafting.ts`).
+These files are sourced from the official Carbon decoders and should be edited only when syncing with upstream.
+
 ## Supported Programs
 
 ### 1. Crafting Program
@@ -36,11 +41,6 @@ This directory contains the **official** decoders for Star Atlas SAGE and Crafti
   - **Fleet State** (4 ops): IdleToLoadingBay, LoadingBayToIdle, etc.
   - **Profile** (3 ops): RegisterSagePlayerProfile, MintCrewToGame, etc.
   - **And many more**: 50+ additional operations
-
-### 3. SAGE Holosim Program
-- **Program ID**: `HSim1111111111111111111111111111111111111111`
-- **Source**: `star-atlas-decoders-main/carbon-decoders/sage-holosim-decoder`
-- **Status**: Integrated (same instruction types as Starbased)
 
 ## Architecture
 
