@@ -1,0 +1,24 @@
+{
+  "name": "sa-explorer",
+  "version": "1.0.0",
+  "description": "SA Explorer - Star Atlas Fleet Fees Analyzer",
+  "main": "dist/backend/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev --workspace=backend",
+    "build": "npm run build --workspace=backend && npm run build:frontend",
+    "build:frontend": "tsc -p tsconfig.public.json && npm run copy-assets",
+    "copy-assets": "cp frontend/src/index.html dist/frontend/ && cp -r frontend/src/assets/* dist/frontend/ && cp -r frontend/src/styles dist/frontend/ && cp frontend/src/config/* dist/frontend/ && cp config/rpc-pool*.json dist/frontend/",
+    "start": "node dist/backend/index.js",
+    "split-css": "node scripts/split-css.cjs",
+    "verify-css": "node scripts/verify-css-split.cjs",
+    "build-css": "npm run split-css && npm run verify-css"
+  },
+  "author": "",
+  "license": "MIT",
+  "workspaces": ["backend"],
+  "devDependencies": {
+    "@types/node": "^20.19.27",
+    "typescript": "^5.3.3"
+  }
+}

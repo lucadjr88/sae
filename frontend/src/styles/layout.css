@@ -1,0 +1,41 @@
+.container { 
+  max-width: 100%; 
+  margin: 0 auto; 
+  padding: 20px;
+  position: relative;
+  z-index: 1;
+  transition: margin-left 0.3s ease;
+}
+
+.container.with-sidebar {
+  margin-left: 60px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tab {
+  padding: 6px 12px;
+  background: #13151f;
+  border: 1px solid #1e222e;
+  color: #b8c0cc;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tab-active {
+  color: #e0e6ed;
+  border-color: #3d4758;
+  background: #1a1f2e;
+}
+
+h1 { 
+  color: #e0e6ed; 
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  letter-spacing: 0.3px;
+}

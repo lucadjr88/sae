@@ -1,0 +1,42 @@
+# Node
+node_modules/
+
+# VS Code
+.vscode/
+
+# TypeScript build artifacts
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+
+# Caches and generated data
+cache/
+
+# Rust targets
+**/target/
+
+# Dist/build outputs
+bin/**/target/
+dist/
+
+# Environment/Secrets (keep a sample separately)
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.swp
+
+
+# Local data
+docs/
+
+# Exclude large external vendor repos (track via submodule or separate)
+star-atlas-cookbook-master/
+star-atlas-decoders/

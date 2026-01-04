@@ -1,0 +1,12 @@
+export const WALLET_SIG_BATCH = 200;
+export const WALLET_SIG_PER_FLEET = 50;
+export const WALLET_TX_CHUNK = 100;
+export const WALLET_FETCH_TIMEOUT_MS = 8000;
+export const WALLET_MAX_RETRIES = 1;
+export const WALLET_BACKOFF_BASE_MS = 500;
+export const WALLET_MARK_UNHEALTHY = 10;
+export const WALLET_BATCH_DELAY_MS = 50;
+export const MIN_DELAY = 90;
+export const MAX_DELAY = 2000;
+export const BACKOFF_MULTIPLIER = 1.6;
+export const SUCCESS_DECREASE_STEP = 10;
