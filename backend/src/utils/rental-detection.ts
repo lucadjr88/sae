@@ -32,13 +32,15 @@ export async function detectRentedFleets(
   poolConn: RpcPoolConnection,
   feePayer: string,
   profileId: string,
+  cacheProfileId?: string,
   sigLimit = 5000,
   cacheTtlSeconds = 600,
   rpcOpts?: any
 ) {
   const cacheKey = `${feePayer}:${profileId}`;
+  const cKey = cacheProfileId || profileId;
   try {
-    const cached = await getCache('rented-fleets', cacheKey);
+    const cached = await getCache(cKey, 'rented-fleets', cacheKey);
     if (cached) {
       console.log('[detectRentedFleets] cache hit, returning cached result');
       return cached as any;
@@ -116,7 +118,7 @@ export async function detectRentedFleets(
       const tx = results[i];
       const sig = batch[i];
       if (!tx) continue;
-      try { await setCache(`wallet-txs/${feePayer}`, sig, tx); } catch (e) {}
+      try { await setCache(cKey, 'wallet-txs', sig, tx); } catch (e) {}
       const accountKeys: any[] = (tx.transaction?.message as any)?.accountKeys || (tx.transaction?.message as any)?.staticAccountKeys || [];
       for (const ak of accountKeys) {
         const pub = (typeof ak === 'string') ? ak : (ak.pubkey?.toString?.() || ak.toString?.());
@@ -237,7 +239,7 @@ export async function detectRentedFleets(
   const result = { rented, owned, all: fleets };
 
   try {
-    await setCache('rented-fleets', cacheKey, result);
+    await setCache(cKey, 'rented-fleets', cacheKey, result);
   } catch (e) {
     // ignore cache write errors
   }

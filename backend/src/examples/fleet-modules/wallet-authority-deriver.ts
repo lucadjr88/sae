@@ -5,7 +5,7 @@ import { derivSleep } from '../deriv-sleep.js';
 import { WalletAuthorityDeriverInput, WalletAuthorityDeriverOutput } from './interfaces.js';
 
 export async function deriveWalletAuthority(input: WalletAuthorityDeriverInput): Promise<WalletAuthorityDeriverOutput> {
-  const { fleets, connection, playerProfilePubkey } = input;
+  const { fleets, connection, playerProfilePubkey, cacheProfileId } = input;
 
   let walletAuthority: string | null = null;
   const primaryPayerCounts: Array<[string, number]> = [];
@@ -68,7 +68,8 @@ export async function deriveWalletAuthority(input: WalletAuthorityDeriverInput):
               const feePayer = tx?.transaction.message.accountKeys?.[0]?.pubkey?.toString();
               if (feePayer) payerCounts.set(feePayer, (payerCounts.get(feePayer) || 0) + 1);
               try {
-                if (feePayer) await setCache(`wallet-txs/${feePayer}`, sig.signature, tx);
+                const cacheKey = cacheProfileId || feePayer;
+                if (cacheKey) await setCache(cacheKey, 'wallet-txs', sig.signature, tx);
               } catch (e) {
                 // ignore cache errors
               }
@@ -161,7 +162,8 @@ export async function deriveWalletAuthority(input: WalletAuthorityDeriverInput):
                 const payer = ptx?.transaction?.message?.accountKeys?.[0]?.pubkey?.toString?.();
                 if (payer) fallbackPayers.set(payer, (fallbackPayers.get(payer) || 0) + 1);
                 try {
-                  if (payer) await setCache(`wallet-txs/${payer}`, s.signature, ptx);
+                  const cacheKey = cacheProfileId || payer;
+                  if (cacheKey) await setCache(cacheKey, 'wallet-txs', s.signature, ptx);
                 } catch (e) {
                   // ignore cache errors
                 }

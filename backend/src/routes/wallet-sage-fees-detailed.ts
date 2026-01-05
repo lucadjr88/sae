@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import { getCacheWithTimestamp, setCache } from '../utils/persist-cache.js';
-import { getWalletSageFeesDetailed } from '../examples/wallet-sage-fees-detailed.js';
+import { getCacheWithTimestamp, setCache, ensureProfileCacheDir } from '../utils/persist-cache.js';
+import { getWalletSageFeesDetailed } from '../services/wallet/feesDetailed.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET, WALLET_PATH } from '../config/serverConfig.js';
 import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
 import { defaultServerConnection, globalPoolConnection } from '../index.js';
@@ -10,17 +10,19 @@ import { defaultServerConnection, globalPoolConnection } from '../index.js';
  * Detailed 24h SAGE fees with fleet breakdown (legacy non-streaming)
  */
 export async function walletSageFeesDetailedHandler(req: Request, res: Response) {
-  const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, hours } = req.body;
-  if (!walletPubkey) {
-    return res.status(400).json({ error: 'walletPubkey required' });
+  const { profileId, fleetAccounts, fleetNames, fleetRentalStatus, hours } = req.body;
+  if (!profileId) {
+    return res.status(400).json({ error: 'profileId required' });
   }
+  // Ensure profile cache directory exists immediately after validation
+  await ensureProfileCacheDir(profileId);
   try {
     const refresh = (req.query.refresh === 'true') || (req.body && req.body.refresh === true);
     const keyPayload = JSON.stringify({ a: fleetAccounts || [], n: fleetNames || {}, r: fleetRentalStatus || {}, h: hours || 24 });
-    const compositeKey = `${walletPubkey}__${keyPayload}`;
+    const compositeKey = `${profileId}__${keyPayload}`;
     const cacheKey = crypto.createHash('sha256').update(compositeKey).digest('hex');
     if (!refresh) {
-      const cached = await getCacheWithTimestamp<any>('wallet-fees-detailed', cacheKey);
+      const cached = await getCacheWithTimestamp<any>(profileId, 'wallet-fees-detailed', cacheKey);
       if (cached) {
         res.setHeader('X-Cache-Hit', 'disk');
         res.setHeader('X-Cache-Timestamp', String(cached.savedAt));
@@ -30,7 +32,7 @@ export async function walletSageFeesDetailedHandler(req: Request, res: Response)
     const result = await getWalletSageFeesDetailed(
       RPC_ENDPOINT,
       RPC_WEBSOCKET,
-      walletPubkey,
+      profileId,
       fleetAccounts || [],
       fleetNames || {},
       fleetRentalStatus || {},
@@ -38,7 +40,7 @@ export async function walletSageFeesDetailedHandler(req: Request, res: Response)
       { refresh },
       globalPoolConnection
     );
-    await setCache('wallet-fees-detailed', cacheKey, result);
+    await setCache(profileId, 'wallet-fees-detailed', cacheKey, result);
     res.json(result);
   } catch (err: any) {
     console.error('❌ /api/wallet-sage-fees-detailed error:', err.message);

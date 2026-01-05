@@ -24,7 +24,7 @@ export interface FleetsResponse {
 }
 
 export interface WalletSageFeesStreamRequest {
-  walletPubkey: string;
+  profileId: string;
   fleetAccounts: string[];
   fleetNames: { [account: string]: string };
   fleetRentalStatus: { [account: string]: boolean };
@@ -33,7 +33,7 @@ export interface WalletSageFeesStreamRequest {
 }
 
 export interface FleetBreakdownRequest {
-  walletPubkey: string;
+  profileId: string;
   fleetAccounts: string[];
   fleetNames: { [account: string]: string };
   fleetRentalStatus: { [account: string]: boolean };

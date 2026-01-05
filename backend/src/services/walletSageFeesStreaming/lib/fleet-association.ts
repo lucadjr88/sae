@@ -20,15 +20,16 @@ async function fallbackSubAccounts(fleetKey: string): Promise<string[]> {
 /**
  * Costruisce una mappa da account a chiave flotta, includendo sub-accounts.
  * Se la cache manca, tenta fallback automatico.
+ * @param profileId La chiave del profilo.
  * @param fleetAccounts Array di chiavi flotte.
  * @returns Map<string, string> dove chiave è account, valore è fleetKey.
  */
-export function buildAccountToFleetMap(fleetAccounts: string[]): Map<string, string> {
+export function buildAccountToFleetMap(fleetAccounts: string[], profileId?: string): Map<string, string> {
   const accountToFleet = new Map<string, string>();
 
   for (const fleetKey of fleetAccounts) {
     // Carica dati e mappa sub-accounts
-    const fleetData = loadFleetData(fleetKey);
+    const fleetData = profileId ? loadFleetData(profileId, fleetKey) : null;
     if (fleetData) {
       // Mappa la chiave principale solo se abbiamo dati (evita phantom fleets)
       accountToFleet.set(fleetKey, fleetKey);

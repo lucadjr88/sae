@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getPlanets } from '../examples/04-planets.js';
+import { getPlanets } from '../services/game/getPlanets.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET, WALLET_PATH } from '../config/serverConfig.js';
 
 /**

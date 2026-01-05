@@ -158,7 +158,7 @@ export async function analyzeFees() {
 		const uniqueFleetAccounts = [...new Set(allFleetAccounts)];
 		window.updateProgress(`Analyzing ${fleets.length} fleet accounts...`);
 		const requestBody: WalletSageFeesStreamRequest = { 
-			walletPubkey, 
+			profileId: profileId, 
 			fleetAccounts: uniqueFleetAccounts,
 			fleetNames,
 			fleetRentalStatus,
@@ -238,7 +238,7 @@ export async function analyzeFees() {
 		}
 		if (!data) throw new Error('Analysis failed - no data received');
 		setLastAnalysisParams({
-			walletPubkey,
+			profileId,
 			fleetAccounts: uniqueFleetAccounts,
 			fleetNames,
 			fleetRentalStatus,
@@ -265,7 +265,7 @@ export async function analyzeFees() {
 		window.displayResults(data, fleetNames, rentedFleetNames);
 		
 		// Load detailed fleet breakdown for pie charts
-		loadFleetBreakdown(walletPubkey, uniqueFleetAccounts, fleetNames, fleetRentalStatus);
+		loadFleetBreakdown(profileId, uniqueFleetAccounts, fleetNames, fleetRentalStatus);
 		const sidebar = document.getElementById('sidebar');
 		const sidebarProfileId = document.getElementById('sidebarProfileId');
 		const container = document.querySelector('.container');
@@ -285,7 +285,7 @@ export async function analyzeFees() {
 }
 
 // Load detailed fleet breakdown and display operation pie charts for each fleet
-async function loadFleetBreakdown(walletPubkey: string, fleetAccounts: string[], fleetNames: { [account: string]: string }, fleetRentalStatus: { [account: string]: boolean }) {
+async function loadFleetBreakdown(profileId: string, fleetAccounts: string[], fleetNames: { [account: string]: string }, fleetRentalStatus: { [account: string]: boolean }) {
 	try {
 		   console.log('Loading fleet breakdown...');
 		   // Filtra fleetAccounts per rimuovere null e non-stringhe
@@ -293,7 +293,7 @@ async function loadFleetBreakdown(walletPubkey: string, fleetAccounts: string[],
 			   ? fleetAccounts.filter(f => typeof f === 'string' && !!f)
 			   : [];
 		   const payload: FleetBreakdownRequest = {
-			   walletPubkey,
+			   profileId,
 			   fleetAccounts: filteredFleetAccounts,
 			   fleetNames,
 			   fleetRentalStatus,

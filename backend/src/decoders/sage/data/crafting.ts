@@ -1,4 +1,4 @@
-import type { SageInstructionDataset } from "../types.js";
+import type { SageInstructionDataset } from "../../../types.js";
 
 export const CRAFTING = [
   {

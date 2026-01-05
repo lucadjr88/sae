@@ -2,7 +2,7 @@
 // Estrae la logica di recupero signatures dalla funzione monolitica
 
 import { TransactionInfo } from '../types.js';
-import { getAccountTransactions } from '../account-transactions.js';
+import { getAccountTransactions } from '../../services/wallet/accountTransactions.js';
 import {
   SignatureFetcherInput,
   SignatureFetcherOutput

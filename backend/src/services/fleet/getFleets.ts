@@ -1,17 +1,17 @@
 import { Connection } from "@solana/web3.js";
-import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
-import { newConnection, newAnchorProvider } from '../utils/anchor-setup.js';
-import { loadKeypair } from '../utils/wallet-setup.js';
+import { RpcPoolConnection } from '../../utils/rpc/pool-connection.js';
+import { newConnection, newAnchorProvider } from '../../utils/anchor-setup.js';
+import { loadKeypair } from '../../utils/wallet-setup.js';
 import { Program } from "@project-serum/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { SAGE_IDL } from "@staratlas/sage";
-import { SAGE_PROGRAM_ID } from './fleets-constants.js';
-import { setupFleetConnections } from './fleet-modules/fleet-connection-setup.js';
-import { fetchFleets } from './fleet-modules/fleet-fetcher.js';
-import { deriveWalletAuthority } from './fleet-modules/wallet-authority-deriver.js';
-import { scanWalletTransactions } from './fleet-modules/wallet-transaction-scanner.js';
-import { scanSrslyRentals } from './fleet-modules/srsly-rental-scanner.js';
-import { processFleets } from './fleet-modules/fleet-processor.js';
+import { SAGE_PROGRAM_ID } from '../../examples/fleets-constants.js';
+import { setupFleetConnections } from '../../examples/fleet-modules/fleet-connection-setup.js';
+import { fetchFleets } from '../../examples/fleet-modules/fleet-fetcher.js';
+import { deriveWalletAuthority } from '../../examples/fleet-modules/wallet-authority-deriver.js';
+import { scanWalletTransactions } from '../../examples/fleet-modules/wallet-transaction-scanner.js';
+import { scanSrslyRentals } from '../../examples/fleet-modules/srsly-rental-scanner.js';
+import { processFleets } from '../../examples/fleet-modules/fleet-processor.js';
 
 export async function getFleets(
   anchorConnOrEndpoint: Connection | string,
@@ -66,7 +66,8 @@ export async function getFleets(
   const deriveResult = await deriveWalletAuthority({
     fleets: context.fleets,
     connection: context.poolConnection,
-    playerProfilePubkey
+    playerProfilePubkey,
+    cacheProfileId: profileId
   });
 
   context.walletAuthority = deriveResult.walletAuthority;
@@ -82,7 +83,8 @@ export async function getFleets(
     walletAuthority: context.walletAuthority,
     connection: context.poolConnection,
     knownFleetKeys: context.knownFleetKeys,
-    sageProgram
+    sageProgram,
+    cacheProfileId: profileId
   });
 
   // Add additional fleets to context
@@ -101,7 +103,8 @@ export async function getFleets(
     playerProfilePubkey,
     connection: context.poolConnection,
     knownFleetKeys: context.knownFleetKeys,
-    sageProgram
+    sageProgram,
+    cacheProfileId: profileId
   });
 
   // Add SRSLY fleets to context
@@ -122,7 +125,8 @@ export async function getFleets(
     walletHeuristicKeys: context.walletHeuristicKeys,
     srslyHeuristicKeys: context.srslyHeuristicKeys,
     operatedByWalletKeys: context.operatedByWalletKeys,
-    connection: context.poolConnection
+    connection: context.poolConnection,
+    cacheProfileId: profileId
   });
 
   console.log(`[fleets] process fleet data ok ${Date.now() - processStart}ms`);

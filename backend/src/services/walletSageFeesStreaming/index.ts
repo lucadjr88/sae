@@ -10,7 +10,7 @@ import { RpcPoolAdapterWithFetch } from '../RpcPoolAdapter.js';
 // Orchestrator reale: fetch, parse, aggrega, metriche base
 export async function getWalletSageFeesDetailedStreaming(
   services: WalletSageFeesStreamingServices,
-  walletPubkey: string,
+  profileId: string,
   opts: StreamingOptions = {}
 ): Promise<StreamingResult> {
   // Allinea al debug: sub-account mapping solo se esplicitamente richiesto
@@ -27,7 +27,7 @@ export async function getWalletSageFeesDetailedStreaming(
     if (!('fetchTransactions' in rpcPool)) {
       fetcher = new RpcPoolAdapterWithFetch(rpcPool);
     }
-    transactions = await fetcher.fetchTransactions(walletPubkey, opts.limit || 100, { 
+    transactions = await fetcher.fetchTransactions(profileId, opts.limit || 100, { 
       hours: (opts && (opts as any).hours) || 24,
       refresh: opts.refresh || (opts as any).update
     });
@@ -35,7 +35,7 @@ export async function getWalletSageFeesDetailedStreaming(
     if (logger) logger.log('walletSageFeesStreaming: fetch error', err);
     if (metrics) metrics.emit('rpc_error_count', 1);
     return {
-      walletPubkey,
+      profileId,
       period: 'unknown',
       totalFees: 0,
       transactionCount: 0,
@@ -187,7 +187,7 @@ export async function getWalletSageFeesDetailedStreaming(
   Object.values(feesByFleet).forEach((f: any) => { f.feePercentage = totalFees > 0 ? (f.totalFee / totalFees) : 0; });
 
   const result: any = {
-    walletPubkey,
+    profileId,
     period: 'last24h',
     totalFees24h: totalFees,
     sageFees24h: totalFees,

@@ -2,8 +2,8 @@ import { Program } from "@project-serum/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { readAllFromRPC } from "@staratlas/data-source";
 import { Game, SAGE_IDL } from "@staratlas/sage";
-import { newConnection, newAnchorProvider } from '../utils/anchor-setup.js';
-import { loadKeypair } from '../utils/wallet-setup.js';
+import { newConnection, newAnchorProvider } from '../../utils/anchor-setup.js';
+import { loadKeypair } from '../../utils/wallet-setup.js';
 
 const SAGE_PROGRAM_ID = "SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE";
 

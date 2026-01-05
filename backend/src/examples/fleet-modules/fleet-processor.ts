@@ -11,7 +11,8 @@ export async function processFleets(input: FleetProcessorInput): Promise<FleetPr
     walletHeuristicKeys,
     srslyHeuristicKeys,
     operatedByWalletKeys,
-    connection
+    connection,
+    cacheProfileId
   } = input;
 
   // Pre-extract owner/subProfile from all fleet accounts for optimization
@@ -124,9 +125,12 @@ export async function processFleets(input: FleetProcessorInput): Promise<FleetPr
       if (callsign === '<unnamed>' && Object.keys(fleet.data.data).length === 0) {
         // Try to get from cache
         try {
-          const cachedFleet = await getCacheDataOnly<any>('fleets', fleet.key.toString());
-          if (cachedFleet && cachedFleet.callsign && cachedFleet.callsign !== '<unnamed>') {
-            callsign = cachedFleet.callsign;
+          const cKey = cacheProfileId || playerProfilePubkey?.toString?.();
+          if (cKey) {
+            const cachedFleet = await getCacheDataOnly<any>(cKey, 'fleets', fleet.key.toString());
+            if (cachedFleet && cachedFleet.callsign && cachedFleet.callsign !== '<unnamed>') {
+              callsign = cachedFleet.callsign;
+            }
           }
         } catch {}
       }

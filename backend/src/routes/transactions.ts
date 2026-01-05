@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getFleetTransactions } from '../examples/fleet-transactions.js';
+import { getFleetTransactions } from '../services/fleet/transactions.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET } from '../config/serverConfig.js';
 
 /**

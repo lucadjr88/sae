@@ -4,8 +4,8 @@ import { PublicKey } from "@solana/web3.js";
 import bs58 from 'bs58';
 import { byteArrayToString, readAllFromRPC, readFromRPC } from "@staratlas/data-source";
 import { Fleet, SAGE_IDL, Starbase, StarbasePlayer, Ship } from "@staratlas/sage";
-import { newConnection, newAnchorProvider } from '../utils/anchor-setup.js';
-import { loadKeypair } from '../utils/wallet-setup.js';
+import { newConnection, newAnchorProvider } from '../../utils/anchor-setup.js';
+import { loadKeypair } from '../../utils/wallet-setup.js';
 
 const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
 const SAGE_GAME_ID = 'GAMEzqJehF8yAnKiTARUuhZMvLvkZVAsCVri5vSfemLr';

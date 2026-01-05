@@ -1,4 +1,4 @@
-import type { SageInstructionDataset } from "../../types.js";
+import type { SageInstructionDataset } from "../../../../types.js";
 import { CERTIFICATES } from "./certificates.js";
 import { CONNECTIONS } from "./connections.js";
 import { DEV } from "./dev.js";

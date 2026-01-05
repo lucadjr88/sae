@@ -1,33 +1,35 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import { getCacheWithTimestamp, setCache } from '../utils/persist-cache.js';
+import { getCacheWithTimestamp, setCache, ensureProfileCacheDir } from '../utils/persist-cache.js';
 import { nlog } from '../utils/log-normalizer.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET } from '../config/serverConfig.js';
 
 export async function walletSageFeesStreamHandler(req: Request, res: Response) {
-  const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, hours, debug, enableSubAccountMapping } = req.body;
-  console.log(`[api/wallet-sage-fees-stream] Received request at ${new Date().toISOString()} with walletPubkey=${walletPubkey ? walletPubkey.substring(0,8) : 'undefined'}`);
-  if (!walletPubkey) {
-    return res.status(400).json({ error: 'walletPubkey required' });
+  const { profileId, fleetAccounts, fleetNames, fleetRentalStatus, hours, debug, enableSubAccountMapping } = req.body;
+  console.log(`[api/wallet-sage-fees-stream] Received request at ${new Date().toISOString()} with profileId=${profileId ? profileId.substring(0,8) : 'undefined'}`);
+  if (!profileId) {
+    return res.status(400).json({ error: 'profileId required' });
   }
+  // Ensure profile cache directory exists immediately after validation
+  await ensureProfileCacheDir(profileId);
 
   const refresh = (req.query.refresh === 'true') || (req.body && req.body.refresh === true);
   const update = (req.query.update === 'true') || (req.body && req.body.update === true);
   // Modalità debug: se ?debug=json o body.debug=true, rispondi con JSON puro
   const debugJson = req.query.debug === 'json' || debug === true;
   const keyPayload = JSON.stringify({ a: fleetAccounts || [], n: fleetNames || {}, r: fleetRentalStatus || {}, h: hours || 24, s: !!enableSubAccountMapping });
-  const compositeKey = `${walletPubkey}__${keyPayload}`;
+  const compositeKey = `${profileId}__${keyPayload}`;
   const cacheKey = crypto.createHash('sha256').update(compositeKey).digest('hex');
   console.log(`[stream] Cache key hash: ${cacheKey.substring(0, 16)}...`);
-  console.log(`[stream] Request for wallet ${walletPubkey.substring(0, 8)}... refresh=${refresh}, update=${update}`);
+  console.log(`[stream] Request for profile ${profileId.substring(0, 8)}... refresh=${refresh}, update=${update}`);
 
   let cachedData = null;
   let lastProcessedSignature = null;
   if (update) {
-    const cached = await getCacheWithTimestamp<any>('wallet-fees-detailed', cacheKey);
+    const cached = await getCacheWithTimestamp<any>(profileId, 'wallet-fees-detailed', cacheKey);
     if (cached) {
       const cacheAgeMs = Date.now() - cached.savedAt;
-      const { getWalletSageFeesDetailedStreaming } = await import('../examples/wallet-sage-fees-streaming.js');
+      const { getWalletSageFeesDetailedStreaming } = await import('../services/wallet/feesStreaming.js');
       const sixHoursMs = 6 * 60 * 60 * 1000;
       if (cacheAgeMs < sixHoursMs) {
         console.log(`[stream] Update mode: cache is fresh (${(cacheAgeMs / 60000).toFixed(1)}min), will fetch only new transactions`);
@@ -47,7 +49,7 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
   }
 
   if (!refresh && !update) {
-    const cached = await getCacheWithTimestamp<any>('wallet-fees-detailed', cacheKey);
+    const cached = await getCacheWithTimestamp<any>(profileId, 'wallet-fees-detailed', cacheKey);
     if (cached) {
       const cacheAgeMs = Date.now() - cached.savedAt;
       const cacheAgeMin = (cacheAgeMs / 60000).toFixed(1);
@@ -100,7 +102,7 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
 
   const saveProgress = async (partialResult: any) => {
     try {
-      await setCache('wallet-fees-detailed', cacheKey, partialResult);
+      await setCache(profileId, 'wallet-fees-detailed', cacheKey, partialResult);
       nlog(`[stream] 📦 Incremental cache saved (${partialResult.transactionCount24h || 0} tx processed)`);
     } catch (err) {
       console.error('[stream] Failed to save incremental cache:', err);
@@ -108,11 +110,11 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
   };
 
   try {
-    const { getWalletSageFeesDetailedStreaming } = await import('../examples/wallet-sage-fees-streaming.js');
+    const { getWalletSageFeesDetailedStreaming } = await import('../services/wallet/feesStreaming.js');
     const finalResult = await getWalletSageFeesDetailedStreaming(
       RPC_ENDPOINT,
       RPC_WEBSOCKET,
-      walletPubkey,
+      profileId,
       fleetAccounts || [],
       fleetNames || {},
       fleetRentalStatus || {},
@@ -124,9 +126,9 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
       lastProcessedSignature,
       refresh
     );
-    console.log(`[stream] 💾 Saving to cache for wallet ${walletPubkey.substring(0, 8)}...`);
+    console.log(`[stream] 💾 Saving to cache for wallet ${profileId.substring(0, 8)}...`);
     if (finalResult.totalSignaturesFetched > 0) {
-      await setCache('wallet-fees-detailed', cacheKey, finalResult);
+      await setCache(profileId, 'wallet-fees-detailed', cacheKey, finalResult);
       console.log(`[stream] ✅ Cache saved successfully`);
     } else {
       console.log(`[stream] ❌ Not saving cache (0 signatures fetched, likely rate limited)`);

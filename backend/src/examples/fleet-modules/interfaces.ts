@@ -44,6 +44,7 @@ export interface WalletAuthorityDeriverInput {
   fleets: any[];
   connection: any;
   playerProfilePubkey: any;
+  cacheProfileId?: string;
 }
 
 export interface WalletAuthorityDeriverOutput {
@@ -58,6 +59,7 @@ export interface WalletTransactionScannerInput {
   connection: any;
   knownFleetKeys: Set<string>;
   sageProgram: any;
+  cacheProfileId?: string;  // Profile ID to use for cache (defaults to walletAuthority)
 }
 
 export interface WalletTransactionScannerOutput {
@@ -71,6 +73,7 @@ export interface SrslyRentalScannerInput {
   connection: any;
   knownFleetKeys: Set<string>;
   sageProgram: any;
+  cacheProfileId?: string;
 }
 
 export interface SrslyRentalScannerOutput {
@@ -86,6 +89,7 @@ export interface FleetProcessorInput {
   srslyHeuristicKeys: Set<string>;
   operatedByWalletKeys: Set<string>;
   connection: any;
+  cacheProfileId?: string;
 }
 
 export interface FleetProcessorOutput {

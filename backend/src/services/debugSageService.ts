@@ -10,7 +10,7 @@ import { globalPoolConnection, defaultServerConnection } from '../index.js';
 // import OP_MAP from '../examples/op-map.js'; // duplicato rimosso
 
 type GetSageTransactionsParams = {
-  walletPubkey: string;
+  profileId: string;
   fleetAccount?: string;
   fromTimestamp?: number;
   toTimestamp?: number;
@@ -18,7 +18,7 @@ type GetSageTransactionsParams = {
 };
 
 type SummarizeInstructionsParams = {
-  walletPubkey: string;
+  profileId: string;
   fleetAccount?: string;
   fromTimestamp?: number;
   toTimestamp?: number;
@@ -41,7 +41,7 @@ type GetOpMapTableParams = {
 };
 
 type SearchTransactionsParams = {
-  walletPubkey: string;
+  profileId: string;
   searchString: string;
   fromTimestamp?: number;
   toTimestamp?: number;
@@ -52,19 +52,19 @@ type SearchTransactionsParams = {
  * Input: walletPubkey (required), fleetAccount (optional), fromTimestamp, toTimestamp, limit
  * Output: array di TransactionInfo (solo campi richiesti dallo schema output)
  */
-export async function getSageTransactions({ walletPubkey, fleetAccount, fromTimestamp, toTimestamp, limit = 100 }: GetSageTransactionsParams): Promise<any[]> {
+export async function getSageTransactions({ profileId, fleetAccount, fromTimestamp, toTimestamp, limit = 100 }: GetSageTransactionsParams): Promise<any[]> {
   // Usa sempre la pool globale, logga errore se non disponibile
   const connection = globalPoolConnection;
   if (!connection) {
     nlog('[debugSageService] ERRORE: globalPoolConnection non disponibile');
     throw new Error('No healthy RPC pool available');
   }
-  const pubkey = new PublicKey(walletPubkey);
+  const pubkey = new PublicKey(profileId);
   // Fetch signatures
   let sigs;
   try {
     sigs = await connection.getSignaturesForAddress(pubkey, { limit });
-    nlog(`[debugSageService] getSageTransactions: trovate ${sigs.length} signature per wallet ${walletPubkey} (limit ${limit})`);
+    nlog(`[debugSageService] getSageTransactions: trovate ${sigs.length} signature per wallet ${profileId} (limit ${limit})`);
   } catch (err: any) {
     nlog(`[debugSageService] ERRORE pool getSignaturesForAddress: ${err?.message || err}`);
     throw new Error('RPC pool error: ' + (err?.message || err));
@@ -121,8 +121,8 @@ export async function getSageTransactions({ walletPubkey, fleetAccount, fromTime
  * Input: walletPubkey (required), fleetAccount (optional), fromTimestamp, toTimestamp
  * Output: summary: { [instructionType]: { count, signatures[] } }
  */
-export async function summarizeInstructions({ walletPubkey, fleetAccount, fromTimestamp, toTimestamp }: SummarizeInstructionsParams): Promise<Record<string, { count: number, signatures: string[] }>> {
-  const txs = await getSageTransactions({ walletPubkey, fleetAccount, fromTimestamp, toTimestamp, limit: 1000 });
+export async function summarizeInstructions({ profileId, fleetAccount, fromTimestamp, toTimestamp }: SummarizeInstructionsParams): Promise<Record<string, { count: number, signatures: string[] }>> {
+  const txs = await getSageTransactions({ profileId, fleetAccount, fromTimestamp, toTimestamp, limit: 1000 });
   const summary: Record<string, { count: number, signatures: string[] }> = {};
   for (const tx of txs) {
     if (!tx) continue;
@@ -136,7 +136,7 @@ export async function summarizeInstructions({ walletPubkey, fleetAccount, fromTi
   return summary;
 }
 
-import OP_MAP from '../examples/op-map.js';
+import OP_MAP from '../lib/operations/opMap.js';
 
 /**
  * mapTxInstructions
@@ -190,7 +190,7 @@ export async function mapTxInstructions({ signatures, mappingVersion }: MapTxIns
 export async function getFleetOpsRaw({ fleetAccount, fromTimestamp, toTimestamp }: GetFleetOpsRawParams): Promise<any[]> {
   let txs;
   try {
-    txs = await getSageTransactions({ walletPubkey: fleetAccount, fleetAccount, fromTimestamp, toTimestamp, limit: 1000 });
+    txs = await getSageTransactions({ profileId: fleetAccount, fleetAccount, fromTimestamp, toTimestamp, limit: 1000 });
   } catch (err: any) {
     nlog(`[debugSageService] ERRORE pool getFleetOpsRaw: ${err?.message || err}`);
     throw new Error('RPC pool error: ' + (err?.message || err));
@@ -235,10 +235,10 @@ export async function getOpMapTable({ category, instruction }: GetOpMapTablePara
  * Input: walletPubkey (required), searchString (required), fromTimestamp, toTimestamp
  * Output: array di TransactionInfo che matchano il pattern
  */
-export async function searchTransactions({ walletPubkey, searchString, fromTimestamp, toTimestamp }: SearchTransactionsParams): Promise<any[]> {
+export async function searchTransactions({ profileId, searchString, fromTimestamp, toTimestamp }: SearchTransactionsParams): Promise<any[]> {
   let txs;
   try {
-    txs = await getSageTransactions({ walletPubkey, fromTimestamp, toTimestamp, limit: 1000 });
+    txs = await getSageTransactions({ profileId, fromTimestamp, toTimestamp, limit: 1000 });
   } catch (err: any) {
     nlog(`[debugSageService] ERRORE pool searchTransactions: ${err?.message || err}`);
     throw new Error('RPC pool error: ' + (err?.message || err));

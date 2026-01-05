@@ -1,33 +1,39 @@
 import { getWalletSageFeesDetailedStreaming } from './index.js';
 import type { WalletSageFeesStreamingServices } from './types.js';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { parseTransaction } from './lib/parsers.js';
 import { extractFleetFromInstruction } from './lib/extract-fleet-official.js';
+import { cachePath } from '../../utils/cache-path.js';
+import { ensureProfileCacheDir, getCacheDataOnly } from '../../utils/persist-cache.js';
+import { buildAccountToFleetMap } from './lib/fleet-association.js';
 
 /**
  * API di debug: restituisce la struttura feesByFleet completa (raw breakdown)
  * @param services dipendenze backend
- * @param walletPubkey chiave pubblica wallet
+ * @param profileId chiave pubblica profile (same as wallet)
  * @param opts opzioni streaming (fleetAccounts, fleetNames, ecc)
  * @returns feesByFleet raw breakdown
  */
 export async function debugFleetBreakdown(
   services: WalletSageFeesStreamingServices,
-  walletPubkey: string,
+  profileId: string,
   opts: any = {}
 ) {
   // For debug, read from cache instead of fetching live
-  const cacheDir = path.resolve('../cache/wallet-txs', walletPubkey);
+  const nsDir = cachePath(profileId).file('wallet-txs');
   const transactions: any[] = [];
 
   try {
-    if (fs.existsSync(cacheDir)) {
-      const files = fs.readdirSync(cacheDir);
-      for (const file of files.slice(0, 100)) { // Limit to 100 for debug
+    // Ensure directory exists
+    await ensureProfileCacheDir(profileId);
+    const files = await fsPromises.readdir(nsDir);
+    for (const file of files.slice(0, 100)) { // Limit to 100 for debug
+      if (file.endsWith('.json')) {
         try {
-          const txData = JSON.parse(fs.readFileSync(path.join(cacheDir, file), 'utf8'));
-          transactions.push(txData.data);
+          const txData = await getCacheDataOnly(profileId, 'wallet-txs', file.replace('.json', ''));
+          if (txData) transactions.push(txData);
         } catch (e) {
           // Skip corrupted files
         }
@@ -65,7 +71,7 @@ export async function debugFleetBreakdown(
 
   if (Array.isArray(fleetAccounts) && fleetAccounts.length > 0) {
     // Build mapping completo account→fleet
-    const accountToFleetMap = opts.enableSubAccountMapping ? buildAccountToFleetMap(fleetAccounts) : null;
+    const accountToFleetMap = opts.enableSubAccountMapping ? buildAccountToFleetMap(fleetAccounts, profileId) : null;
     
     // 1. Inizializza solo le fleet reali che hanno dati
     for (const f of fleetAccounts) {
@@ -195,11 +201,8 @@ export async function debugFleetBreakdown(
 
   // Restituisci solo la struttura feesByFleet completa, senza filtri
   return {
-    walletPubkey,
+    profileId,
     feesByFleet,
     opts
   };
 }
-
-// Import needed for buildAccountToFleetMap
-import { buildAccountToFleetMap } from './lib/fleet-association.js';

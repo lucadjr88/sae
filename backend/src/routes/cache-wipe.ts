@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import { promises as fs } from 'fs';
+import { cachePath } from '../utils/cache-path.js';
 
 /**
  * Cache wipe endpoint
@@ -10,9 +12,9 @@ export async function cacheWipeHandler(req: Request, res: Response) {
   }
   try {
     console.log(`[cache] Wiping cache for profile: ${profileId}`);
-    // TODO: Implement cache deletion by profile pattern
-    // For now, just acknowledge - cache will be overwritten on next fetch
-    res.json({ success: true, message: 'Cache wipe acknowledged' });
+    const root = cachePath(profileId).root;
+    await fs.rm(root, { recursive: true, force: true });
+    res.json({ success: true, message: 'Cache wiped successfully' });
   } catch (err: any) {
     console.error('Cache wipe error:', err);
     res.status(500).json({ error: err.message });

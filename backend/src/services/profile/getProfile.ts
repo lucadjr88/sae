@@ -2,8 +2,8 @@ import { Program } from "@project-serum/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { readAllFromRPC, readFromRPC } from "@staratlas/data-source";
 import { PLAYER_PROFILE_IDL, PlayerProfile } from "@staratlas/player-profile";
-import { newConnection, newAnchorProvider } from '../utils/anchor-setup.js';
-import { loadKeypair } from '../utils/wallet-setup.js';
+import { newConnection, newAnchorProvider } from '../../utils/anchor-setup.js';
+import { loadKeypair } from '../../utils/wallet-setup.js';
 
 const PLAYER_PROFILE_PROGRAM_ID = "pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9";
 

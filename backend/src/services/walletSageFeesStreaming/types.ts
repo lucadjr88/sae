@@ -19,7 +19,7 @@ export interface StreamingProgress {
 }
 
 export interface StreamingResult {
-  walletPubkey: string;
+  profileId: string;
   period: string;
   totalFees: number;
   transactionCount: number;

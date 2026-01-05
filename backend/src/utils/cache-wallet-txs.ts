@@ -1,4 +1,4 @@
-import { getAccountTransactions } from '../examples/account-transactions.js';
+import { getAccountTransactions } from '../services/wallet/accountTransactions.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET } from '../config/serverConfig.js';
 
 /**

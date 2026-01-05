@@ -1,9 +1,9 @@
 
-import { TransactionInfo } from './types.js';
-import { getAccountTransactions } from './account-transactions.js';
-import { newConnection } from '../utils/anchor-setup.js';
-import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
-import { ALL_SAGE_INSTRUCTION_NAMES } from '../decoders/instruction-maps.js';
+import { TransactionInfo } from '../../examples/types.js';
+import { getAccountTransactions } from './accountTransactions.js';
+import { newConnection } from '../../utils/anchor-setup.js';
+import { RpcPoolConnection } from '../../utils/rpc/pool-connection.js';
+import { ALL_SAGE_INSTRUCTION_NAMES } from '../../decoders/instruction-maps.js';
 
 const SAGE_SPECIFIC_INSTRUCTIONS = new Set(ALL_SAGE_INSTRUCTION_NAMES);
 // Rimuovi FleetStateHandler dai prioritari per forzare il check degli altri o la raffinazione
@@ -76,7 +76,8 @@ export async function getWalletSageFeesDetailed(
     cutoffTime,
     10000,  // Max signatures for 24h coverage
     opts,
-    poolConnection  // Pass the pool connection if provided
+    poolConnection,  // Pass the pool connection if provided
+    walletPubkey  // Use walletPubkey as the cache profile ID
   );
   const allTransactions = result.transactions;
   const totalSigs = result.totalSignaturesFetched;

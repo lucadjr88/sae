@@ -9,7 +9,7 @@ import { Fleet } from "@staratlas/sage";
 import { SrslyRentalScannerInput, SrslyRentalScannerOutput } from './interfaces.js';
 
 export async function scanSrslyRentals(input: SrslyRentalScannerInput): Promise<SrslyRentalScannerOutput> {
-  const { playerProfilePubkey, connection, knownFleetKeys, sageProgram } = input;
+  const { playerProfilePubkey, connection, knownFleetKeys, sageProgram, cacheProfileId } = input;
 
   const srslyFleets: any[] = [];
   const srslyHeuristicKeys = new Set<string>();
@@ -27,11 +27,14 @@ export async function scanSrslyRentals(input: SrslyRentalScannerInput): Promise<
     // Try cache first (cache SRSLY program accounts for short TTL to avoid repeated heavy scans)
     try {
       const cacheKey = 'srsly_program_accounts';
-      const cached = await getCacheWithTimestamp<any[]>('srsly', cacheKey);
-      const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-      if (cached && (Date.now() - cached.savedAt) < CACHE_TTL_MS) {
-        accounts = cached.data;
-        nlog('[SRSLY] Using cached program accounts');
+      const cKey = cacheProfileId || playerProfilePubkey?.toString?.();
+      if (cKey) {
+        const cached = await getCacheWithTimestamp<any[]>(cKey, 'srsly', cacheKey);
+        const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+        if (cached && (Date.now() - cached.savedAt) < CACHE_TTL_MS) {
+          accounts = cached.data;
+          nlog('[SRSLY] Using cached program accounts');
+        }
       }
     } catch (e) {
       // ignore cache errors
@@ -51,7 +54,10 @@ export async function scanSrslyRentals(input: SrslyRentalScannerInput): Promise<
           //nlog(`[SRSLY] pool metrics after=${JSON.stringify(afterMetrics.map(m=>({i:m.index,processed:m.processedTxs,fail:m.failures,429:m.errorCounts.rateLimit429})))}`);
 
           // Save to cache for short TTL
-          try { await setCache('srsly', 'srsly_program_accounts', accounts || []); } catch (e) {}
+          try {
+            const cKey = cacheProfileId || playerProfilePubkey?.toString?.();
+            if (cKey) await setCache(cKey, 'srsly', 'srsly_program_accounts', accounts || []);
+          } catch (e) {}
 
           break;
         } catch (err) {

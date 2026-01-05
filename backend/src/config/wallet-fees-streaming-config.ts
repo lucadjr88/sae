@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'fs';
+import { cachePath } from '../utils/cache-path.js';
 
 export const excludeAccounts = [
   'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE',
@@ -34,11 +35,12 @@ export interface FleetMaps {
 export function buildFleetMaps(
   fleetAccounts: string[],
   fleetAccountNames: { [account: string]: string } = {},
-  enableSubAccountMapping: boolean = false
+  enableSubAccountMapping: boolean = false,
+  profileId: string
 ): FleetMaps {
-  const CACHE_DIR = '../cache/fleets';
+  const CACHE_DIR = cachePath(profileId).root;
   const validFleetAccounts = (fleetAccounts || []).filter(key => {
-    const filePath = `../cache/fleets/${key}.json`;
+    const filePath = `${CACHE_DIR}/${key}.json`;
     return existsSync(filePath);
   });
 
@@ -68,7 +70,7 @@ export function buildFleetMaps(
     accountToFleet.set(fleetKey, fleetKey);
     if (!enableSubAccountMapping) continue;
     try {
-      const filePath = `../cache/fleets/${fleetKey}.json`;
+      const filePath = `${CACHE_DIR}/${fleetKey}.json`;
       if (require('fs').existsSync(filePath)) {
         const cacheData = JSON.parse(readFileSync(filePath, 'utf8'));
         const fleetData = cacheData.data?.data;

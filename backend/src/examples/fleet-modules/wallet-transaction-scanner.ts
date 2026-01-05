@@ -21,7 +21,12 @@ import {
 import { WalletTransactionScannerInput, WalletTransactionScannerOutput } from './interfaces.js';
 
 export async function scanWalletTransactions(input: WalletTransactionScannerInput): Promise<WalletTransactionScannerOutput> {
-  const { walletAuthority, connection, knownFleetKeys, sageProgram } = input;
+  const { walletAuthority, connection, knownFleetKeys, sageProgram, cacheProfileId } = input;
+
+  const cacheKey = cacheProfileId || walletAuthority;
+  if (!cacheKey) {
+    throw new Error('Either cacheProfileId or walletAuthority must be provided');
+  }
 
   const additionalFleets: any[] = [];
   const walletHeuristicKeys = new Set<string>();
@@ -177,7 +182,7 @@ export async function scanWalletTransactions(input: WalletTransactionScannerInpu
         const fetchPromises: Promise<any | null>[] = batch.map(async (s: any) => {
           // Try cache first (per-wallet folder) before hitting RPC
           try {
-            const cached: any = await getCacheDataOnly<any>(`wallet-txs/${walletAuthority}`, s.signature);
+            const cached: any = await getCacheDataOnly<any>(cacheKey, 'wallet-txs', s.signature);
             if (cached) return cached;
           } catch (e) {
             // ignore cache read errors
@@ -220,7 +225,7 @@ export async function scanWalletTransactions(input: WalletTransactionScannerInpu
             const feePayer = (tx as any).transaction?.message?.accountKeys?.[0]?.pubkey?.toString?.() ||
               ((tx as any).transaction?.message?.accountKeys && (tx as any).transaction?.message?.accountKeys[0] && (tx as any).transaction?.message?.accountKeys[0].toString && (tx as any).transaction?.message?.accountKeys[0].toString());
             if (feePayer && sigStr) {
-              try { await setCache(`wallet-txs/${feePayer}`, sigStr, tx); } catch (e) { /* ignore cache errors */ }
+              try { await setCache(cacheKey, 'wallet-txs', sigStr, tx); } catch (e) { /* ignore cache errors */ }
             }
           } catch (e) {
             // ignore cache errors

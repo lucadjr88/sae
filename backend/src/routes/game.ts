@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getGameInfo } from '../examples/01-game.js';
+import { getGameInfo } from '../services/game/getGameInfo.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET, WALLET_PATH } from '../config/serverConfig.js';
 
 /**

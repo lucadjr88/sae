@@ -1,11 +1,11 @@
-import { TransactionInfo } from './types.js';
+import { TransactionInfo } from '../../examples/types.js';
 import { Connection, PublicKey, ConfirmedSignatureInfo } from "@solana/web3.js";
-import { newConnection } from '../utils/anchor-setup.js';
-import { getCacheDataOnly, setCache } from '../utils/persist-cache.js';
-import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
-import { nlog } from '../utils/log-normalizer.js';
-import { detectCraftingMaterial } from './tx-utils.js';
-import { decodeCompositeInstructions } from '../decoders/composite-decoder.js';
+import { newConnection } from '../../utils/anchor-setup.js';
+import { getCacheDataOnly, setCache } from '../../utils/persist-cache.js';
+import { RpcPoolConnection } from '../../utils/rpc/pool-connection.js';
+import { nlog } from '../../utils/log-normalizer.js';
+import { detectCraftingMaterial } from '../../lib/transactions/utils.js';
+import { decodeCompositeInstructions } from '../../decoders/composite-decoder.js';
 
 export async function getAccountTransactions(
   rpcEndpoint: string,
@@ -15,8 +15,12 @@ export async function getAccountTransactions(
   sinceUnixMs?: number,
   maxSignatures: number = 3000,
   opts?: { refresh?: boolean },
-  poolConnection?: RpcPoolConnection  // Optional pre-configured pool connection
+  poolConnection?: RpcPoolConnection,  // Optional pre-configured pool connection
+  cacheProfileId?: string  // Optional: profile ID to use for cache (defaults to accountPubkey)
 ) {
+  // Use provided cacheProfileId for cache operations, fallback to accountPubkey
+  const cacheKey = cacheProfileId || accountPubkey;
+
   // Create default connection and wrapped pool connection
   const defaultConnection = newConnection(rpcEndpoint, rpcWebsocket);
   const conn = poolConnection || new RpcPoolConnection(defaultConnection);
@@ -115,7 +119,7 @@ export async function getAccountTransactions(
 
           // Check cache first unless refresh is forced
           if (!opts?.refresh) {
-            tx = await getCacheDataOnly(`wallet-txs/${accountPubkey}`, sig.signature);
+            tx = await getCacheDataOnly(cacheKey, 'wallet-txs', sig.signature);
             if (tx) return { sig, tx };
           }
 
@@ -171,7 +175,7 @@ export async function getAccountTransactions(
       const tx: any = res.tx;
       // Save raw transaction to cache per-wallet (non-blocking, ignore cache errors)
       try {
-        await setCache(`wallet-txs/${accountPubkey}`, sig.signature, tx);
+        await setCache(cacheKey, 'wallet-txs', sig.signature, tx);
       } catch (e) {
         // ignore cache write errors
       }

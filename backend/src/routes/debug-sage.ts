@@ -5,15 +5,15 @@ const router = express.Router();
 
 /**
  * /api/debug/tx-list
- * Input: walletPubkey (required), fleetAccount, fromTimestamp, toTimestamp, limit
+ * Input: profileId (required), fleetAccount, fromTimestamp, toTimestamp, limit
  * Output: { transactions: [...] }
  * Edge case: wallet senza tx, fleet non associata, errori RPC
  */
 router.post('/tx-list', async (req: Request, res: Response) => {
   try {
-    const { walletPubkey, fleetAccount, fromTimestamp, toTimestamp, limit } = req.body;
-    if (!walletPubkey) return res.status(400).json({ error: 'walletPubkey required' });
-    const transactions = await getSageTransactions({ walletPubkey, fleetAccount, fromTimestamp, toTimestamp, limit });
+    const { profileId, fleetAccount, fromTimestamp, toTimestamp, limit } = req.body;
+    if (!profileId) return res.status(400).json({ error: 'profileId required' });
+    const transactions = await getSageTransactions({ profileId, fleetAccount, fromTimestamp, toTimestamp, limit });
     res.json({ transactions });
   } catch (err) {
     res.status(500).json({ error: 'Internal error', details: String(err) });
@@ -22,14 +22,14 @@ router.post('/tx-list', async (req: Request, res: Response) => {
 
 /**
  * /api/debug/tx-instructions-summary
- * Input: walletPubkey (required), fleetAccount, fromTimestamp, toTimestamp
+ * Input: profileId (required), fleetAccount, fromTimestamp, toTimestamp
  * Output: { summary: {...} }
  */
 router.post('/tx-instructions-summary', async (req: Request, res: Response) => {
   try {
-    const { walletPubkey, fleetAccount, fromTimestamp, toTimestamp } = req.body;
-    if (!walletPubkey) return res.status(400).json({ error: 'walletPubkey required' });
-    const summary = await summarizeInstructions({ walletPubkey, fleetAccount, fromTimestamp, toTimestamp });
+    const { profileId, fleetAccount, fromTimestamp, toTimestamp } = req.body;
+    if (!profileId) return res.status(400).json({ error: 'profileId required' });
+    const summary = await summarizeInstructions({ profileId, fleetAccount, fromTimestamp, toTimestamp });
     res.json({ summary });
   } catch (err) {
     res.status(500).json({ error: 'Internal error', details: String(err) });
@@ -88,14 +88,14 @@ router.get('/mapping-table', async (req: Request, res: Response) => {
 
 /**
  * /api/debug/tx-search
- * Input: walletPubkey (required), searchString (required), fromTimestamp, toTimestamp
+ * Input: profileId (required), searchString (required), fromTimestamp, toTimestamp
  * Output: { transactions: [...] }
  */
 router.post('/tx-search', async (req: Request, res: Response) => {
   try {
-    const { walletPubkey, searchString, fromTimestamp, toTimestamp } = req.body;
-    if (!walletPubkey || !searchString) return res.status(400).json({ error: 'walletPubkey and searchString required' });
-    const transactions = await searchTransactions({ walletPubkey, searchString, fromTimestamp, toTimestamp });
+    const { profileId, searchString, fromTimestamp, toTimestamp } = req.body;
+    if (!profileId || !searchString) return res.status(400).json({ error: 'profileId and searchString required' });
+    const transactions = await searchTransactions({ profileId, searchString, fromTimestamp, toTimestamp });
     res.json({ transactions });
   } catch (err) {
     res.status(500).json({ error: 'Internal error', details: String(err) });

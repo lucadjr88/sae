@@ -1,5 +1,5 @@
-import { TransactionInfo, FleetOperation } from './types.js';
-import { getAccountTransactions } from './account-transactions.js';
+import { TransactionInfo, FleetOperation } from '../../examples/types.js';
+import { getAccountTransactions } from '../wallet/accountTransactions.js';
 
 export async function getFleetTransactions(
   rpcEndpoint: string,

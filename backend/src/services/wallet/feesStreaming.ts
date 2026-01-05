@@ -1,15 +1,15 @@
-import { TransactionInfo } from './types.js';
+import { TransactionInfo } from '../../examples/types.js';
 import { Connection, PublicKey } from '@solana/web3.js';
 import * as fs from 'fs';
-import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
-import { resolveMints } from '../utils/metaplex-metadata.js';
-import { nlog } from '../utils/log-normalizer.js';
-import { excludeAccounts, MATERIALS, BATCH_SETTINGS, buildFleetMaps, filterFleetBuckets } from '../config/wallet-fees-streaming-config.js';
-import { fetchWalletSignatures } from '../services/fetch-wallet-signatures.js';
-import { classifyTx } from '../decoders/streaming/tx-classifier.js';
-import { enrichCrafting } from '../services/crafting-enricher.js';
-import { accumulate, finalize, pairCraftingTransactions } from '../services/fees-aggregator.js';
-import { buildPartialResult, sendProgressUpdate } from '../services/progress-reporter.js';
+import { RpcPoolConnection } from '../../utils/rpc/pool-connection.js';
+import { resolveMints } from '../../utils/metaplex-metadata.js';
+import { nlog } from '../../utils/log-normalizer.js';
+import { excludeAccounts, MATERIALS, BATCH_SETTINGS, buildFleetMaps, filterFleetBuckets } from '../../config/wallet-fees-streaming-config.js';
+import { fetchWalletSignatures } from '../../services/fetch-wallet-signatures.js';
+import { classifyTx } from '../../decoders/streaming/tx-classifier.js';
+import { enrichCrafting } from '../../services/crafting-enricher.js';
+import { accumulate, finalize, pairCraftingTransactions } from '../../services/fees-aggregator.js';
+import { buildPartialResult, sendProgressUpdate } from '../../services/progress-reporter.js';
 
 export async function getWalletSageFeesDetailedStreaming(
   rpcEndpoint: string,
@@ -30,7 +30,7 @@ export async function getWalletSageFeesDetailedStreaming(
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
 
   // Build fleet maps
-  const { allowedFleetKeys, accountToFleet, resolveFleetKey } = buildFleetMaps(fleetAccounts, fleetAccountNames, enableSubAccountMapping);
+  const { allowedFleetKeys, accountToFleet, resolveFleetKey } = buildFleetMaps(fleetAccounts, fleetAccountNames, enableSubAccountMapping, walletPubkey);
 
   const now = Date.now();
   const cutoffTime = now - (hours * 60 * 60 * 1000);

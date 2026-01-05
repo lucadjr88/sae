@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getShipsForFleet } from '../examples/05-compose-fleet.js';
+import { getShipsForFleet } from '../services/fleet/composeFleet.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET, WALLET_PATH } from '../config/serverConfig.js';
 
 /**

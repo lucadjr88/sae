@@ -1,6 +1,6 @@
 import { IRpcPool } from './IRpcPool.js';
 import { getGlobalRpcPoolManager } from '../utils/rpc/rpc-pool-manager.js';
-import { getAccountTransactions } from '../examples/account-transactions.js';
+import { getAccountTransactions } from './wallet/accountTransactions.js';
 import { newConnection } from '../utils/anchor-setup.js';
 import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
 import { RPC_ENDPOINT, RPC_WEBSOCKET } from '../config/serverConfig.js';
@@ -50,7 +50,8 @@ export class RpcPoolAdapterWithFetch extends RpcPoolAdapter {
         sinceUnixMs,
         5000,
         { refresh: opts?.refresh },
-        poolConn
+        poolConn,
+        walletPubkey  // Pass profileId for cache operations
       );
       return res.transactions || [];
     } catch (err) {

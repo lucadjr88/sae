@@ -127,14 +127,20 @@ async function readSSEStream(response: Response, handlers: any): Promise<any> {
   return finalData;
 }
 
-function buildFleetAccountsMap(fleets: any[]): Map<string, any> {
-  const map = new Map();
+function buildFleetAccountsMap(fleets: any[]): { accounts: string[], names: Record<string, string>, rentalStatus: Record<string, any> } {
+  const accounts: string[] = [];
+  const names: Record<string, string> = {};
+  const rentalStatus: Record<string, any> = {};
+
   for (const fleet of fleets || []) {
     if (fleet.fleetId) {
-      map.set(fleet.fleetId, fleet);
+      accounts.push(fleet.fleetId);
+      names[fleet.fleetId] = fleet.fleetName || fleet.fleetId;
+      rentalStatus[fleet.fleetId] = { isRented: fleet.isRented || false };
     }
   }
-  return map;
+
+  return { accounts, names, rentalStatus };
 }
 
 function buildRentedFleetNames(fleets: any[], fleetRentalStatus: any): string[] {
@@ -174,11 +180,11 @@ export async function updateCache(): Promise<void> {
 
   try {
     // Use saved parameters from last analysis
-    const { walletPubkey, fleetAccounts, fleetNames, fleetRentalStatus, fleets } = lastAnalysisParams;
+    const { profileId, fleetAccounts, fleetNames, fleetRentalStatus, fleets } = lastAnalysisParams;
 
     console.log('Updating cache for profile:', currentProfileId);
     console.log('Using saved parameters:', {
-      walletPubkey: walletPubkey.substring(0, 8) + '...',
+      profileId: profileId.substring(0, 8) + '...',
       fleetCount: fleetAccounts.length
     });
 
@@ -187,7 +193,7 @@ export async function updateCache(): Promise<void> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        walletPubkey,
+        profileId,
         fleetAccounts,
         fleetNames,
         fleetRentalStatus,
@@ -322,29 +328,31 @@ export async function refreshAnalysis(): Promise<void> {
       throw new Error('Failed to fetch fleets');
     }
 
-    const fleetsData = await fleetsResponseon();
+    const fleetsData = await fleetsResponse.json();
     const walletPubkey = fleetsData.walletAuthority;
     const fleets = fleetsData.fleets;
 
     updateProgress(`Found ${fleets.length} fleets, collecting accounts...`);
 
+    console.log('[refreshAnalysis] Fleets structure:', fleets.slice(0, 2));
     const { accounts: uniqueFleetAccounts, names: fleetNames, rentalStatus: fleetRentalStatus } = buildFleetAccountsMap(fleets);
+    console.log('[refreshAnalysis] Fleet names:', fleetNames);
 
     updateProgress('Fetching fresh transaction data...');
 
-    // Validate walletPubkey before making request
-    if (!walletPubkey) {
-      throw new Error('Wallet pubkey not found in fleet data');
+    // Validate profileId before making request
+    if (!currentProfileId) {
+      throw new Error('Profile ID not set');
     }
 
-    console.log('[refreshAnalysis] Sending request with wallet:', walletPubkey.substring(0, 8) + '...');
+    console.log('[refreshAnalysis] Sending request with profile:', currentProfileId.substring(0, 8) + '...');
 
     // Use streaming endpoint with refresh flag
     const response = await fetch('/api/wallet-sage-fees-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-        walletPubkey: walletPubkey,
+        profileId: currentProfileId,
         fleetAccounts: uniqueFleetAccounts,
         fleetNames: fleetNames,
         fleetRentalStatus: fleetRentalStatus,

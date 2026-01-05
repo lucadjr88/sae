@@ -8,5 +8,5 @@ export async function scanFeePayerForRented(
   sigLimit = 5000
 ) {
   // Delegate to centralized detector (with caching)
-  return detectRentedFleets(poolConn, feePayer, profileId, sigLimit);
+  return detectRentedFleets(poolConn, feePayer, profileId, profileId, sigLimit);
 }

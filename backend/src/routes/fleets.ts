@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { getFleets } from '../examples/getFleets-modular.js';
-import { getCacheDataOnly, setCache } from '../utils/persist-cache.js';
+import { getFleets } from '../services/fleet/getFleets.js';
+import { getCacheDataOnly, setCache, ensureProfileCacheDir } from '../utils/persist-cache.js';
 import { nlog } from '../utils/log-normalizer.js';
 import { scanFeePayerForRented } from '../utils/fee-payer-scan.js';
 import { createRpcPoolManager } from '../utils/rpc/rpc-pool-manager.js';
@@ -14,10 +14,12 @@ export async function fleetsHandler(req: Request, res: Response) {
   if (!profileId) {
     return res.status(400).json({ error: 'profileId required' });
   }
+  // Ensure profile cache directory exists immediately after validation
+  await ensureProfileCacheDir(profileId);
   try {
     const refresh = (req.query.refresh === 'true') || (req.body && req.body.refresh === true);
     if (!refresh) {
-      const cached = await getCacheDataOnly<any>('fleets', profileId);
+      const cached = await getCacheDataOnly<any>(profileId, 'fleets', profileId);
       if (cached) {
         res.setHeader('X-Cache-Hit', 'disk');
         if (cached.walletAuthority == null) {
@@ -30,12 +32,12 @@ export async function fleetsHandler(req: Request, res: Response) {
     let result = await getFleets(defaultServerConnection as any, globalPoolConnection as any, WALLET_PATH, profileId);
     // Include cached rented fleets
     try {
-      const cachedRentedKeys = await getCacheDataOnly<string[]>('rented-fleets', profileId);
+      const cachedRentedKeys = await getCacheDataOnly<string[]>(profileId, 'rented-fleets', profileId);
       if (cachedRentedKeys && Array.isArray(cachedRentedKeys)) {
         const existingKeys = new Set(result.fleets.map((f: any) => f.key));
         for (const key of cachedRentedKeys) {
           if (!existingKeys.has(key)) {
-            const cachedFleet = await getCacheDataOnly<any>('fleets', key);
+            const cachedFleet = await getCacheDataOnly<any>(profileId, 'fleets', key);
             if (cachedFleet && cachedFleet.isRented) {
               result.fleets.push(cachedFleet);
               existingKeys.add(key);
@@ -115,12 +117,12 @@ export async function fleetsHandler(req: Request, res: Response) {
 
       for (const fleet of result.fleets) {
         if (fleet && fleet.key) {
-          await setCache('fleets', fleet.key, fleet);
+          await setCache(profileId, 'fleets', fleet.key, fleet);
         }
       }
       // Cache list of rented fleet keys for this profile
       const rentedFleets = result.fleets.filter((f: any) => f.isRented).map((f: any) => f.key);
-      await setCache('rented-fleets', profileId, rentedFleets);
+      await setCache(profileId, 'rented-fleets', profileId, rentedFleets);
     }
     res.json(result);
   } catch (err: any) {

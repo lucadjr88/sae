@@ -3,16 +3,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { FleetData } from '../types';
-
-const CACHE_DIR = path.join(process.cwd(), '..', 'cache', 'fleets');
+import { cachePath } from '../../../utils/cache-path.js';
 
 /**
  * Carica i dati di una flotta dalla cache.
+ * @param profileId La chiave del profilo.
  * @param fleetKey La chiave della flotta.
  * @returns FleetData o null se non trovato o errore.
  */
-export function loadFleetData(fleetKey: string): FleetData | null {
-  const filePath = path.join(CACHE_DIR, `${fleetKey}.json`);
+export function loadFleetData(profileId: string, fleetKey: string): FleetData | null {
+  const filePath = cachePath(profileId).file(`fleets/${fleetKey}.json`);
   try {
     const cacheData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     return cacheData.data?.data || null;
