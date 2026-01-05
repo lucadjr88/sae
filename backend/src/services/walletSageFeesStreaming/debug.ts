@@ -73,18 +73,16 @@ export async function debugFleetBreakdown(
     // Build mapping completo account→fleet
     const accountToFleetMap = opts.enableSubAccountMapping ? buildAccountToFleetMap(fleetAccounts, profileId) : null;
     
-    // 1. Inizializza solo le fleet reali che hanno dati
+    // 1. Inizializza tutte le fleet fornite
     for (const f of fleetAccounts) {
-      if (accountToFleetMap?.has(f)) {
-        feesByFleet[f] = { 
-          totalFee: 0, 
-          feePercentage: 0, 
-          totalOperations: 0, 
-          isRented: !!fleetRentalStatus[f], 
-          operations: {}, 
-          fleetName: (fleetNames && fleetNames[f]) ? fleetNames[f] : f.substring(0,8) 
-        };
-      }
+      feesByFleet[f] = { 
+        totalFee: 0, 
+        feePercentage: 0, 
+        totalOperations: 0, 
+        isRented: !!fleetRentalStatus[f], 
+        operations: {}, 
+        fleetName: (fleetNames && fleetNames[f]) ? fleetNames[f] : f.substring(0,8) 
+      };
     }
 
     if (accountToFleetMap && services.logger) {

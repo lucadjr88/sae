@@ -164,8 +164,6 @@ export async function updateCache(): Promise<void> {
   }
 
   const resultsDiv = document.getElementById('results');
-  const profileIcon = document.getElementById('profileIcon');
-  const cacheTooltip = document.getElementById('cacheTooltip');
   const cacheUpdateBtn = document.getElementById('cacheUpdateBtn');
 
   hideCacheTooltipAndSidebar();
@@ -175,7 +173,6 @@ export async function updateCache(): Promise<void> {
   
   timerHandle = startTimer(updateTimerInResults);
 
-  setCacheIconState('loading', 'Updating...');
   setCacheButtonState('cacheUpdateBtn', true, '⏳ Updating...');
 
   try {
@@ -254,23 +251,19 @@ export async function wipeAndReload(): Promise<void> {
 
   let timerHandle = null;
 
-  // Proceed without confirmation popup (auto-confirm)
-
   const resultsDiv = document.getElementById('results');
-  const profileIcon = document.getElementById('profileIcon');
   const cacheWipeBtn = document.getElementById('cacheWipeBtn');
 
   hideCacheTooltipAndSidebar();
 
-  updateProgress('Wiping cache and reloading...');
+  updateProgress('Wiping cache...');
   
   timerHandle = startTimer(updateTimerInResults);
 
-  setCacheIconState('loading', 'Wiping cache...');
   setCacheButtonState('cacheWipeBtn', true, '⏳ Wiping...');
 
   try {
-    // Call wipe endpoint
+    // Call wipe endpoint to delete entire cache folder
     console.log('Wiping cache for profile:', currentProfileId);
     const wipeResponse = await fetch('/api/cache/wipe', {
       method: 'POST',
@@ -282,43 +275,11 @@ export async function wipeAndReload(): Promise<void> {
       throw new Error('Failed to wipe cache');
     }
 
-    console.log('Cache wiped, reloading data...');
-    updateProgress('Cache wiped, fetching fresh data...');
+    console.log('Cache wiped, refetching fleet data...');
+    updateProgress('Fetching fleet data...');
 
-    // Now call refresh
-    await refreshAnalysis();
-
-  } catch (error) {
-    console.error('Wipe error:', error);
-    resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
-  } finally {
-    stopTimer(timerHandle);
-    setSidebarVisible(true);
-  }
-}
-
-export async function refreshAnalysis(): Promise<void> {
-  if (!currentProfileId) return;
-
-  let timerHandle = null;
-
-  const resultsDiv = document.getElementById('results');
-  const profileIcon = document.getElementById('profileIcon');
-  const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
-
-  hideCacheTooltipAndSidebar();
-
-  updateProgress('Refreshing fleet data...');
-  
-  timerHandle = startTimer(updateTimerInResults);
-
-  setCacheIconState('loading', 'Refreshing...');
-  setCacheButtonState('cacheRefreshBtn', true, '⏳ Refreshing...');
-
-  try {
-    // Fetch with refresh flag
-    console.log('Refreshing fleets for profile:', currentProfileId);
-    const fleetsResponse = await fetch('/api/fleets?refresh=true', {
+    // Refetch fleets from scratch (like analyzeFees does)
+    const fleetsResponse = await fetch('/api/fleets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profileId: currentProfileId })
@@ -332,33 +293,189 @@ export async function refreshAnalysis(): Promise<void> {
     const walletPubkey = fleetsData.walletAuthority;
     const fleets = fleetsData.fleets;
 
-    updateProgress(`Found ${fleets.length} fleets, collecting accounts...`);
+    updateProgress(`Found ${fleets.length} fleets, analyzing...`);
 
-    console.log('[refreshAnalysis] Fleets structure:', fleets.slice(0, 2));
-    const { accounts: uniqueFleetAccounts, names: fleetNames, rentalStatus: fleetRentalStatus } = buildFleetAccountsMap(fleets);
-    console.log('[refreshAnalysis] Fleet names:', fleetNames);
+    // Build fleet accounts like analyzeFees does
+    const allFleetAccounts: string[] = [];
+    const fleetNames: { [account: string]: string } = {};
+    const fleetRentalStatus: { [account: string]: boolean } = {};
 
-    updateProgress('Fetching fresh transaction data...');
+    fleets.forEach((f: any) => {
+      allFleetAccounts.push(f.data.fleetShips);
+      allFleetAccounts.push(f.key);
+      if (f.data.fuelTank) allFleetAccounts.push(f.data.fuelTank);
+      if (f.data.ammoBank) allFleetAccounts.push(f.data.ammoBank);
+      if (f.data.cargoHold) allFleetAccounts.push(f.data.cargoHold);
+      fleetNames[f.data.fleetShips] = f.callsign;
+      fleetNames[f.key] = f.callsign;
+      if (f.data.fuelTank) fleetNames[f.data.fuelTank] = f.callsign;
+      if (f.data.ammoBank) fleetNames[f.data.ammoBank] = f.callsign;
+      if (f.data.cargoHold) fleetNames[f.data.cargoHold] = f.callsign;
+      const initialRented = !!f.isRented;
+      fleetRentalStatus[f.data.fleetShips] = initialRented;
+      fleetRentalStatus[f.key] = initialRented;
+      if (f.data.fuelTank) fleetRentalStatus[f.data.fuelTank] = initialRented;
+      if (f.data.ammoBank) fleetRentalStatus[f.data.ammoBank] = initialRented;
+      if (f.data.cargoHold) fleetRentalStatus[f.data.cargoHold] = initialRented;
+    });
 
-    // Validate profileId before making request
-    if (!currentProfileId) {
-      throw new Error('Profile ID not set');
-    }
+    const uniqueFleetAccounts = [...new Set(allFleetAccounts)];
 
-    console.log('[refreshAnalysis] Sending request with profile:', currentProfileId.substring(0, 8) + '...');
+    updateProgress(`Analyzing ${fleets.length} fleet accounts...`);
 
-    // Use streaming endpoint with refresh flag
+    // Call streaming endpoint (like analyzeFees)
     const response = await fetch('/api/wallet-sage-fees-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      body: JSON.stringify({
         profileId: currentProfileId,
         fleetAccounts: uniqueFleetAccounts,
-        fleetNames: fleetNames,
-        fleetRentalStatus: fleetRentalStatus,
+        fleetNames,
+        fleetRentalStatus,
         hours: 24,
-          refresh: true,
-          enableSubAccountMapping: false
+        enableSubAccountMapping: false
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Streaming request failed');
+    }
+
+    const cacheHit = response.headers.get('X-Cache-Hit');
+    const cacheTimestamp = response.headers.get('X-Cache-Timestamp');
+
+    // Process SSE stream (like analyzeFees)
+    const finalData = await readSSEStream(response, {
+      onProgress: (data) => {
+        if (data.stage === 'signatures') {
+          updateProgress(`${data.message} (${data.processed}/${data.total})`);
+        } else if (data.stage === 'transactions') {
+          const msg = `Processing: ${data.processed}/${data.total} tx (${data.percentage}%)`;
+          updateProgress(msg);
+          if (data.feesByFleet && Object.keys(data.feesByFleet).length > 0) {
+            displayPartialResults(data, fleets, fleetRentalStatus);
+          }
+        }
+      },
+      onComplete: (data) => {
+        console.log('[wipeAndReload] Complete! Txs:', data.transactionCount24h);
+        const totalSigs = data.totalSignaturesFetched || 'N/A';
+        const processedTxs = data.transactionCount24h || 0;
+        updateProgress(`Completed: ${processedTxs}/${totalSigs} transactions`);
+      },
+      onError: null
+    });
+
+    console.log('[wipeAndReload] Stream ended. finalData present?', !!finalData);
+
+    // Build rented fleet names
+    const rentedFleetNames = new Set();
+    fleets.forEach((f: any) => {
+      const isRented = !!(fleetRentalStatus[f.key] || fleetRentalStatus[f.data.fleetShips]);
+      if (isRented) rentedFleetNames.add(f.callsign);
+    });
+
+    // Mark rented entries
+    Object.entries(finalData.feesByFleet || {}).forEach(([name, entry]: [string, any]) => {
+      const isRent = rentedFleetNames.has(String(name)) || rentedFleetNames.has(String(name).trim());
+      if (isRent) { entry.isRented = true; }
+    });
+
+    // Render full results
+    console.log('[wipeAndReload] Rendering final results...');
+    displayResults(finalData, fleetNames, rentedFleetNames);
+
+    // Update cache tooltip
+    updateCacheTooltip(cacheHit, cacheTimestamp);
+
+    setCacheButtonState('cacheWipeBtn', false, '🗑️ Wipe & Reload');
+    
+    // Show sidebar
+    setSidebarVisible(true);
+    const sidebarProfileId = document.getElementById('sidebarProfileId');
+    if (sidebarProfileId) {
+      sidebarProfileId.textContent = currentProfileId.substring(0, 6) + '...';
+    }
+
+    const sidebar = document.getElementById('sidebar');
+    const container = document.querySelector('.container');
+    if (sidebar) {
+      sidebar.style.display = 'flex';
+    }
+    if (container) container.classList.add('with-sidebar');
+
+    // Load detailed fleet breakdown for pie charts (async, non-blocking)
+    try {
+      const breakdownPayload = {
+        profileId: currentProfileId,
+        fleetAccounts: uniqueFleetAccounts,
+        fleetNames,
+        fleetRentalStatus,
+        enableSubAccountMapping: false
+      };
+      await fetch('/api/debug/fleet-breakdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(breakdownPayload)
+      });
+    } catch (e) {
+      console.warn('Fleet breakdown not available', e);
+    }
+
+  } catch (error) {
+    console.error('Wipe error:', error);
+    resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+  } finally {
+    stopTimer(timerHandle);
+    setSidebarVisible(true);
+    resetAllCacheButtons();
+    setSidebarVisible(true);
+  }
+}
+
+export async function refreshAnalysis(): Promise<void> {
+  if (!currentProfileId) return;
+
+  let timerHandle = null;
+
+  if (!lastAnalysisParams) {
+    alert('No previous analysis found. Please run "Analyze 24h" first.');
+    return;
+  }
+
+  const resultsDiv = document.getElementById('results');
+  const cacheRefreshBtn = document.getElementById('cacheRefreshBtn');
+
+  hideCacheTooltipAndSidebar();
+
+  updateProgress('Refreshing cache (incremental)...');
+  
+  timerHandle = startTimer(updateTimerInResults);
+
+  setCacheButtonState('cacheRefreshBtn', true, '⏳ Refreshing...');
+
+  try {
+    // Use saved parameters from last analysis
+    const { profileId, fleetAccounts, fleetNames, fleetRentalStatus, fleets } = lastAnalysisParams;
+
+    console.log('[refreshAnalysis] Refreshing with saved parameters for profile:', currentProfileId.substring(0, 8) + '...');
+    console.log('[refreshAnalysis] Using:', {
+      profileId: profileId.substring(0, 8) + '...',
+      fleetCount: fleetAccounts.length
+    });
+
+    // Call streaming endpoint with update=true flag (incremental analysis)
+    const response = await fetch('/api/wallet-sage-fees-stream?update=true', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profileId,
+        fleetAccounts,
+        fleetNames,
+        fleetRentalStatus,
+        hours: 24,
+        update: true,
+        enableSubAccountMapping: false
       })
     });
 
@@ -394,18 +511,10 @@ export async function refreshAnalysis(): Promise<void> {
 
     // Render full results with charts
     console.log('[refreshAnalysis] Rendering final results...');
-    displayResults(finalData, fleetNames, rentedFleetNames, fleets);
+    displayResults(finalData, fleetNames, rentedFleetNames);
 
     // Update cache tooltip
     updateCacheTooltip(cacheHit, cacheTimestamp);
-
-    setCacheIconState('fresh', 'Fresh data. Click to refresh');
-    if (profileIcon) {
-      profileIcon.onclick = (e) => {
-        e.stopPropagation();
-        refreshAnalysis();
-      };
-    }
 
     // Show sidebar again
     setSidebarVisible(true);

@@ -1,15 +1,15 @@
-import { TransactionInfo } from '../../examples/types.js';
+import { TransactionInfo } from './types.js';
 import { Connection, PublicKey } from '@solana/web3.js';
 import * as fs from 'fs';
-import { RpcPoolConnection } from '../../utils/rpc/pool-connection.js';
-import { resolveMints } from '../../utils/metaplex-metadata.js';
-import { nlog } from '../../utils/log-normalizer.js';
-import { excludeAccounts, MATERIALS, BATCH_SETTINGS, buildFleetMaps, filterFleetBuckets } from '../../config/wallet-fees-streaming-config.js';
-import { fetchWalletSignatures } from '../../services/fetch-wallet-signatures.js';
-import { classifyTx } from '../../decoders/streaming/tx-classifier.js';
-import { enrichCrafting } from '../../services/crafting-enricher.js';
-import { accumulate, finalize, pairCraftingTransactions } from '../../services/fees-aggregator.js';
-import { buildPartialResult, sendProgressUpdate } from '../../services/progress-reporter.js';
+import { RpcPoolConnection } from '../utils/rpc/pool-connection.js';
+import { resolveMints } from '../utils/metaplex-metadata.js';
+import { nlog } from '../utils/log-normalizer.js';
+import { excludeAccounts, MATERIALS, BATCH_SETTINGS, buildFleetMaps, filterFleetBuckets } from '../config/wallet-fees-streaming-config.js';
+import { fetchWalletSignatures } from '../services/fetch-wallet-signatures.js';
+import { classifyTx } from '../decoders/streaming/tx-classifier.js';
+import { enrichCrafting } from '../services/crafting-enricher.js';
+import { accumulate, finalize, pairCraftingTransactions } from '../services/fees-aggregator.js';
+import { buildPartialResult, sendProgressUpdate } from '../services/progress-reporter.js';
 
 export async function getWalletSageFeesDetailedStreaming(
   rpcEndpoint: string,
@@ -54,42 +54,8 @@ export async function getWalletSageFeesDetailedStreaming(
   // Gestione incrementale/cache
   let isIncrementalUpdate = !!(cachedData && lastProcessedSignature);
   if (refresh) isIncrementalUpdate = false; // Forza ricalcolo completo per refresh
-  
-  // Deep clone di feesByFleet e feesByOperation per evitare corruzioni durante incremental updates
-  let feesByFleet: any = {};
-  let feesByOperation: any = {};
-  if (isIncrementalUpdate && cachedData) {
-    // Deep clone feesByFleet
-    Object.entries(cachedData.feesByFleet || {}).forEach(([fleetKey, fleetData]: [string, any]) => {
-      feesByFleet[fleetKey] = {
-        totalFee: fleetData.totalFee || 0,
-        feePercentage: fleetData.feePercentage || 0,
-        totalOperations: fleetData.totalOperations || 0,
-        isRented: fleetData.isRented || false,
-        operations: {}
-      };
-      // Clone each operation entry
-      Object.entries(fleetData.operations || {}).forEach(([opKey, opStats]: [string, any]) => {
-        feesByFleet[fleetKey].operations[opKey] = {
-          count: Number.isInteger(opStats.count) ? opStats.count : 0,
-          totalFee: typeof opStats.totalFee === 'number' ? opStats.totalFee : 0,
-          avgFee: typeof opStats.avgFee === 'number' ? opStats.avgFee : 0,
-          percentageOfFleet: typeof opStats.percentageOfFleet === 'number' ? opStats.percentageOfFleet : 0,
-          details: Array.isArray(opStats.details) ? [...opStats.details] : []
-        };
-      });
-    });
-    // Deep clone feesByOperation
-    Object.entries(cachedData.feesByOperation || {}).forEach(([opKey, opStats]: [string, any]) => {
-      feesByOperation[opKey] = {
-        count: Number.isInteger(opStats.count) ? opStats.count : 0,
-        totalFee: typeof opStats.totalFee === 'number' ? opStats.totalFee : 0,
-        avgFee: typeof opStats.avgFee === 'number' ? opStats.avgFee : 0,
-        details: Array.isArray(opStats.details) ? [...opStats.details] : []
-      };
-    });
-  }
-  
+  let feesByFleet: any = isIncrementalUpdate && cachedData ? { ...cachedData.feesByFleet } : {};
+  let feesByOperation: any = isIncrementalUpdate && cachedData ? { ...cachedData.feesByOperation } : {};
   let totalFees24h = isIncrementalUpdate && cachedData ? (cachedData.totalFees24h || 0) : 0;
   let sageFees24h = isIncrementalUpdate && cachedData ? (cachedData.sageFees24h || 0) : 0;
   let unknownOperations = 0;
@@ -158,6 +124,26 @@ export async function getWalletSageFeesDetailedStreaming(
       // Accumulate
       accumulate(tx, meta, craftExtra, aggregatorState, fleetRentalStatus, fleetAccountNames);
     }
+
+    // Dopo aver processato il batch, aggiorna il totale operazioni per ogni flotta
+    Object.values(aggregatorState.feesByFleet).forEach(fleetData => {
+      const ops = Object.values((fleetData as any).operations) as any[];
+      (fleetData as any).totalOperations = ops.reduce((sum, op) => sum + (op.count || 0), 0);
+    });
+
+    // Aggiornamento percentuali
+    Object.keys(aggregatorState.feesByOperation).forEach(op => {
+      aggregatorState.feesByOperation[op].avgFee = aggregatorState.feesByOperation[op].totalFee / aggregatorState.feesByOperation[op].count;
+    });
+    Object.keys(aggregatorState.feesByFleet).forEach(fleet => {
+      aggregatorState.feesByFleet[fleet].feePercentage = aggregatorState.sageFees24h > 0 ? (aggregatorState.feesByFleet[fleet].totalFee / aggregatorState.sageFees24h) * 100 : 0;
+
+      Object.keys(aggregatorState.feesByFleet[fleet].operations).forEach(op => {
+        const opData = aggregatorState.feesByFleet[fleet].operations[op];
+        opData.avgFee = opData.totalFee / opData.count;
+        opData.percentageOfFleet = aggregatorState.feesByFleet[fleet].totalFee > 0 ? (opData.totalFee / aggregatorState.feesByFleet[fleet].totalFee) * 100 : 0;
+      });
+    });
 
     // Log sintetici per crafting details phase
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;

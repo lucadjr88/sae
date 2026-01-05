@@ -24,6 +24,14 @@ export function createFleetList(
   fleetNames: FleetNamesMap,
   rentedFleetNames: Set<string> = new Set()
 ): void {
+
+  // Step 1: Debug input payload (only once)
+  // eslint-disable-next-line no-console
+  console.debug('[fleet-breakdown] payload', {
+    feesByFleet: data.feesByFleet,
+    feesByOperation: data.feesByOperation
+  });
+
   const fleetListDiv = document.getElementById('fleetList') as HTMLDivElement | null;
   if (!fleetListDiv) {
     console.warn('[createFleetList] fleetList element not found');
@@ -51,6 +59,26 @@ export function createFleetList(
 
   // Filter out categories, keep only actual fleets
   const sortedFleets = (Object.entries(data.feesByFleet) as Array<[string, FleetFeeData]>)
+    .map(([fleetAccount, fleetData]) => {
+      // Normalize all operation stats for this fleet
+      const normalizedOps = {};
+      const totalCount = Math.max(1, Number(fleetData.totalOperations) || 0);
+      Object.entries(fleetData.operations || {}).forEach(([opName, op]) => {
+        const count = Number(op.count) || 0;
+        const totalFee = Number(op.totalFee) || 0;
+        const percentageOfFleet = (count / totalCount) * 100;
+        normalizedOps[opName] = {
+          ...op,
+          count,
+          totalFee,
+          percentageOfFleet
+        };
+      });
+      // Normalize fleet-level totals
+      const safeTotalFee = Number(fleetData.totalFee) || 0;
+      const safeTotalOps = Math.max(1, Number(fleetData.totalOperations) || 0);
+      return [fleetAccount, { ...fleetData, operations: normalizedOps, totalFee: safeTotalFee, totalOperations: safeTotalOps }];
+    })
     .sort((a, b) => {
       const aRented = !!(a[1].isRented || rentedLc.has((fleetNames[a[0]] || a[0] || '').toString().toLowerCase()));
       const bRented = !!(b[1].isRented || rentedLc.has((fleetNames[b[0]] || b[0] || '').toString().toLowerCase()));
@@ -106,8 +134,16 @@ export function createFleetList(
       if (!normalizedOpsMap[normName]) {
         normalizedOpsMap[normName] = { count: 0, totalFee: 0, avgFee: 0, percentageOfFleet: 0, details: [] };
       }
-      normalizedOpsMap[normName].count += stats.count;
-      normalizedOpsMap[normName].totalFee += stats.totalFee;
+      // Log raw stats to debug
+      if (stats.count === undefined || isNaN(stats.count)) {
+        console.warn(`[Fleet ${fleetAccount}] Operation ${opName} has invalid count:`, stats.count, 'raw stats:', stats);
+      }
+      // Validate numeric types to prevent NaN
+      const count = typeof stats.count === 'number' && !isNaN(stats.count) ? stats.count : 0;
+      const totalFee = typeof stats.totalFee === 'number' && !isNaN(stats.totalFee) ? stats.totalFee : 0;
+      
+      normalizedOpsMap[normName].count += count;
+      normalizedOpsMap[normName].totalFee += totalFee;
       if (stats.details && Array.isArray(stats.details)) {
         normalizedOpsMap[normName].details = normalizedOpsMap[normName].details.concat(stats.details);
       }
@@ -139,25 +175,7 @@ export function createFleetList(
         `;
       }
 
-      // Se l'operazione ha dettagli (es. crafting), mostrali sempre
-      if (stats.details && Array.isArray(stats.details) && stats.details.length > 0) {
-        const maxDetails = 50;
-        html += `
-          <tr>
-            <td colspan="5">
-              <div class="op-details" style="padding-top:6px;">
-                <table class="fleet-ops-table">
-                  <tbody>
-        `;
-        html += renderCraftingDetailsRows(stats.details, maxDetails);
-        html += `
-                  </tbody>
-                </table>
-              </div>
-            </td>
-          </tr>
-        `;
-      }
+      // NESSUNA visualizzazione dettagli per Fleet Breakdown (solo riga aggregata)
     });
 
     html += `
@@ -195,18 +213,23 @@ export function createOperationList(
       if (!operationFleetMap[normName]) {
         operationFleetMap[normName] = [];
       }
+      // Inline normalization
+      const count = Number(opStats.count) || 0;
+      const totalFee = Number(opStats.totalFee) || 0;
+      const totalCount = Math.max(1, Number(fleetData.totalOperations) || 0);
+      const percentageOfFleet = (count / totalCount) * 100;
       const existingFleetEntry = operationFleetMap[normName].find(e => e.fleetAccount === fleetAccount);
       if (existingFleetEntry) {
-        existingFleetEntry.count += opStats.count;
-        existingFleetEntry.totalFee += opStats.totalFee;
+        existingFleetEntry.count += count;
+        existingFleetEntry.totalFee += totalFee;
       } else {
         operationFleetMap[normName].push({
           fleetAccount,
           fleetName,
           isRented,
-          count: opStats.count,
-          totalFee: opStats.totalFee,
-          percentageOfFleet: opStats.percentageOfFleet
+          count,
+          totalFee,
+          percentageOfFleet
         });
       }
     });
@@ -370,18 +393,23 @@ export function createOtherOperationsList(
       if (!operationFleetMap[normName]) {
         operationFleetMap[normName] = [];
       }
+      // Inline normalization
+      const count = Number(opStats.count) || 0;
+      const totalFee = Number(opStats.totalFee) || 0;
+      const totalCount = Math.max(1, Number(fleetData.totalOperations) || 0);
+      const percentageOfFleet = (count / totalCount) * 100;
       const existingFleetEntry = operationFleetMap[normName].find(e => e.fleetAccount === fleetAccount);
       if (existingFleetEntry) {
-        existingFleetEntry.count += opStats.count;
-        existingFleetEntry.totalFee += opStats.totalFee;
+        existingFleetEntry.count += count;
+        existingFleetEntry.totalFee += totalFee;
       } else {
         operationFleetMap[normName].push({
           fleetAccount,
           fleetName,
           isRented,
-          count: opStats.count,
-          totalFee: opStats.totalFee,
-          percentageOfFleet: opStats.percentageOfFleet
+          count,
+          totalFee,
+          percentageOfFleet
         });
       }
     });

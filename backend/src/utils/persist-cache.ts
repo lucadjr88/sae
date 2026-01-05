@@ -8,19 +8,6 @@ import { cachePath } from './cache-path.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'cache');
 const DEFAULT_PROFILE_ID = 'default';
 
-// Simple mutex per profile
-const profileMutexes = new Map<string, Promise<any>>();
-
-async function withProfileMutex<T>(profileId: string, fn: () => Promise<T>): Promise<T> {
-  const key = profileId;
-  while (profileMutexes.has(key)) {
-    await profileMutexes.get(key);
-  }
-  const promise = fn().finally(() => profileMutexes.delete(key));
-  profileMutexes.set(key, promise);
-  return promise;
-}
-
 export { DEFAULT_PROFILE_ID };
 
 // Ensure the profile cache directory exists
@@ -48,13 +35,16 @@ async function ensureDir(dir: string) {
 }
 
 
-export async function getCache<T = any>(profileId: string, namespace: string, key: string): Promise<T | null> {
+export async function getCache<T = any>(profileId: string, namespace: string, key: string, options?: { skipLegacy?: boolean }): Promise<T | null> {
   const nsDir = cachePath(profileId).file(namespace);
   const file = getCacheFilename(nsDir, key);
   try {
     const buf = await fs.readFile(file, 'utf8');
     return JSON.parse(buf) as T;
   } catch {
+    // Skip legacy migration check during bulk operations
+    if (options?.skipLegacy) return null;
+    
     // Check for legacy flat structure
     if (profileId === DEFAULT_PROFILE_ID) {
       const legacyNsDir = path.join(ROOT, namespace);
@@ -75,24 +65,31 @@ export async function getCache<T = any>(profileId: string, namespace: string, ke
 }
 
 
-export async function setCache(profileId: string, namespace: string, key: string, data: any): Promise<void> {
-  return withProfileMutex(profileId, async () => {
-    const nsDir = cachePath(profileId).file(namespace);
-    await ensureDir(nsDir);
-    const file = getCacheFilename(nsDir, key);
-    const payload = {
-      savedAt: Date.now(),
-      data
-    };
+export async function setCache(profileId: string, namespace: string, key: string, data: any, options?: { atomic?: boolean }): Promise<void> {
+  const nsDir = cachePath(profileId).file(namespace);
+  await ensureDir(nsDir);
+  const file = getCacheFilename(nsDir, key);
+  const payload = {
+    savedAt: Date.now(),
+    data
+  };
+  
+  // Skip atomic write for bulk operations (default: atomic=false for performance)
+  const useAtomic = options?.atomic ?? false;
+  
+  if (useAtomic) {
     // Atomic write: write to tmp then rename
     const tmpFile = file + '.tmp';
     await fs.writeFile(tmpFile, JSON.stringify(payload, null, 2), 'utf8');
     await fs.rename(tmpFile, file);
-  });
+  } else {
+    // Direct write for bulk operations (faster but not atomic)
+    await fs.writeFile(file, JSON.stringify(payload, null, 2), 'utf8');
+  }
 }
 
-export async function getCacheDataOnly<T = any>(profileId: string, namespace: string, key: string): Promise<T | null> {
-  const raw = await getCache(profileId, namespace, key);
+export async function getCacheDataOnly<T = any>(profileId: string, namespace: string, key: string, options?: { skipLegacy?: boolean }): Promise<T | null> {
+  const raw = await getCache(profileId, namespace, key, options);
   // If caller expects only the data field
   // Accept both legacy plain-data and wrapped {savedAt,data}
   if (!raw) return null;

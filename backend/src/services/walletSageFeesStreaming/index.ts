@@ -5,6 +5,7 @@ import type { WalletSageFeesStreamingServices, StreamingOptions, StreamingResult
 import { parseTransaction } from './lib/parsers.js';
 import { buildAccountToFleetMap } from './lib/fleet-association.js';
 import { extractFleetFromInstruction } from './lib/extract-fleet-official.js';
+import { initializeFleetBuckets, ensureFleetBucket } from './lib/initialize-fleet-buckets.js';
 import { RpcPoolAdapterWithFetch } from '../RpcPoolAdapter.js';
 
 // Orchestrator reale: fetch, parse, aggrega, metriche base
@@ -67,38 +68,41 @@ export async function getWalletSageFeesDetailedStreaming(
 
   const feesByFleet: Record<string, any> = {};
   if (Array.isArray(fleetAccounts) && fleetAccounts.length > 0) {
-    const accountToFleetMap = opts.enableSubAccountMapping ? buildAccountToFleetMap(fleetAccounts) : null;
+    // ALWAYS build mapping if fleets provided (OLD behavior restored)
+    const accountToFleetMap = buildAccountToFleetMap(fleetAccounts, profileId);
 
     if (logger) {
       logger.log(`[DEBUG] fleetAccounts received: ${JSON.stringify(fleetAccounts)}`);
       logger.log(`[DEBUG] accountToFleetMap size: ${accountToFleetMap?.size || 0}`);
     }
 
-    // Pre-initialize fleet slots from accountToFleetMap (only if accountToFleetMap is not empty)
-    for (const f of fleetAccounts) {
-      if (accountToFleetMap?.has(f)) {
-        feesByFleet[f] = {
-          totalFee: 0,
-          feePercentage: 0,
-          totalOperations: 0,
-          isRented: !!fleetRentalStatus[f],
-          operations: {},
-          fleetName: (fleetNames && fleetNames[f]) ? fleetNames[f] : f
-        };
-      }
-    }
+    // PRE-INIT: Only fleets in accountToFleetMap (OLD logic)
+    // Fleets without cached data will NOT be pre-initialized
+    Object.assign(feesByFleet, initializeFleetBuckets({
+      fleetAccounts,
+      fleetNames,
+      fleetRentalStatus,
+      accountToFleetMap,
+      existingBuckets: feesByFleet
+    }));
 
     for (const tx of items) {
       const fleetsMatched = new Set<string>();
       const officialFleet = extractFleetFromInstruction((tx as any).raw || tx);
       if (officialFleet && fleetAccounts.includes(officialFleet)) {
         fleetsMatched.add(officialFleet);
+        // ON-DEMAND FALLBACK: Ensure fleet bucket exists
+        ensureFleetBucket(feesByFleet, officialFleet, fleetNames, fleetRentalStatus);
       }
       if (fleetsMatched.size === 0 && Array.isArray(tx.accountKeys)) {
         for (const k of tx.accountKeys) {
           if (accountToFleetMap?.has(k)) {
             const fleetKey = accountToFleetMap.get(k);
-            if (fleetKey) fleetsMatched.add(fleetKey);
+            if (fleetKey) {
+              fleetsMatched.add(fleetKey);
+              // ON-DEMAND FALLBACK: Ensure fleet bucket exists (sub-account path)
+              ensureFleetBucket(feesByFleet, fleetKey, fleetNames, fleetRentalStatus);
+            }
           }
         }
       }
@@ -132,16 +136,10 @@ export async function getWalletSageFeesDetailedStreaming(
         }
       } else {
         for (const fleetKey of fleetsMatched) {
-          if (!feesByFleet[fleetKey]) {
-            feesByFleet[fleetKey] = {
-              totalFee: 0,
-              feePercentage: 0,
-              totalOperations: 0,
-              isRented: !!fleetRentalStatus[fleetKey],
-              operations: {},
-              fleetName: (fleetNames && fleetNames[fleetKey]) ? fleetNames[fleetKey] : fleetKey
-            };
-          }
+          // BELT-AND-SUSPENDERS: Double-check bucket exists before updating
+          // (Should already exist from initialization or earlier on-demand creation)
+          ensureFleetBucket(feesByFleet, fleetKey, fleetNames, fleetRentalStatus);
+          
           const target = feesByFleet[fleetKey];
           target.totalFee += (tx.fee || 0);
           target.totalOperations = (target.totalOperations || 0) + 1;
@@ -182,6 +180,15 @@ export async function getWalletSageFeesDetailedStreaming(
       operations,
       fleetName: 'All Fleets'
     };
+  }
+
+  // POST-PROCESSING: Only validate existing buckets (no emergency creation)
+  // OLD behavior: If fleet missing from cache → it won't appear in breakdown
+  if (logger && Object.keys(feesByFleet).length > 0) {
+    const fleetCount = Object.keys(feesByFleet).filter(k => 
+      k !== 'Other Operations' && k !== 'Crafting Operations' && k !== 'All Fleets'
+    ).length;
+    logger.log(`[walletSageFeesStreaming] ✅ ${fleetCount} fleets in breakdown (from cache)`);
   }
 
   Object.values(feesByFleet).forEach((f: any) => { f.feePercentage = totalFees > 0 ? (f.totalFee / totalFees) : 0; });

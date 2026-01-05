@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { getCacheWithTimestamp, setCache, ensureProfileCacheDir } from '../utils/persist-cache.js';
 import { nlog } from '../utils/log-normalizer.js';
-import { RPC_ENDPOINT, RPC_WEBSOCKET } from '../config/serverConfig.js';
+import { getWalletSageFeesDetailedStreaming } from '../services/walletSageFeesStreaming/index.js';
+import { RpcPoolAdapter } from '../services/RpcPoolAdapter.js';
 
 export async function walletSageFeesStreamHandler(req: Request, res: Response) {
   const { profileId, fleetAccounts, fleetNames, fleetRentalStatus, hours, debug, enableSubAccountMapping } = req.body;
@@ -23,23 +24,13 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
   console.log(`[stream] Cache key hash: ${cacheKey.substring(0, 16)}...`);
   console.log(`[stream] Request for profile ${profileId.substring(0, 8)}... refresh=${refresh}, update=${update}`);
 
-  let cachedData = null;
-  let lastProcessedSignature = null;
   if (update) {
     const cached = await getCacheWithTimestamp<any>(profileId, 'wallet-fees-detailed', cacheKey);
     if (cached) {
       const cacheAgeMs = Date.now() - cached.savedAt;
-      const { getWalletSageFeesDetailedStreaming } = await import('../services/wallet/feesStreaming.js');
       const sixHoursMs = 6 * 60 * 60 * 1000;
       if (cacheAgeMs < sixHoursMs) {
-        console.log(`[stream] Update mode: cache is fresh (${(cacheAgeMs / 60000).toFixed(1)}min), will fetch only new transactions`);
-        cachedData = cached.data;
-        if (cachedData.allTransactions && cachedData.allTransactions.length > 0) {
-          lastProcessedSignature = cachedData.allTransactions[0].signature;
-          console.log(`[stream] Last processed signature: ${lastProcessedSignature.substring(0, 8)}...`);
-        } else {
-          console.log('[stream] Legacy cache detected (missing allTransactions). Performing full fetch this time to upgrade format.');
-        }
+        console.log(`[stream] Update mode: cache is fresh (${(cacheAgeMs / 60000).toFixed(1)}min), serving cached while recomputing full dataset`);
       } else {
         console.log(`[stream] Update mode: cache too old (${(cacheAgeMs / 3600000).toFixed(1)}h), doing full refresh`);
       }
@@ -100,44 +91,39 @@ export async function walletSageFeesStreamHandler(req: Request, res: Response) {
     }
   };
 
-  const saveProgress = async (partialResult: any) => {
-    try {
-      await setCache(profileId, 'wallet-fees-detailed', cacheKey, partialResult);
-      nlog(`[stream] 📦 Incremental cache saved (${partialResult.transactionCount24h || 0} tx processed)`);
-    } catch (err) {
-      console.error('[stream] Failed to save incremental cache:', err);
-    }
-  };
-
   try {
-    const { getWalletSageFeesDetailedStreaming } = await import('../services/wallet/feesStreaming.js');
-    const finalResult = await getWalletSageFeesDetailedStreaming(
-      RPC_ENDPOINT,
-      RPC_WEBSOCKET,
-      profileId,
-      fleetAccounts || [],
-      fleetNames || {},
-      fleetRentalStatus || {},
-      hours || 24,
-      !!enableSubAccountMapping,
-      sendUpdate,
-      saveProgress,
-      cachedData,
-      lastProcessedSignature,
-      refresh
-    );
-    console.log(`[stream] 💾 Saving to cache for wallet ${profileId.substring(0, 8)}...`);
-    if (finalResult.totalSignaturesFetched > 0) {
-      await setCache(profileId, 'wallet-fees-detailed', cacheKey, finalResult);
-      console.log(`[stream] ✅ Cache saved successfully`);
-    } else {
-      console.log(`[stream] ❌ Not saving cache (0 signatures fetched, likely rate limited)`);
+    const rpcPool = new RpcPoolAdapter();
+    const services = { rpcPool, logger: console } as any;
+
+    // Send minimal progress notification
+    if (!debugJson) {
+      sendUpdate({ type: 'progress', stage: 'transactions', processed: 0, total: 0 });
     }
-    await new Promise(resolve => setTimeout(resolve, 100));
-    if (debugJson && lastResult) {
+
+    const finalResult = await getWalletSageFeesDetailedStreaming(services, profileId, {
+      fleetAccounts: fleetAccounts || [],
+      fleetNames: fleetNames || {},
+      fleetRentalStatus: fleetRentalStatus || {},
+      enableSubAccountMapping: !!enableSubAccountMapping,
+      hours: hours || 24,
+      limit: 3000,
+    });
+
+    const payload = { type: 'complete', ...finalResult, fromCache: false };
+
+    console.log(`[stream] 💾 Saving to cache for wallet ${profileId.substring(0, 8)}...`);
+    try {
+      await setCache(profileId, 'wallet-fees-detailed', cacheKey, payload);
+      console.log(`[stream] ✅ Cache saved successfully`);
+    } catch (err) {
+      console.error('[stream] Failed to save cache:', err);
+    }
+
+    if (debugJson) {
       res.setHeader('Content-Type', 'application/json');
-      res.json(lastResult);
+      res.json(payload);
     } else {
+      sendUpdate(payload);
       res.end();
     }
   } catch (err: any) {

@@ -31,6 +31,7 @@ export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: stri
 	const cacheTooltipStatus = document.getElementById('cacheTooltipStatus');
 	const cacheTooltipAge = document.getElementById('cacheTooltipAge');
 	if (profileIcon && cacheTooltip) {
+		cacheTooltip.style.display = '';
 		profileIcon.classList.remove('cache-fresh', 'cache-stale');
 		profileIcon.title = '';
 		profileIcon.style.opacity = '1';

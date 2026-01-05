@@ -28,10 +28,19 @@ export function displayPartialResults(update: PartialUpdate, fleets: FleetMeta[]
     });
   } catch {}
 
-  // Mark rented fleets in the partial data
+  // Mark rented fleets in the partial data and validate numeric types
   Object.entries(update.feesByFleet || {}).forEach(([name, entry]) => {
     if (rentedFleetNames.has(String(name))) {
       entry.isRented = true;
+    }
+    // Validate numeric fields to prevent NaN propagation
+    entry.totalFee = typeof entry.totalFee === 'number' && !isNaN(entry.totalFee) ? entry.totalFee : 0;
+    entry.totalOperations = typeof entry.totalOperations === 'number' && !isNaN(entry.totalOperations) ? entry.totalOperations : 0;
+    if (entry.operations) {
+      Object.entries(entry.operations).forEach(([opKey, opStats]) => {
+        opStats.count = typeof opStats.count === 'number' && !isNaN(opStats.count) ? opStats.count : 0;
+        opStats.totalFee = typeof opStats.totalFee === 'number' && !isNaN(opStats.totalFee) ? opStats.totalFee : 0;
+      });
     }
   });
 
@@ -100,8 +109,28 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
   const feesByOperation = data.feesByOperation ?? {};
   const txs = (data.transactions?.length ? data.transactions : data.allTransactions) ?? [];
 
+  // Validate numeric types in feesByFleet to prevent NaN
+  Object.entries(feesByFleet).forEach(([name, entry]) => {
+    entry.totalFee = typeof entry.totalFee === 'number' && !isNaN(entry.totalFee) ? entry.totalFee : 0;
+    entry.totalOperations = typeof entry.totalOperations === 'number' && !isNaN(entry.totalOperations) ? entry.totalOperations : 0;
+    if (entry.operations) {
+      Object.entries(entry.operations).forEach(([opKey, opStats]) => {
+        opStats.count = typeof opStats.count === 'number' && !isNaN(opStats.count) ? opStats.count : 0;
+        opStats.totalFee = typeof opStats.totalFee === 'number' && !isNaN(opStats.totalFee) ? opStats.totalFee : 0;
+      });
+    }
+  });
+
   // Prepare data for charts
   // Include all fleets, even those with 0 fees
+  // Step 1: Debug input payload (only once)
+  // eslint-disable-next-line no-console
+  console.debug('[fleet-breakdown] payload', {
+    feesByFleet,
+    feesByOperation,
+    completeFeesByFleet: feesByFleet // initial state
+  });
+  // Step 4: Normalize completeFeesByFleet values
   const completeFeesByFleet: Record<string, FleetFeeEntry> = { ...feesByFleet };
   fleets.forEach(f => {
     const aliases = [f.key, f.data?.fleetShips].filter(Boolean) as string[];
@@ -118,6 +147,30 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
     });
   });
 
+  // Coerce all values to numbers and recalc percentageOfFleet
+  Object.values(completeFeesByFleet).forEach(fleet => {
+    fleet.totalFee = Number(fleet.totalFee) || 0;
+    fleet.totalOperations = Number(fleet.totalOperations) || 0;
+    if (fleet.operations) {
+      Object.values(fleet.operations).forEach(op => {
+        op.count = Number(op.count) || 0;
+        op.totalFee = Number(op.totalFee) || 0;
+        // percentageOfFleet will be recalculated below
+      });
+    }
+  });
+
+  // Calculate fleetTotalCount for percentage
+  const fleetTotalCount = Math.max(1, Object.values(completeFeesByFleet).reduce((sum, fleet) => sum + (fleet.totalOperations || 0), 0));
+  Object.values(completeFeesByFleet).forEach(fleet => {
+    fleet.percentageOfFleet = (fleet.totalOperations / fleetTotalCount) * 100;
+    if (fleet.operations) {
+      Object.values(fleet.operations).forEach(op => {
+        op.percentageOfFleet = (op.count / Math.max(1, fleet.totalOperations)) * 100;
+      });
+    }
+  });
+
   const sortedFleets = Object.entries(completeFeesByFleet)
     .sort((a, b) => b[1].totalFee - a[1].totalFee)
     .slice(0, 5); // Top 5 fleets
@@ -129,8 +182,16 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
     if (!normalizedFeesByOperation[normName]) {
       normalizedFeesByOperation[normName] = { totalFee: 0, count: 0 };
     }
-    normalizedFeesByOperation[normName].totalFee += stats.totalFee;
-    normalizedFeesByOperation[normName].count += stats.count;
+    // Validate numeric types during aggregation
+    const count = Number(stats.count) || 0;
+    const totalFee = Number(stats.totalFee) || 0;
+    normalizedFeesByOperation[normName].totalFee += totalFee;
+    normalizedFeesByOperation[normName].count += count;
+  });
+
+  // Recalculate operation percentages relative to fleetTotalCount
+  Object.values(normalizedFeesByOperation).forEach(op => {
+    op.percentageOfFleet = (op.count / fleetTotalCount) * 100;
   });
 
   // Build sorted operation entries and ensure crafting-related categories
