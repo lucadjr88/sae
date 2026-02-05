@@ -14,6 +14,13 @@ const __dirname = path.dirname(__filename);
 // Serve frontend: use dist/ in production, src/ in development
 const isDev = process.argv.includes('tsx');
 const frontendDir = isDev ? 'src' : 'dist';
-router.use('/', express.static(path.join(__dirname, `../../../frontend/${frontendDir}`)));
+const frontendPath = path.join(__dirname, `../../../frontend/${frontendDir}`);
+
+router.use('/', express.static(frontendPath));
+
+// Fallback: serve index.html for all unmatched routes (SPA support)
+router.get('*', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'index.html'));
+});
 
 export default router;
