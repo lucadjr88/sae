@@ -1,0 +1,296 @@
+.fleet-item {
+  background: #13151f;
+  border: 1px solid #1e222e;
+  margin-bottom: 2px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.fleet-item:hover {
+  background: #16182280;
+}
+
+.fleet-header {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 12px;
+  padding: 8px 12px;
+  align-items: center;
+  border-bottom: 1px solid transparent;
+  font-size: 11px;
+}
+
+.fleet-header .fleet-name {
+  font-weight: 500;
+  color: #e0e6ed;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.fleet-header .rented-name {
+  color: #fbbf24 !important;
+  font-weight: 800;
+}
+
+.fleet-header .fleet-ops {
+  text-align: right;
+  color: #7a8ba0;
+  white-space: nowrap;
+  font-size: 10px;
+  min-width: 60px;
+}
+
+.fleet-header .fleet-pct {
+  text-align: right;
+  color: #7a8ba0;
+  white-space: nowrap;
+  min-width: 50px;
+}
+
+.fleet-header .fleet-sol {
+  text-align: right;
+  color: #34d399;
+  font-weight: 500;
+  font-family: 'Roboto Mono', monospace;
+  white-space: nowrap;
+  min-width: 100px;
+}
+
+.fleet-details {
+  display: none;
+  border-top: 1px solid #1e222e;
+  padding: 6px 8px;
+  background: #0f1119;
+}
+
+.fleet-item.expanded .fleet-details {
+  display: block;
+}
+
+.fleet-item.expanded {
+  background: #16182280;
+  border-color: #2d3748;
+}
+
+.fleet-ops-table {
+  width: 100%;
+  font-size: 10px;
+}
+
+.fleet-ops-table td {
+  padding: 2px 4px;
+  color: #b8c0cc;
+}
+
+.fleet-ops-table thead th {
+  padding: 4px 6px;
+  font-size: 10px;
+  color: #9aa6b2;
+  text-align: left;
+}
+
+/* Crafting details table with fixed column widths */
+.crafting-details-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.crafting-details-table th:nth-child(1),
+.crafting-details-table td:nth-child(1) {
+  width: 100px;
+}
+
+.crafting-details-table th:nth-child(2),
+.crafting-details-table td:nth-child(2) {
+  width: 35%;
+  text-align: left;
+  vertical-align: top;
+  padding-left: 8px;
+}
+
+.crafting-details-table th:nth-child(3),
+.crafting-details-table td:nth-child(3) {
+  width: 35%;
+  text-align: left;
+  vertical-align: top;
+  padding-left: 8px;
+}
+
+.crafting-details-table th:nth-child(4),
+.crafting-details-table td:nth-child(4) {
+  width: 100px;
+  text-align: right;
+}
+
+.crafting-details-table th:nth-child(5),
+.crafting-details-table td:nth-child(5) {
+  width: 100px;
+  text-align: right;
+}
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.detail-table thead th {
+  padding: 4px 6px;
+  font-size: 10px;
+  color: #9aa6b2;
+}
+.detail-table td {
+  padding: 4px 6px;
+  border-top: 1px solid #12131a;
+  color: #c7d0da;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+}
+.detail-table td a { color: #60a5fa; text-decoration: none; }
+.detail-table td a:hover { text-decoration: underline; }
+
+.crafting-detail-section {
+  background: rgba(26, 31, 46, 0.5);
+  border-left: 3px solid #34d399;
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 2px;
+  font-size: 11px;
+}
+
+.crafting-detail-section.material {
+  border-left-color: #34d399;
+}
+
+.crafting-detail-section.quantity {
+  border-left-color: #60a5fa;
+}
+
+.crafting-detail-section.recipe {
+  border-left-color: #f59e0b;
+}
+
+.crafting-detail-section.process {
+  border-left-color: #a78bfa;
+}
+
+.crafting-detail-section.accounts {
+  border-left-color: #ec4899;
+}
+
+.crafting-detail-label {
+  color: #9aa6b2;
+  font-weight: 600;
+  margin-bottom: 3px;
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.crafting-detail-value {
+  color: #e0e6ed;
+  font-family: 'Roboto Mono', monospace;
+  word-break: break-word;
+}
+
+.fleet-ops-table td:first-child {
+  color: #b8c0cc;
+  text-align: left;
+}
+
+.fleet-ops-table td:nth-child(2) {
+  text-align: right;
+  color: #7a8ba0;
+}
+
+.fleet-ops-table td:nth-child(3) {
+  text-align: right;
+  color: #34d399;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.fleet-ops-table td:nth-child(4) {
+  text-align: right;
+  color: #7a8ba0;
+}
+
+.fleet-ops-table td:nth-child(5) {
+  text-align: right;
+  color: #7a8ba0;
+}
+
+table {
+  width: 100%;
+  background: #13151f;
+  border: 1px solid #1e222e;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+thead {
+  background: #0f1119;
+  border-bottom: 1px solid #1e222e;
+}
+
+th {
+  padding: 6px 10px;
+  text-align: left;
+  color: #7a8ba0;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+td {
+  padding: 6px 10px;
+  border-top: 1px solid #1a1d28;
+}
+
+tbody tr:hover {
+  background: #16182280;
+}
+
+.fee-value {
+  color: #34d399;
+  font-weight: 500;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.operation-list {
+  font-size: 11px;
+  line-height: 1.3;
+  color: #7a8ba0;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.operation-list:last-child {
+  margin-bottom: 60px;
+}
+
+.section-title {
+  color: #e0e6ed;
+  font-size: 13px;
+  font-weight: 500;
+  margin: 16px 0 8px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1e222e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.section-title.other-ops {
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.error {
+  background: #1f1315;
+  border: 1px solid #3d1f23;
+  padding: 10px 12px;
+  color: #ef4444;
+  margin: 12px 0;
+  font-size: 12px;
+}
+
+th.num, td.num { text-align: right; }

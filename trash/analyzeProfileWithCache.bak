@@ -1,0 +1,11 @@
+import { setCache, getCache } from '../utils/cache';
+import { fetchAndNormalizeFleets } from './fleetOrchestrator';
+
+export async function analyzeProfileWithCache(profileId: string, cutoffMs?: number) {
+  const cacheKey = profileId;
+  const cached = await getCache('analyze', cacheKey, profileId);
+  if (cached && cached.data) return cached.data;
+  const result = await fetchAndNormalizeFleets(profileId, cutoffMs);
+  await setCache('analyze', cacheKey, result, profileId);
+  return result;
+}
