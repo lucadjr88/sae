@@ -101,21 +101,27 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
   const txs = (data.transactions?.length ? data.transactions : data.allTransactions) ?? [];
 
   // Prepare data for charts
-  // Include all fleets, even those with 0 fees
+  // Include all fleets, even those with 0 fees (avoid duplicate display names)
   const completeFeesByFleet: Record<string, FleetFeeEntry> = { ...feesByFleet };
+  const usedDisplayNames = new Set(
+    Object.keys(completeFeesByFleet).map(k => (fleetNames[k] || k || '').toString().toLowerCase())
+  );
   fleets.forEach(f => {
     const aliases = [f.key, f.data?.fleetShips].filter(Boolean) as string[];
-    aliases.forEach(name => {
-      if (!completeFeesByFleet[name]) {
-        completeFeesByFleet[name] = {
-          totalFee: 0,
-          feePercentage: 0,
-          totalOperations: 0,
-          isRented: f.isRented,
-          operations: {}
-        };
-      }
-    });
+    const aliasDisplayNames = aliases.map(k => (fleetNames[k] || k || '').toString().toLowerCase());
+    if (aliasDisplayNames.some(n => usedDisplayNames.has(n))) return;
+
+    const keyToAdd = aliases.find(k => !completeFeesByFleet[k]) || aliases[0];
+    if (!keyToAdd) return;
+
+    completeFeesByFleet[keyToAdd] = {
+      totalFee: 0,
+      feePercentage: 0,
+      totalOperations: 0,
+      isRented: f.isRented,
+      operations: {}
+    };
+    usedDisplayNames.add((fleetNames[keyToAdd] || keyToAdd || '').toString().toLowerCase());
   });
 
   const sortedFleets = Object.entries(completeFeesByFleet)

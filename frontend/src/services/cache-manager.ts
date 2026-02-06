@@ -257,6 +257,7 @@ export async function wipeAndReload(): Promise<void> {
 
   updateProgress('Wiping cache and reloading...');
 
+  setAnalysisStartTime(Date.now());
   timerHandle = startTimer(updateTimerInResults);
 
   setCacheIconState('loading', 'Wiping cache...');
