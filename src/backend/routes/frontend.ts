@@ -19,7 +19,7 @@ const frontendPath = path.join(__dirname, `../../../frontend/${frontendDir}`);
 router.use('/', express.static(frontendPath));
 
 // Fallback: serve index.html for all unmatched routes (SPA support)
-router.get('*', (req, res) => {
+router.use((req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
