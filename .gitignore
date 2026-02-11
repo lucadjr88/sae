@@ -1,0 +1,13 @@
+node_modules/
+dist/
+cache/
+log/
+*.log
+.DS_Store
+.env
+.env.local
+docs/personal_ids.md
+decoder/player-profile-decoder/target/
+frontend/dist/
+node_modules
+trash/

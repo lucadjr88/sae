@@ -1,0 +1,30 @@
+{
+  "name": "sae-backend",
+  "version": "1.0.0",
+  "main": "dist/app.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && node scripts/add-js-extensions.cjs && cd frontend && npm run build && cd ..",
+    "build:backend": "tsc && node scripts/add-js-extensions.cjs",
+    "build:frontend": "cd frontend && npm run build && cd ..",
+    "build:watch": "tsc --watch",
+    "dev": "npx tsx src/app.ts",
+    "start": "node dist/app.js",
+    "test": "npx tsx src/utils/rpc/test-rpc-pool-manager.ts"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/supertest": "^6.0.3",
+    "jest": "^30.2.0",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.6"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "@types/express": "^5.0.6",
+    "bs58": "^6.0.0",
+    "express": "^5.2.1",
+    "tsx": "^4.21.0"
+  },
+  "postinstall": "cd frontend && npm install"
+}

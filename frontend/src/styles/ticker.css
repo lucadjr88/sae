@@ -1,0 +1,12 @@
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+#price-ticker-content {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  will-change: transform;
+  animation: ticker-scroll 999s linear infinite;
+  opacity: 1 !important;
+}
