@@ -1,0 +1,30 @@
+[package]
+name = "carbon-player-profile-decoder"
+version = "0.10.0"
+edition = "2024"
+description = "Rust decoder for Star Atlas Player Profile program on Solana"
+license = "Apache-2.0"
+repository = "https://github.com/staratlasmeta/star-atlas-decoders"
+homepage = "https://github.com/staratlasmeta/star-atlas-decoders"
+readme = "README.md"
+keywords = ["solana", "star-atlas", "decoder"]
+categories = ["encoding"]
+rust-version = "1.85"
+
+[lib]
+crate-type = ["rlib"]
+
+
+[dependencies]
+bitflags = "2.6"
+carbon-core = "0.10.0"
+carbon-proc-macros = "0.10.0"
+carbon-macros = "0.10.0"
+solana-account = "2.2.1"
+solana-instruction = { version = "2.3.0", default-features = false }
+solana-pubkey = { version = "2.4.0", features = ["borsh", "serde", "bytemuck"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+solana-client = "2.0"
+solana-sdk = "2.0"
+

@@ -1,0 +1,137 @@
+.hero {
+  text-align: center;
+  margin: 40px 0 80px 0;
+}
+
+.hero-title {
+  color: #f0f4f8;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6), 0 0 20px rgba(255,255,255,0.15);
+}
+
+.hero-subtitle {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-top: 6px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.chart-card {
+  background: #13151f;
+  border: 1px solid #1e222e;
+  padding: 8px;
+}
+
+.chart-title {
+  font-size: 9px;
+  color: #7a8ba0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.chart-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pie-chart {
+  width: 120px;
+  height: 120px;
+  margin: 0 auto;
+  flex-shrink: 0;
+}
+
+.chart-legend {
+  flex: 1;
+  font-size: 10px;
+}
+
+.chart-legend table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  background: transparent;
+  border: none;
+}
+
+.chart-legend td {
+  padding: 3px 4px;
+  border: none;
+}
+
+.chart-legend td:nth-child(1) {
+  width: 8px;
+  padding-right: 6px;
+}
+
+.chart-legend td:nth-child(2) {
+  color: #b8c0cc;
+  white-space: nowrap;
+}
+
+.chart-legend td:nth-child(3) {
+  text-align: right;
+  color: #7a8ba0;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.chart-legend td:nth-child(4) {
+  text-align: right;
+  color: #7a8ba0;
+  white-space: nowrap;
+  min-width: 40px;
+}
+
+.chart-legend td:nth-child(5) {
+  text-align: right;
+  color: #34d399;
+  font-family: 'Roboto Mono', monospace;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stat-card {
+  background: #13151f;
+  border: 1px solid #1e222e;
+  padding: 8px 10px;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: #7a8ba0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e0e6ed;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.stat-value.highlight { color: #34d399; }
