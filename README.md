@@ -60,10 +60,8 @@ npm run build
 ```bash
 # Metodo consigliato (con logging completo)
 pkill -9 node
-cd ~/Scaricati/sae
-rm -r log
-rm -r cache
-rm -r dist
+cd <project_root>
+rm -rf log cache dist
 sleep 1
 npm run build && mkdir -p log && nohup npm run dev > log/server-$(date +%Y%m%d-%H%M%S).log 2>&1 &
 ```
