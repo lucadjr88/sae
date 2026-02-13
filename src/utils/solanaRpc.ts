@@ -57,27 +57,31 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
       while (page < MAX_PAGES) {
         page++;
         let pageSigs: any[] = [];
-        const maxSignatureEndpointAttempts = Math.max(1, endpoints.length);
+        const maxSignatureEndpointAttempts = Math.max(3, Math.round(endpoints.length * 1.5)); // aggr: più tentativi
+        let last429Delay = 0;
         for (let attemptEp = 0; attemptEp < maxSignatureEndpointAttempts; attemptEp++) {
           try {
-            const pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 2000 });
+            const pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 3000, allowStale: attemptEp > 2 });
             const { connection, endpoint, release } = pick;
             const start = Date.now();
             try {
               pageSigs = await connection.getSignaturesForAddress(address, { limit: 1000, before });
               release({ success: true, latencyMs: Date.now() - start });
               console.log(`[fetchWalletTransactions] wallet=${pubkey} page=${page} endpoint=${endpoint.url} signaturesTrovate=${pageSigs.length}`);
+              last429Delay = 0; // reset se successo
               break;
             } catch (e: any) {
               const is429 = e && (e.status === 429 || (e.message && String(e.message).includes('429')));
               release({ success: false, errorType: is429 ? '429' : undefined });
               sigErr = e;
               if (is429) {
-                const delay = Math.min(2000 * Math.pow(2, attemptEp), 30000); // escalation con cap 30s
-                const jitter = Math.floor(Math.random() * 1000);
-                await new Promise(r => setTimeout(r, delay + jitter));
+                // 429: sleep progressivo + forza endpoint diverso su retry
+                last429Delay = Math.min(5000 * Math.pow(2, Math.floor(attemptEp / 2)), 60000); // cap 60s
+                const jitter = Math.floor(Math.random() * 2000);
+                process.stdout.write(`Server responded with 429 Too Many Requests.  Retrying after ${(last429Delay + jitter) / 1000}s delay...\n`);
+                await new Promise(r => setTimeout(r, last429Delay + jitter));
               } else {
-                // piccolo jitter prima di provare un altro endpoint
+                // altri errori: jitter minore
                 await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 200)));
               }
             }
@@ -184,11 +188,12 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
     }
 
     // Fetch singolo per signature usando RpcPoolManager.pickRpcConnection per ogni tentativo
-    // Limitiamo il parallelismo a 20 richieste simultanee per evitare di saturare il pool RPC
+    // CRUCIALE: limitare a 3-5 per non colpire rate limit (Helius ~10 req/sec)
     const maxRetries = 3;
     const txs: any[] = [];
     const failed: string[] = [];
-    const MAX_CONCURRENT = 20;
+    const MAX_CONCURRENT = 10; // RIDOTTO da 20 per rispettare rate limit Helius
+    const INTER_REQUEST_DELAY_MS = 150; // delay tra richieste per throttling
     
     const tasks = filtered.map(sig => async () => {
       let tx = null;
@@ -198,17 +203,17 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
         attempt++;
         let pick: any = null;
         try {
-          // Aumentiamo waitForMs a 5000 per permettere che le richieste precedenti si completino
           pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 5000 });
         } catch (e: any) {
           lastErr = e;
-          // small backoff before next attempt to acquire a connection
           await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 200)));
           continue;
         }
         const { connection, endpoint, release } = pick;
         const start = Date.now();
         try {
+          // Throttle: aggiunge un piccolo delay per rispettare rate limits
+          await new Promise(r => setTimeout(r, Math.random() * INTER_REQUEST_DELAY_MS / 2));
           tx = await connection.getTransaction(sig.signature, { 
             maxSupportedTransactionVersion: 0,
             commitment: 'confirmed'
@@ -224,13 +229,11 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
           lastErr = e;
           const is429 = e && (e.status === 429 || (e.message && String(e.message).includes('429')));
           release({ success: false, errorType: is429 ? '429' : undefined });
-          // on 429 apply exponential backoff + jitter before retrying
           if (is429) {
             const backoffMs = Math.min(60000, 500 * Math.pow(2, attempt - 1));
             const jitter = Math.floor(Math.random() * (backoffMs * 0.5));
             await new Promise(r => setTimeout(r, backoffMs + jitter));
           } else {
-            // small random delay to avoid thundering herd on other errors
             await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 200)));
           }
         }
