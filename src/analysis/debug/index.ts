@@ -13,6 +13,7 @@ import { getRentedFleetsHandler } from './getRentedFleets';
 import { associateSageOpsToFleetsHandler } from './associateSageOpsToFleets';
 import { walletSageFeesDetailedHandler } from './walletSageFeesDetailed';
 import { playloadHandler } from './playload';
+import { playerProfileIdHandler } from './playerProfileId';
 import { enrichFleetStateHandler } from '../../decoders/fleetstatehandler';
 
 const debugRouter = Router();
@@ -29,6 +30,7 @@ debugRouter.get('/decode-sage-ops-full', decodeSageOpsFullHandler);
 debugRouter.get('/get-fleets', getFleetsHandler);
 debugRouter.get('/get-rented-fleets', getRentedFleetsHandler);
 debugRouter.get('/associate-sage-ops-to-fleets', associateSageOpsToFleetsHandler);
+debugRouter.get('/player-profile-id', playerProfileIdHandler);
 debugRouter.get('/playload', playloadHandler);
 debugRouter.post('/playload', walletSageFeesDetailedHandler);
 

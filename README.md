@@ -79,38 +79,185 @@ Il server sarà disponibile su `http://localhost:3000`
 
 ***
 
-## 📡 API Principali
+## 📡 API Disponibili
 
-### POST `/api/analyze-profile`
+### Analisi Profili
 
-Avvia l'analisi completa delle operazioni SAGE per un profilo.
+#### POST `/api/analyze-profile`
+
+Avvia l'analisi completa delle operazioni SAGE per un profilo giocatore.
 
 **Body JSON:**
 
 ```json
 {
-  "profileId": "4PsiX...",
+  "profileId": "4PsiXxqZZkRynC96UMZDQ6yDuMTWB1zmn4hr84vQwaz8",
   "wipeCache": false,
   "lats": 24
 }
 ```
 
 **Parametri:**
-
 * `profileId` (string, richiesto): ID del profilo Star Atlas da analizzare
-* `wipeCache` (boolean, opzionale): cancella cache prima dell'analisi
-* `lats` (number, opzionale): ore di lookback (default 24)
+* `wipeCache` (boolean, opzionale): cancella cache prima dell'analisi (default: false)
+* `lats` (number, opzionale): ore di lookback per transazioni (default: 24)
 
 **Risposta:**
+```json
+{
+  "fleets": [...],
+  "rentedFleets": [...],
+  "walletAuthority": "...",
+  "feePayer": "...",
+  "walletTxs": [...],
+  "aggregation": {...},
+  "fleetBreakdown": {...},
+  "playerOps": [...]
+}
+```
 
-* `fleets`: array fleets possedute con operazioni decodificate
-* `rentedFleets`: array fleets in affitto
-* `walletAuthority`: wallet principale del giocatore
-* `feePayer`: fee payer utilizzato
-* `walletTxs`: transazioni raw analizzate
-* `aggregation`: statistiche aggregate (fees, tx totali, unknown ops)
-* `fleetBreakdown`: breakdown operazioni per fleet/cargo/ammo/fuel
-* `playerOps`: operazioni non associate a specifiche fleets
+---
+
+### Prezzi e Dati di Mercato
+
+#### GET `/api/prices`
+
+Ritorna i prezzi attuali di token principali (Bitcoin, Solana, Star Atlas, Atlas DAO, WPAC).
+
+**Query Parameters:** nessuno
+
+**Risposta:**
+```json
+{
+  "bitcoin": { "usd": 45000, ... },
+  "solana": { "usd": 150, ... },
+  "star-atlas": { "usd": 0.02, ... },
+  "star-atlas-dao": { "usd": 0.50, ... },
+  "wpac": 0.005
+}
+```
+
+---
+
+### Debug & Utility APIs
+
+Tutte le seguenti API sono disponibili sotto `/api/debug/`:
+
+#### GET `/debug/player-profile-id?wallet=<wallet_pubkey>`
+
+**Ricerca on-chain** del profilo giocatore data una wallet pubkey (owner o authority).
+
+**Query Parameters:**
+* `wallet` (string, richiesto): wallet pubkey del proprietario/autorità
+
+**Risposta:**
+```json
+{
+  "wallet": "GeUiZvjERgN95MFxU5wogLWPRUUpMgzQzdQnvyBkQHxv",
+  "message": "Player Profile account(s) found on-chain for wallet",
+  "variants": [
+    {
+      "label": "profile_found_1",
+      "profileId": "4PsiXxqZZkRynC96UMZDQ6yDuMTWB1zmn4hr84vQwaz8",
+      "description": "Profile account found containing wallet...",
+      "source": "on-chain search at offset 30"
+    }
+  ]
+}
+```
+
+#### GET `/debug/decode-profile-with-rust?profileId=<id>`
+
+Decodifica un profilo usando il decoder Rust ottimizzato.
+
+**Query Parameters:**
+* `profileId` (string, richiesto): ID del profilo da decodificare
+
+**Risposta:** Dati decodificati del profilo (version, auth_key_count, key_threshold, profile_keys, ecc.)
+
+#### GET `/debug/dump-profile-hex?profileId=<id>`
+
+Ritorna il contenuto grezzo esadecimale dell'account profilo.
+
+#### GET `/debug/get-wallet-authority?profileId=<id>`
+
+Estrae tutte le chiavi autorizzate (allowed wallets) da un profilo.
+
+**Risposta:**
+```json
+{
+  "allowedWallets": [
+    {
+      "pubkey": "...",
+      "permissions": "..."
+    }
+  ]
+}
+```
+
+#### GET `/debug/scan-profile-owner?profileId=<id>`
+
+Scansiona e identifica il proprietario del profilo.
+
+#### GET `/debug/get-wallet-txs?profileId=<id>&cutoffH=<hours>`
+
+Recupera e decodifica tutte le transazioni di una wallet nel periodo specificato.
+
+**Query Parameters:**
+* `profileId` (string, richiesto): ID del profilo
+* `cutoffH` (number, opzionale): ore di lookback (default: 24)
+
+#### GET `/debug/get-fleets?profileId=<id>`
+
+Recupera e decodifica tutte le flotte possedute da un profilo.
+
+#### GET `/debug/get-rented-fleets?profileId=<id>`
+
+Recupera tutte le flotte in affitto (contratti di rental) per un profilo.
+
+#### GET `/debug/decode-sage-ops?profileId=<id>`
+
+Decodifica tutte le operazioni SAGE per un profilo.
+
+#### GET `/debug/decode-sage-ops-full?profileId=<id>`
+
+Decodifica completa delle operazioni SAGE con enrichment dati e associazione flotte.
+
+#### GET `/debug/associate-sage-ops-to-fleets?profileId=<id>`
+
+Associa le operazioni SAGE decodificate alle flotte specifiche.
+
+#### GET `/debug/dump-fleets?profileId=<id>`
+
+Dump grezzo di tutte le flotte associate al profilo.
+
+#### GET `/debug/refresh-allowed-wallets?profileId=<id>`
+
+Rinfresca la cache delle chiavi autorizzate per un profilo.
+
+#### POST `/debug/playload`
+
+Analizza le fee e break-down dettagliato delle operazioni pagatori.
+
+**Body JSON:**
+```json
+{
+  "profileId": "...",
+  "cutoffH": 24
+}
+```
+
+#### GET `/debug/enrich-fleet-state-handler-test`
+
+Endpoint di test per enrichment dello stato fleet (mining, idle, movimento, ecc.)
+
+---
+
+### Frontend
+
+#### GET `/`
+
+Serve la Single Page Application (SPA) web per l'analisi interattiva dei profili.
 
 ***
 
