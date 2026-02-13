@@ -91,7 +91,7 @@ Avvia l'analisi completa delle operazioni SAGE per un profilo giocatore.
 
 ```json
 {
-  "profileId": "4PsiXxqZZkRynC96UMZDQ6yDuMTWB1zmn4hr84vQwaz8",
+  "profileId": "4PsiXxqZZkRynC96U.....",
   "wipeCache": false,
   "lats": 24
 }
@@ -153,12 +153,12 @@ Tutte le seguenti API sono disponibili sotto `/api/debug/`:
 **Risposta:**
 ```json
 {
-  "wallet": "GeUiZvjERgN95MFxU5wogLWPRUUpMgzQzdQnvyBkQHxv",
+  "wallet": "GeUiZvjERgN95MFxU5....",
   "message": "Player Profile account(s) found on-chain for wallet",
   "variants": [
     {
       "label": "profile_found_1",
-      "profileId": "4PsiXxqZZkRynC96UMZDQ6yDuMTWB1zmn4hr84vQwaz8",
+      "profileId": "4PsiXxqZZkRynC96UMZ....",
       "description": "Profile account found containing wallet...",
       "source": "on-chain search at offset 30"
     }
@@ -324,3 +324,5 @@ sae/
 ## 📄 Licenza
 
 Progetto per uso personale/educativo.
+
+pkill -9 node; pm2 delete all; cd /home/luca/sae; rm -rf dist frontend/dist log cache; sleep 1; npm run build && pm2 start dist/app.js --name sae --log log/pm2-sae.log
