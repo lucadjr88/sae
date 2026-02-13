@@ -18,7 +18,7 @@ async function fetchCoinGeckoPrices() {
 async function fetchGeckoTerminalTokenPrice(network: string, tokenAddress: string) {
   // Nota: l'endpoint /simple/ token_price restituisce i prezzi mappati sull'indirizzo
   const url = `${GECKOTERMINAL_BASE}/simple/networks/${network}/token_price/${tokenAddress}`;
-  console.log(`[GeckoTerminal] Fetching: ${url}`);
+  //console.log(`[GeckoTerminal] Fetching: ${url}`);
   const gtRes = await fetch(url);
   if (!gtRes.ok) {
     console.warn(`[GeckoTerminal] Request failed: ${gtRes.status} ${gtRes.statusText}`);
@@ -32,7 +32,7 @@ async function fetchGeckoTerminalTokenPrice(network: string, tokenAddress: strin
   const addr = tokenAddress.toLowerCase();
   const price = prices?.[addr];
   
-  console.log(`[GeckoTerminal] Token ${addr} price: ${price}`);
+  //console.log(`[GeckoTerminal] Token ${addr} price: ${price}`);
   return price ? parseFloat(price) : null;
 }
 
