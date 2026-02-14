@@ -37,7 +37,7 @@ import { resetMetricsMap } from '../utils/rpc/metrics';
 
 
 router.post('/analyze-profile', async (req: Request, res: Response) => {
-    const { profileId, wipeCache, lats } = req.body || {};
+    const { profileId, wipeCache, lats, cachePersist } = req.body || {};
     if (!profileId || typeof profileId !== 'string') return res.status(400).json({ error: 'Missing profileId' });
     try {
         // If wipeCache is requested, delete entire profile cache directory
@@ -137,36 +137,38 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 console.error('[analyze-profile] failed to save playload cache', saveErr);
             }
 
-            // Clean up all cache except playload/latest.json
-            try {
-                const cacheDir = path.join(process.cwd(), 'cache', profileId as string);
-                const playloadFile = path.join(cacheDir, 'playload', 'latest.json');
+            // Clean up all cache except playload/latest.json (unless cachePersist is true)
+            if (!cachePersist) {
+                try {
+                    const cacheDir = path.join(process.cwd(), 'cache', profileId as string);
+                    const playloadFile = path.join(cacheDir, 'playload', 'latest.json');
 
-                // Get all subdirectories in cache
-                const entries = await fs.readdir(cacheDir, { withFileTypes: true });
-                for (const entry of entries) {
-                    const fullPath = path.join(cacheDir, entry.name);
-                    if (entry.isDirectory()) {
-                        if (entry.name === 'playload') {
-                            // Keep only latest.json in playload folder
-                            const playloadFiles = await fs.readdir(fullPath);
-                            for (const file of playloadFiles) {
-                                if (file !== 'latest.json') {
-                                    await fs.rm(path.join(fullPath, file), { recursive: true, force: true });
+                    // Get all subdirectories in cache
+                    const entries = await fs.readdir(cacheDir, { withFileTypes: true });
+                    for (const entry of entries) {
+                        const fullPath = path.join(cacheDir, entry.name);
+                        if (entry.isDirectory()) {
+                            if (entry.name === 'playload') {
+                                // Keep only latest.json in playload folder
+                                const playloadFiles = await fs.readdir(fullPath);
+                                for (const file of playloadFiles) {
+                                    if (file !== 'latest.json') {
+                                        await fs.rm(path.join(fullPath, file), { recursive: true, force: true });
+                                    }
                                 }
+                            } else {
+                                // Remove all other directories
+                                await fs.rm(fullPath, { recursive: true, force: true });
                             }
-                        } else {
-                            // Remove all other directories
-                            await fs.rm(fullPath, { recursive: true, force: true });
+                        } else if (entry.name !== playloadFile) {
+                            // Remove any files in the root cache directory
+                            await fs.rm(fullPath, { force: true });
                         }
-                    } else if (entry.name !== playloadFile) {
-                        // Remove any files in the root cache directory
-                        await fs.rm(fullPath, { force: true });
                     }
+                    console.log('[analyze-profile] Cache cleaned, kept only playload/latest.json');
+                } catch (cleanErr) {
+                    console.error('[analyze-profile] failed to clean cache', cleanErr);
                 }
-                console.log('[analyze-profile] Cache cleaned, kept only playload/latest.json');
-            } catch (cleanErr) {
-                console.error('[analyze-profile] failed to clean cache', cleanErr);
             }
 
             console.log("###################### FINE FASE 7: FINE FLUSSO ANALYZE #########################");
@@ -183,32 +185,34 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 console.error('[analyze-profile] failed to save fallback playload cache', saveErr);
             }
 
-            // Clean up all cache except playload/latest.json
-            try {
-                const cacheDir = path.join(process.cwd(), 'cache', profileId as string);
-                const playloadFile = path.join(cacheDir, 'playload', 'latest.json');
+            // Clean up all cache except playload/latest.json (unless cachePersist is true)
+            if (!cachePersist) {
+                try {
+                    const cacheDir = path.join(process.cwd(), 'cache', profileId as string);
+                    const playloadFile = path.join(cacheDir, 'playload', 'latest.json');
 
-                const entries = await fs.readdir(cacheDir, { withFileTypes: true });
-                for (const entry of entries) {
-                    const fullPath = path.join(cacheDir, entry.name);
-                    if (entry.isDirectory()) {
-                        if (entry.name === 'playload') {
-                            const playloadFiles = await fs.readdir(fullPath);
-                            for (const file of playloadFiles) {
-                                if (file !== 'latest.json') {
-                                    await fs.rm(path.join(fullPath, file), { recursive: true, force: true });
+                    const entries = await fs.readdir(cacheDir, { withFileTypes: true });
+                    for (const entry of entries) {
+                        const fullPath = path.join(cacheDir, entry.name);
+                        if (entry.isDirectory()) {
+                            if (entry.name === 'playload') {
+                                const playloadFiles = await fs.readdir(fullPath);
+                                for (const file of playloadFiles) {
+                                    if (file !== 'latest.json') {
+                                        await fs.rm(path.join(fullPath, file), { recursive: true, force: true });
+                                    }
                                 }
+                            } else {
+                                await fs.rm(fullPath, { recursive: true, force: true });
                             }
-                        } else {
-                            await fs.rm(fullPath, { recursive: true, force: true });
+                        } else if (entry.name !== playloadFile) {
+                            await fs.rm(fullPath, { force: true });
                         }
-                    } else if (entry.name !== playloadFile) {
-                        await fs.rm(fullPath, { force: true });
                     }
+                    console.log('[analyze-profile] Cache cleaned, kept only playload/latest.json');
+                } catch (cleanErr) {
+                    console.error('[analyze-profile] failed to clean cache', cleanErr);
                 }
-                console.log('[analyze-profile] Cache cleaned, kept only playload/latest.json');
-            } catch (cleanErr) {
-                console.error('[analyze-profile] failed to clean cache', cleanErr);
             }
 
             console.log("###################### FINE FASE 7: FINE FLUSSO ANALYZE #########################");
