@@ -101,6 +101,30 @@ Avvia l'analisi completa delle operazioni SAGE per un profilo giocatore.
 * `profileId` (string, richiesto): ID del profilo Star Atlas da analizzare
 * `wipeCache` (boolean, opzionale): cancella cache prima dell'analisi (default: false)
 * `lats` (number, opzionale): ore di lookback per transazioni (default: 24)
+* `cachePersist` (boolean, opzionale): se true, mantiene la cache completa (skips cleanup, solo debug) (default: false)
+
+**Esempi cURL:**
+
+Analisi standard con cleanup automatico:
+```bash
+curl -X POST http://localhost:3000/api/analyze-profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profileId": "4PsiXxqZZkRynC96UMZDQ6yDuMTWB1zmn4hr84vQwaz8",
+    "wipeCache": false,
+    "lats": 24
+  }'
+```
+
+Con cache persistente (debug mode, mantiene tutti i file cache):
+```bash
+curl -X POST http://localhost:3000/api/analyze-profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profileId": "4PsiXxqZZkRynC96UMZDQ6yDuMTWB1zmn4hr84vQwaz8",
+    "cachePersist": true
+  }'
+```
 
 **Risposta:**
 ```json
@@ -322,7 +346,10 @@ sae/
 ***
 
 ## 📄 Licenza
+Questo progetto è concesso in licenza sotto la Licenza MIT. Vedi [LICENSE](LICENSE) per i dettagli.
 
-Progetto per uso personale/educativo.
+pkill -9 node; cd ~/sae ;rm -rf log cache dist; sleep 1; npm run build && mkdir -p log && nohup npm run dev > log/server-$(date +%Y%m%d-%H%M%S).log 2>&1 &    
 
-pkill -9 node; pm2 delete all; cd /home/luca/sae; rm -rf dist frontend/dist log cache; sleep 1; npm run build && pm2 start dist/app.js --name sae --log log/pm2-sae.log
+pkill -9 node; cd ~/sae; rm -rf dist frontend/dist log cache; sleep 1; npm run build && pm2 start dist/app.js --name sae --log log/pm2-sae.log
+
+git add . && git commit -m "wallet connection" && git push -f origin main       
