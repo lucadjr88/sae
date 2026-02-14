@@ -58,3 +58,28 @@ window.lastAnalysisParams = null;
 import { analyzeFees } from '@services/api';
 window.analyzeFees = analyzeFees;
 
+const initStartScreen = () => {
+  const startScreen = document.getElementById('start-screen') as HTMLElement | null;
+  const enterBtn = document.getElementById('enterNoWalletBtn') as HTMLButtonElement | null;
+
+  if (!startScreen || !enterBtn) {
+    return;
+  }
+
+  document.body.classList.add('start-screen-active');
+  startScreen.style.display = 'flex';
+
+  const exitStartScreen = () => {
+    document.body.classList.remove('start-screen-active');
+    startScreen.style.display = 'none';
+  };
+
+  enterBtn.addEventListener('click', exitStartScreen);
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initStartScreen);
+} else {
+  initStartScreen();
+}
+

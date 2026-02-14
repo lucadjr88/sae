@@ -135,3 +135,108 @@
 }
 
 .stat-value.highlight { color: #34d399; }
+
+.start-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 900;
+}
+
+.start-screen__content {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 60px;
+}
+
+.start-hero {
+  margin: 20px 0 0 0;
+}
+
+.start-buttons {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 40px;
+}
+
+.start-button {
+  width: 130px;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  color: #e0e6ed;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+
+.start-button__icon {
+  width: 80px;
+  height: 80px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.start-button__icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.start-button__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e0e6ed;
+  text-align: center;
+}
+
+.start-button.is-muted .start-button__icon img {
+  opacity: 0.2;
+  filter: grayscale(1) brightness(0.8);
+}
+
+.start-button.is-muted .start-button__label {
+  color: #b8c0cc;
+}
+
+.start-button.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+body.start-screen-active {
+  overflow: hidden;
+}
+
+body.start-screen-active .container,
+body.start-screen-active #price-ticker-bar,
+body.start-screen-active .sidebar {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .start-screen__content {
+    gap: 40px;
+  }
+
+  .start-buttons {
+    flex-direction: column;
+    gap: 24px;
+  }
+}

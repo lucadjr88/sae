@@ -352,4 +352,4 @@ pkill -9 node; cd ~/sae ;rm -rf log cache dist; sleep 1; npm run build && mkdir 
 
 pkill -9 node; cd ~/sae; rm -rf dist frontend/dist log cache; sleep 1; npm run build && pm2 start dist/app.js --name sae --log log/pm2-sae.log
 
-git add . && git commit -m "wallet connection" && git push -f origin main       
+git add . && git commit -m "wallet connection gui" && git push -f origin main       
