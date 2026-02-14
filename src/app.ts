@@ -1,9 +1,11 @@
+import 'dotenv/config.js';
 import express from 'express';
 import analyzeProfileRouter from './analysis/analyzeProfile';
 import debugRouter from './analysis/debug/index';
 import getFleetsRouter from './backend/routes/get-fleets';
 import pricesRouter from './backend/routes/prices';
 import frontendRouter from './backend/routes/frontend';
+import authRouter from './backend/routes/auth.js';
 import { startNonInvasiveMetricsLogger } from './utils/rpc/metrics';
 
 
@@ -12,6 +14,7 @@ app.use(express.json());
 
 // NOTE: removed global debug logging for static/frontend requests
 
+app.use('/auth', authRouter);
 app.use('/api', pricesRouter);
 app.use('/api', analyzeProfileRouter);
 app.use('/api/debug', debugRouter);
