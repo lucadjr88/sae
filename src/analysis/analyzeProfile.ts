@@ -37,8 +37,15 @@ import { resetMetricsMap } from '../utils/rpc/metrics';
 
 
 router.post('/analyze-profile', async (req: Request, res: Response) => {
+    const startTime = Date.now();
     const { profileId, wipeCache, lats, cachePersist } = req.body || {};
-    if (!profileId || typeof profileId !== 'string') return res.status(400).json({ error: 'Missing profileId' });
+    console.log(`[/api/analyze-profile] POST request received | profileId=${profileId} | wipeCache=${wipeCache} | lats=${lats} | cachePersist=${cachePersist}`);
+    
+    if (!profileId || typeof profileId !== 'string') {
+      console.log(`[/api/analyze-profile] ❌ Invalid profileId | profileId=${profileId}`);
+      return res.status(400).json({ error: 'Missing profileId' });
+    }
+    
     try {
         // If wipeCache is requested, delete entire profile cache directory
         if (wipeCache) {
@@ -218,10 +225,13 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
             console.log("###################### FINE FASE 7: FINE FLUSSO ANALYZE #########################");
             res.set('X-Cache-Hit', 'miss');
             res.set('X-Cache-Timestamp', String(Date.now()));
+            const duration = Date.now() - startTime;
+            console.log(`[/api/analyze-profile] ✅ SUCCESS | profileId=${profileId} | duration=${duration}ms`);
             return res.json(playload);
         }
     } catch (e: any) {
-        console.error('[analyze-profile] error', e);
+        const duration = Date.now() - startTime;
+        console.error(`[/api/analyze-profile] ❌ ERROR | profileId=${profileId} | error=${e?.message || e} | duration=${duration}ms`);
         return res.status(500).json({ error: e?.message || 'analyze-profile failed' });
     }
 });

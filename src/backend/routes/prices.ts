@@ -37,14 +37,20 @@ async function fetchGeckoTerminalTokenPrice(network: string, tokenAddress: strin
 }
 
 router.get('/prices', async (req, res) => {
+  const startTime = Date.now();
+  //console.log(`[/api/prices] GET request received`);
+
   try {
+    //console.log(`[/api/prices] Fetching coin prices from CoinGecko...`);
     // 1. Prendi i prezzi standard
     const data = await fetchCoinGeckoPrices();
+    //console.log(`[/api/prices] ✓ CoinGecko prices fetched | coins=${Object.keys(data).length}`);
 
     // 2. Iniezione forzata di WPAC (dato che CoinGecko API standard non lo ha)
     const tokenAddress = process.env.GECKOTERMINAL_WPAC_TOKEN || '0x10004a9A742ec135c686C9aCed00FA3C93D66866';
     const network = process.env.GECKOTERMINAL_NETWORK || DEFAULT_GECKOTERMINAL_NETWORK;
 
+    //console.log(`[/api/prices] Fetching WPAC price from GeckoTerminal...`);
     const wpacUsd = await fetchGeckoTerminalTokenPrice(network, tokenAddress);
     
     if (wpacUsd !== null) {
@@ -52,13 +58,17 @@ router.get('/prices', async (req, res) => {
         usd: wpacUsd,
         last_updated_at: Math.floor(Date.now() / 1000) 
       };
+      //console.log(`[/api/prices] ✓ WPAC price fetched | wpac=${wpacUsd}`);
     } else {
-      console.warn(`[/api/prices] WPAC price not available`);
+      console.warn(`[/api/prices] ⚠ WPAC price not available from GeckoTerminal`);
     }
 
+    const duration = Date.now() - startTime;
+    //console.log(`[/api/prices] ✅ SUCCESS | coins=${Object.keys(data).length} | duration=${duration}ms`);
     return res.json(data);
   } catch (e) {
-    console.error('[/api/prices] error', e);
+    const duration = Date.now() - startTime;
+    console.error(`[/api/prices] ❌ ERROR | ${e} | duration=${duration}ms`);
     return res.status(500).json({});
   }
 });

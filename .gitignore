@@ -2,6 +2,7 @@ node_modules/
 dist/
 cache/
 log/
+token/
 *.log
 .DS_Store
 .env
