@@ -84,7 +84,7 @@ export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: stri
 	}
 }
 
-import { setCurrentProfileId, setLastAnalysisParams, setAnalysisStartTime, setProgressInterval, progressInterval } from '@utils/state';
+import { setCurrentProfileId, setLastAnalysisParams, setAnalysisStartTime, setProgressInterval, progressInterval, currentProfileId } from '@utils/state';
 
 export function processAnalysisData(data: any) {
 	const fleets = data.fleets || [];
@@ -130,20 +130,32 @@ export function processAnalysisData(data: any) {
 	};
 }
 
-export async function analyzeFees() {
-	const profileId = document.getElementById('profileId').value.trim();
+export async function analyzeFees(profileIdParam?: string) {
+	let profileId = profileIdParam;
 	const resultsDiv = document.getElementById('results');
 	const btn = document.getElementById('analyzeBtn');
+	//console.log('[analyzeFees] called with profileIdParam:', profileIdParam);
+	if (!profileId) {
+		const input = document.getElementById('profileId') as HTMLInputElement | null;
+		profileId = input?.value?.trim() || '';
+		//console.log('[analyzeFees] profileId from input:', profileId);
+	}
 	if (!profileId) {
 		alert('Inserisci un Player Profile ID!');
+		console.warn('[analyzeFees] profileId missing, aborting');
 		return;
 	}
 	setCurrentProfileId(profileId);
+	console.log('[analyzeFees] currentProfileId dopo set:', currentProfileId);
+	//console.log('[analyzeFees] window.currentProfileId dopo set:', window.currentProfileId);
+	//console.log('[analyzeFees] typeof window.currentProfileId:', typeof window.currentProfileId);
+	//console.log('[analyzeFees] window object:', window);
 	const formBox = document.querySelector('.form-box');
 	if (formBox) formBox.style.display = 'none';
-	window.setSidebarVisible(false);
-	btn.disabled = true;
-	btn.textContent = 'Loading...';
+	if (btn) {
+		btn.disabled = true;
+		btn.textContent = 'Loading...';
+	}
 	setAnalysisStartTime(Date.now());
 	const startTime = Date.now();
 	window.updateProgress('Initializing...');
@@ -216,6 +228,7 @@ export async function analyzeFees() {
 			data.feesByFleet = {};
 		}
 		window.displayResults(data, processed.fleetNames, processed.rentedFleetNames, processed.fleets);
+			//console.log('[analyzeFees] window.currentProfileId prima di displayResults:', window.currentProfileId);
 		if (data && data.breakdown && data.breakdown.feesByFleet && typeof data.breakdown.feesByFleet === 'object') {
 			displayFleetOperationCharts(data.breakdown.feesByFleet, processed.fleetNames);
 		} else if (data && data.breakdown_pending) {
@@ -226,21 +239,16 @@ export async function analyzeFees() {
 			// Show pending breakdown state instead of triggering other endpoints.
 			showBreakdownPending();
 		}
-		const sidebar = document.getElementById('sidebar');
-		const sidebarProfileId = document.getElementById('sidebarProfileId');
-		const container = document.querySelector('.container');
-		if (sidebar) {
-			sidebar.style.display = 'flex';
-			if (sidebarProfileId) { sidebarProfileId.textContent = profileId.substring(0, 6) + '...'; }
-		}
-		if (container) container.classList.add('with-sidebar');
+		// Sidebar visibility logic removed; should be managed only in results-display.ts
 	} catch (error) {
 		console.error('Analysis error:', error);
 		resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
 	} finally {
 		if (progressInterval) { clearInterval(progressInterval); setProgressInterval(null); }
-		btn.disabled = false;
-		btn.textContent = 'Analyze 24h';
+		if (btn) {
+			btn.disabled = false;
+			btn.textContent = 'Analyze 24h';
+		}
 	}
 }
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { formatTimestamp } from './ui-helpers';
+import { currentProfileId } from '@utils/state';
 import { drawPieChart } from '@app/charts';
 import { createFleetList, createOperationList, createOtherOperationsList } from '@services/fleet-operations';
 import { normalizeOpName } from '@utils/utils';
@@ -87,12 +88,31 @@ export function displayPartialResults(update: PartialUpdate, fleets: FleetMeta[]
 
   html += '</div>';
   resultsDiv.innerHTML = html;
+  // Sidebar visibile solo durante la visualizzazione risultati
+  if (window.setSidebarVisible) window.setSidebarVisible(true);
 }
 
 export function displayResults(data: DisplayData, fleetNames: Record<string, string>, rentedFleetNames: Set<string> = new Set(), fleets: FleetMeta[] = []): void {
   console.log('Displaying results...');
+  const sidebar = document.getElementById('sidebar');
+  const sidebarProfileId = document.getElementById('sidebarProfileId');
+  //console.log('[displayResults] window.currentProfileId:', window.currentProfileId);
+  //console.log('[displayResults] sidebar:', sidebar);
+  //console.log('[displayResults] sidebarProfileId:', sidebarProfileId);
+  if (sidebar) {
+    sidebar.style.display = 'flex';
+    //console.log('[displayResults] sidebar set to flex');
+  }
+  // Usa solo currentProfileId da @utils/state
+  if (sidebarProfileId && currentProfileId) {
+    sidebarProfileId.textContent = currentProfileId.substring(0, 4) + '...' + currentProfileId.substring(currentProfileId.length - 4);
+    //console.log('[displayResults] sidebarProfileId updated:', sidebarProfileId.textContent);
+  } else {
+    //console.log('[displayResults] sidebarProfileId NOT updated');
+  }
   const resultsDiv = document.getElementById('results') as HTMLDivElement | null;
   if (!resultsDiv) return;
+  // No scrollable class, restore original layout
 
   const prices = (typeof window !== 'undefined' ? (window as typeof window & { prices?: PriceData }).prices : undefined);
   // Prefer breakdown embedded by the server when present (fallback to top-level fields)
@@ -151,7 +171,7 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
 
   // Diagnostic: print available operation keys so we can see what arrived
   try {
-    console.log('[displayResults] feesByOperation keys:', Object.keys(feesByOperation));
+    //console.log('[displayResults] feesByOperation keys:', Object.keys(feesByOperation));
   } catch (e) {
     console.warn('[displayResults] could not log feesByOperation keys', e);
   }
@@ -207,7 +227,10 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
   }
 
   let html = `
-    <div class="analysis-period" style="margin-bottom:12px;color:#9aa6b2;font-size:14px;">Fees for operations in the last 24h from: ${firstTxTimeLabel}</div>
+    <div class="analysis-period" style="margin-bottom:12px;color:#9aa6b2;font-size:14px;">
+      Fees for operations in the last 24h from: ${firstTxTimeLabel}
+      <span class="timer" style="margin-left:12px;font-weight:bold;"></span>
+    </div>
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-label">Transactions</div>
@@ -250,6 +273,8 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
   `;
 
   resultsDiv.innerHTML = html;
+  // Sidebar visibile solo durante la visualizzazione risultati
+  if (window.setSidebarVisible) window.setSidebarVisible(true);
 
   // Create fleet list with fold/unfold
   createFleetList({ ...data, feesByFleet: completeFeesByFleet }, fleetNames, rentedFleetNames);

@@ -1,0 +1,30 @@
+{
+  "name": "Star Atlas Explorer",
+  "short_name": "SAE",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "src/assets/icons/ic_launcher.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "src/assets/icons/ic_launcher_round.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "src/assets/icons/favicon512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "src/assets/icons/ic_splash_favicon.png",
+      "sizes": "288x288",
+      "type": "image/png"
+    }
+  ]
+}

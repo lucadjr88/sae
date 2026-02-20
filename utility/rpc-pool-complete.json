@@ -94,5 +94,37 @@
     "maxConcurrent": 12,
     "cooldownMs": 60000,
     "backoffBaseMs": 1500
+  },
+  {
+    "name": "solana-lava-public",
+    "url": "https://solana.lava.network",
+    "ws": null,
+    "maxConcurrent": 4,
+    "cooldownMs": 60000,
+    "backoffBaseMs": 1500
+  },
+  {
+    "name": "laine-main",
+    "url": "https://api.mainnet-beta.solana.com", 
+    "ws": null,
+    "maxConcurrent": 8,
+    "cooldownMs": 60000,
+    "backoffBaseMs": 1000
+  },
+  {
+    "name": "rpcpool-public",
+    "url": "https://solana-mainnet.rpcpool.com",
+    "ws": null,
+    "maxConcurrent": 5,
+    "cooldownMs": 60000,
+    "backoffBaseMs": 1200
+  },
+  {
+    "name": "everstake-main",
+    "url": "https://solana-rpc.everstake.one",
+    "ws": null,
+    "maxConcurrent": 4,
+    "cooldownMs": 60000,
+    "backoffBaseMs": 2000
   }
 ]

@@ -35,7 +35,7 @@
 - **package.json**: +tweetnacl, +jsonwebtoken, @types/jsonwebtoken
 - **.env**: Configurato JWT_SECRET, ALLOWED_WALLETS per test
 - **.env.example**: Template per setup
-- **Compilazione**: ✓ TypeScript → dist/
+- **Compilazione**: ✓ TypeScript → /home/luca/sae/dist
 
 ### Testing
 

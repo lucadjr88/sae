@@ -1,14 +1,15 @@
-.container { 
-  max-width: 100%; 
-  margin: 0 auto; 
+.container {
+  max-width: 100%;
+  margin: 0 auto;
   padding: 20px;
   position: relative;
   z-index: 1;
-  transition: margin-left 0.3s ease;
-}
-
-.container.with-sidebar {
-  margin-left: 60px;
+  /* nessun overflow, nessuna transizione, nessuna max-height */
+  /* padding-left per sidebar fissa */
+  padding-left: 60px;
+  min-height: 100vh;
+  box-sizing: border-box;
+  /*padding-bottom: 48px;  spazio per il ticker/footer fisso */
 }
 
 .tabs {

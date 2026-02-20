@@ -1,16 +1,19 @@
 // Sidebar UI logic
 export function setSidebarVisible(visible: boolean): void {
   const sidebar = document.getElementById('sidebar');
-  const container = document.querySelector('.container');
   if (sidebar) {
     sidebar.style.display = visible ? 'flex' : 'none';
   }
-  if (container) {
-    if (visible) {
-      container.classList.add('with-sidebar');
-    } else {
-      container.classList.remove('with-sidebar');
-    }
+  // Nascondi info wallet se non visibile
+  const sidebarWalletInfo = document.getElementById('sidebarWalletInfo');
+  if (!visible && sidebarWalletInfo) {
+    sidebarWalletInfo.innerHTML = '';
+    sidebarWalletInfo.style.display = 'none';
+  }
+  // Mostra/nascondi Privacy Policy centrale
+  const privacyPolicyStart = document.getElementById('privacyPolicyStart');
+  if (privacyPolicyStart) {
+    privacyPolicyStart.style.display = visible ? 'none' : '';
   }
 }
 

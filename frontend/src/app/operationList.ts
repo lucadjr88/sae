@@ -88,7 +88,7 @@ export function createOperationList(
     }
     try {
       if (opStats.details && Array.isArray(opStats.details) && opStats.details.length > 0) {
-        console.log(`[createOperationList] operation=${operation} has details count=${opStats.details.length}`);
+        //console.log(`[createOperationList] operation=${operation} has details count=${opStats.details.length}`);
         const maxDetails = 50;
         html += `
           <tr>

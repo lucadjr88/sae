@@ -2,11 +2,15 @@ import express from 'express';
 
 const router = express.Router();
 
-// 'wpac' non verrà trovato da CG, ma lo teniamo per inizializzare la chiave se necessario
 const COINGECKO_IDS = ['bitcoin', 'solana', 'star-atlas', 'star-atlas-dao'];
 const GECKOTERMINAL_BASE = 'https://api.geckoterminal.com/api/v2';
-// Assicurati che nel .env GECKOTERMINAL_NETWORK sia 'bsc'
-const DEFAULT_GECKOTERMINAL_NETWORK = 'bsc'; 
+const DEFAULT_GECKOTERMINAL_NETWORK = 'bsc';
+
+// --- CACHE ---
+let pricesCache = {};
+let pricesCacheTimestamp = 0;
+const CACHE_TTL_MS = 30 * 60 * 1000;
+let cacheUpdating = false;
 
 async function fetchCoinGeckoPrices() {
   const ids = COINGECKO_IDS.join(',');
@@ -36,41 +40,41 @@ async function fetchGeckoTerminalTokenPrice(network: string, tokenAddress: strin
   return price ? parseFloat(price) : null;
 }
 
-router.get('/prices', async (req, res) => {
-  const startTime = Date.now();
-  //console.log(`[/api/prices] GET request received`);
-
+async function updatePricesCache() {
+  if (cacheUpdating) return;
+  cacheUpdating = true;
   try {
-    //console.log(`[/api/prices] Fetching coin prices from CoinGecko...`);
-    // 1. Prendi i prezzi standard
     const data = await fetchCoinGeckoPrices();
-    //console.log(`[/api/prices] ✓ CoinGecko prices fetched | coins=${Object.keys(data).length}`);
-
-    // 2. Iniezione forzata di WPAC (dato che CoinGecko API standard non lo ha)
     const tokenAddress = process.env.GECKOTERMINAL_WPAC_TOKEN || '0x10004a9A742ec135c686C9aCed00FA3C93D66866';
     const network = process.env.GECKOTERMINAL_NETWORK || DEFAULT_GECKOTERMINAL_NETWORK;
-
-    //console.log(`[/api/prices] Fetching WPAC price from GeckoTerminal...`);
     const wpacUsd = await fetchGeckoTerminalTokenPrice(network, tokenAddress);
-    
     if (wpacUsd !== null) {
-      data['wpac'] = { 
+      data['wpac'] = {
         usd: wpacUsd,
-        last_updated_at: Math.floor(Date.now() / 1000) 
+        last_updated_at: Math.floor(Date.now() / 1000)
       };
-      //console.log(`[/api/prices] ✓ WPAC price fetched | wpac=${wpacUsd}`);
-    } else {
-      console.warn(`[/api/prices] ⚠ WPAC price not available from GeckoTerminal`);
     }
-
-    const duration = Date.now() - startTime;
-    //console.log(`[/api/prices] ✅ SUCCESS | coins=${Object.keys(data).length} | duration=${duration}ms`);
-    return res.json(data);
+    pricesCache = data;
+    pricesCacheTimestamp = Date.now();
   } catch (e) {
-    const duration = Date.now() - startTime;
-    console.error(`[/api/prices] ❌ ERROR | ${e} | duration=${duration}ms`);
-    return res.status(500).json({});
+    console.error(`[pricesCache] Update failed:`, e);
+  } finally {
+    cacheUpdating = false;
   }
+}
+
+setInterval(updatePricesCache, CACHE_TTL_MS);
+updatePricesCache();
+
+router.get('/prices', async (req, res) => {
+  const now = Date.now();
+  if (!pricesCacheTimestamp || now - pricesCacheTimestamp > CACHE_TTL_MS) {
+    updatePricesCache();
+  }
+  if (Object.keys(pricesCache).length === 0) {
+    return res.status(503).json({ error: 'Prices cache not ready' });
+  }
+  return res.json(pricesCache);
 });
 
 export default router;

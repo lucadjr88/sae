@@ -2,6 +2,8 @@
 
 **SAE** è un'applicazione web per l'analisi delle operazioni SAGE (Star Atlas Game Engine) su blockchain Solana. Il progetto permette di tracciare, decodificare e visualizzare tutte le attività di un giocatore Star Atlas nelle ultime 24 ore, con focus su flotte, mining, crafting e gestione risorse.
 
+https://github.com/lucadjr88/sae.git
+
 ***
 
 ## 🎯 Cosa Fa
@@ -29,9 +31,36 @@ Il progetto è composto da:
 
 ### Frontend (Vanilla JS + Chart.js)
 
-* Interfaccia single-page con visualizzazione dati in tempo reale
+
+#### Frontend Web (Vanilla JS + Chart.js)
+
+* Interfaccia single-page (SPA) con visualizzazione dati in tempo reale
 * Grafici operazioni, breakdown flotte, ticker prezzi
 * Export JSON dei risultati
+* **Start screen** con due pulsanti: CONNECT WALLET (attualmente disabilitato) e ENTER NO WALLET
+* Design ispirato all'app Android: hero, badge versione, bottoni con icona seedvault2
+* Dopo l'accesso: dashboard analisi (input profilo, risultati, breakdown flotte/operazioni, grafici, ticker prezzi, sidebar cache/wallet)
+
+**TODO e Gap attuali:**
+
+- La logica di connessione wallet non è ancora implementata lato frontend web (vedi [FRONTEND_WALLET_GUI_TODO.md](FRONTEND_WALLET_GUI_TODO.md))
+- Il pulsante CONNECT WALLET è disabilitato e manca un handler JS/TS
+- Non esiste un modulo TypeScript per la gestione provider, firma, stato utente, challenge, ecc.
+- Nessun feedback visivo su connessione/disconnessione, errori, o info wallet in sidebar
+- Nessuna navigazione condizionale tra modalità guest e autenticata
+
+**Roadmap/Implementazione:**
+
+1. Integrare una libreria come `@solana/wallet-adapter` per browser
+2. Creare un modulo `wallet.ts` che gestisca provider, connessione, stato, eventi
+3. Abilitare il pulsante CONNECT WALLET e collegarlo al modulo wallet
+4. Mostrare feedback di stato (loading, errore, successo) e info wallet in sidebar
+5. Implementare flusso di firma/autenticazione (challenge dal backend, firma via wallet, invio risposta)
+6. Gestire la navigazione tra modalità guest e autenticata
+
+Per dettagli e analisi UX vedi anche:
+- [FRONTEND_WALLET_GUI_TODO.md](FRONTEND_WALLET_GUI_TODO.md)
+- [frontend wallet adapter.md](frontend%20wallet%20adapter.md)
 
 ### Decoder (Rust)
 
@@ -52,7 +81,7 @@ Il progetto è composto da:
 
 ```bash
 # Installa dipendenze backend e frontend
-npm install
+cd ~/sae && npm install && cd frontend && npm install
 
 # Build completo (backend + frontend + decoder)
 npm run build
@@ -68,6 +97,8 @@ rm -rf log cache dist
 sleep 1
 npm run build && mkdir -p log && nohup npm run dev > log/server-$(date +%Y%m%d-%H%M%S).log 2>&1 &
 ```
+pkill -9 node; cd ~/sae ;rm -rf log cache dist; sleep 1; npm run build && mkdir -p log && nohup npm run dev > log/server-$(date +%Y%m%d-%H%M%S).log 2>&1 &
+
 
 Oppure avvio rapido senza rebuild:
 
@@ -350,6 +381,6 @@ Questo progetto è concesso in licenza sotto la Licenza MIT. Vedi [LICENSE](LICE
 
 pkill -9 node; cd ~/sae ;rm -rf log cache dist; sleep 1; npm run build && mkdir -p log && nohup npm run dev > log/server-$(date +%Y%m%d-%H%M%S).log 2>&1 &    
 
-pkill -9 node; cd ~/sae; rm -rf dist frontend/dist log cache; sleep 1; npm run build && pm2 start dist/app.js --name sae --log log/pm2-sae.log
+pkill -9 node; cd ~/sae; rm -rf dist log cache; sleep 1; npm run build && pm2 start dist/app.js --name sae --log log/pm2-sae.log
 
 git add . && git commit -m "wallet connection gui" && git push -f origin main       
