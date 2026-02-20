@@ -7,6 +7,8 @@ body {
   font-size: 13px;
   line-height: 1.4;
   position: relative;
+  min-height: 100vh;
+  overflow-y: auto;
 }
 
 body::before {
@@ -21,7 +23,7 @@ body::before {
   background-size: cover;
   background-position: center top;
   background-repeat: no-repeat;
-  background-attachment: scroll;
+  /*background-attachment: scroll;*/
   z-index: -1;
   mask-image: linear-gradient(to bottom, 
     rgba(255,255,255,1) 0%, 

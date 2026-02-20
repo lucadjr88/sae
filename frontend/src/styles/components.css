@@ -1,6 +1,7 @@
 .hero {
   text-align: center;
-  margin: 40px 0 80px 0;
+  margin-top: 40px;
+  margin-bottom: 40px;
 }
 
 .hero-title {
@@ -140,10 +141,12 @@
   position: fixed;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 20px;
   z-index: 900;
+  min-height: 100vh;
 }
 
 .start-screen__content {
@@ -165,6 +168,7 @@
   justify-content: center;
   align-items: center;
   gap: 40px;
+  margin-top: 120px; /* Centra i pulsanti verticalmente */
 }
 
 .start-button {
@@ -215,20 +219,12 @@
   color: #b8c0cc;
 }
 
-.start-button.is-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+
 
 body.start-screen-active {
   overflow: hidden;
 }
 
-body.start-screen-active .container,
-body.start-screen-active #price-ticker-bar,
-body.start-screen-active .sidebar {
-  display: none;
-}
 
 @media (max-width: 640px) {
   .start-screen__content {

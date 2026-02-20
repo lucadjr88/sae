@@ -2,11 +2,27 @@
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
+
+#price-ticker-bar {
+  width: 100%;
+  min-height: 38px;
+  background: linear-gradient(90deg, #13151f 0%, #1a1f2e 100%);
+  border-top: 1px solid #1e222e;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.12);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  z-index: 1000;
+}
+
 #price-ticker-content {
   display: flex;
   align-items: center;
   height: 32px;
   will-change: transform;
-  animation: ticker-scroll 999s linear infinite;
+  animation: ticker-scroll 20s linear infinite; 
   opacity: 1 !important;
 }

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Star Atlas Explorer</title>
+  <!-- Favicon e icone multi-formato -->
+  <link rel="icon" type="image/png" sizes="48x48" href="src/assets/icons/ic_launcher.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="src/assets/icons/favicon512.png">
+  <link rel="icon" type="image/png" sizes="288x288" href="src/assets/icons/ic_splash_favicon.png">
+  <link rel="icon" type="image/png" sizes="108x108" href="src/assets/icons/ic_launcher_foreground.png">
+  <link rel="icon" type="image/png" sizes="640x619" href="src/assets/icons/icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="src/assets/icons/ic_launcher_round.png">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="src/styles/main.css?v=ui2">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+  </script>
+  <script type="module" src="src/main.ts"></script>
+
+</head>
+<body>
+  <div id="start-screen" class="start-screen">
+    <div class="start-screen__content">
+      <div class="hero start-hero">
+        <div class="hero-title">Star Atlas Explorer</div>
+        <div class="hero-subtitle">POWERED BY THE PEOPLE</div>
+      </div>
+      <div class="start-buttons">
+        <button class="start-button" id="connectWalletBtn">
+          <span class="start-button__icon">
+            <img src="src/assets/icons/seedvault2.png" alt="Connect wallet">
+          </span>
+          <span class="start-button__label">CONNECT WALLET</span>
+        </button>
+        <button class="start-button is-muted" id="enterNoWalletBtn">
+          <span class="start-button__icon">
+            <img src="src/assets/icons/seedvault2.png" alt="Enter without wallet">
+          </span>
+          <span class="start-button__label">ENTER NO WALLET</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="app-version">v1.20260219.037</div>
+  <!-- Privacy Policy link visibile solo su start screen, non su results -->
+  <div id="privacyPolicyStart" style="position:fixed;left:0;right:0;bottom:55px;z-index:999;text-align:center;pointer-events:auto;">
+    <a href="https://sites.google.com/view/policy-staratlasexplorer/home-page" target="_blank" rel="noopener" style="color:#7dd3fc;font-size:13px;opacity:0.85;text-decoration:underline;">Privacy Policy</a>
+  </div>
+  <div id="price-ticker-bar" style="
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: #333; /* Colore di esempio */
+    color: white;
+    padding: 10px 0;
+    z-index: 1000; /* Assicura che stia sopra altri elementi */
+    ">
+    <div id="price-ticker-content"></div>
+  </div>
+  <div class="sidebar" id="sidebar" style="display:none;">
+    <div id="sidebarWalletInfo" style="display:none;text-align:center;margin-bottom:8px;"></div>
+    <div class="profile-icon" id="profileIcon" title="">👤</div>
+    <div class="profile-id" id="sidebarProfileId"></div>
+    <div class="cache-tooltip" id="cacheTooltip">
+      <div class="cache-tooltip-title">
+        <span id="cacheTooltipIcon">💾</span>
+        <span id="cacheTooltipTitle">Cache Status</span>
+      </div>
+      <div class="cache-tooltip-status" id="cacheTooltipStatus">Loading...</div>
+      <div class="cache-tooltip-age" id="cacheTooltipAge"></div>
+      <button class="cache-tooltip-btn" id="cacheUpdateBtn" style="display:none;">⚡ Update Cache</button>
+      <button class="cache-tooltip-btn" id="cacheWipeBtn" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); margin-top: 4px;">🗑️ Wipe & Reload</button>
+    </div>
+    <div id="privacyPolicySidebar" style="margin-top:auto;margin-bottom:55px;text-align:center;">
+      <a href="https://sites.google.com/view/policy-staratlasexplorer/home-page" target="_blank" rel="noopener" style="color:#7dd3fc;font-size:13px;opacity:0.85;text-decoration:underline;">Privacy Policy</a>
+    </div>
+  </div>
+  <div class="container" id="mainContainer" style="display:none;"></div>
+</body>
+</html>

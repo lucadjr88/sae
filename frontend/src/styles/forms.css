@@ -63,6 +63,13 @@ button:disabled {
   cursor: not-allowed; 
 }
 
+#results {
+  /*max-height: 70vh;*/
+  overflow-y: auto;
+  padding-left: 60px;
+  padding-right: 20px;
+  box-sizing: border-box;
+}
 #results:empty {
   display: none;
 }

@@ -195,8 +195,6 @@ export async function updateCache(): Promise<void> {
       })
     });
 
-    const cacheHit = response.headers.get('X-Cache-Hit');
-    const cacheTimestamp = response.headers.get('X-Cache-Timestamp');
 
     if (!response.ok) {
       throw new Error('Failed to fetch wallet fees');
@@ -226,75 +224,95 @@ export async function updateCache(): Promise<void> {
 
     setCacheIconState('default');
     setCacheButtonState('cacheUpdateBtn', false);
-    // Show sidebar again
-    setSidebarVisible(true);
-    const sidebarProfileId = document.getElementById('sidebarProfileId');
-    if (sidebarProfileId) {
-      sidebarProfileId.textContent = currentProfileId.substring(0, 6) + '...';
-    }
+    // Sidebar profile update removed
 
   } catch (error) {
     console.error('Update error:', error);
     resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
   } finally {
     stopTimer(timerHandle);
-    setSidebarVisible(true);
   }
 }
 
 export async function wipeAndReload(): Promise<void> {
-  if (!currentProfileId) return;
+  console.log('[wipeAndReload] called. currentProfileId:', currentProfileId);
+  if (!currentProfileId) {
+    console.warn('[wipeAndReload] currentProfileId is null/undefined, aborting wipe.');
+    return;
+  }
 
   let timerHandle = null;
+  console.log('[wipeAndReload] Proceeding with wipe for profile:', currentProfileId);
 
   // Proceed without confirmation popup (auto-confirm)
 
   const resultsDiv = document.getElementById('results');
   const profileIcon = document.getElementById('profileIcon');
   const cacheWipeBtn = document.getElementById('cacheWipeBtn');
+  console.log('[wipeAndReload] DOM elements:', {resultsDiv, profileIcon, cacheWipeBtn});
 
+  console.log('[wipeAndReload] Hiding cache tooltip and sidebar');
   hideCacheTooltipAndSidebar();
 
   updateProgress('Wiping cache and reloading...');
+  console.log('[wipeAndReload] Progress updated: Wiping cache and reloading...');
 
   setAnalysisStartTime(Date.now());
-  timerHandle = startTimer(updateTimerInResults);
+  // Uniforma la schermata di attesa: timer e messaggio
+  setAnalysisStartTime(Date.now());
+  const startTime = Date.now();
+  const timerEl = resultsDiv?.querySelector('.timer');
+  if (timerEl) {
+    timerEl.textContent = '0s';
+    timerEl.style.display = '';
+  }
+  if (progressInterval) clearInterval(progressInterval);
+  setProgressInterval(setInterval(() => {
+    if (startTime) {
+      const seconds = Math.floor((Date.now() - startTime) / 1000);
+      const resultsDiv = document.getElementById('results');
+      if (resultsDiv) {
+        const loadingDiv = resultsDiv.querySelector('.loading');
+        if (loadingDiv) {
+          const span = loadingDiv.querySelector('span');
+          if (span) {
+            const text = span.textContent;
+            const messageMatch = text.match(/\((.+?)(?:\s-\s\d+s)?\)$/);
+            const message = messageMatch ? messageMatch[1] : text.replace(/\(|\)/g, '').split(' - ')[0];
+            span.textContent = `(${message} - ${seconds}s)`;
+          }
+        }
+      }
+    }
+  }, 1000));
+  updateProgress('Analyzing profile (this may take a while)...');
+  console.log('[wipeAndReload] Timer started');
 
   setCacheIconState('loading', 'Wiping cache...');
   setCacheButtonState('cacheWipeBtn', true);
+  console.log('[wipeAndReload] Cache icon and button state set to loading');
 
   try {
-    // Call wipe endpoint with wipeCache in the body
-    console.log('Wiping cache for profile:', currentProfileId);
-    
-    // Create a timeout promise (5 minutes - wipe can take time)
-    const timeoutPromise = new Promise((_, reject) => 
+    // Chiamata POST identica a analyze, con wipeCache
+    const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Wipe operation timed out (5min)')), 300000)
     );
-    
     const fetchPromise = fetch('/api/analyze-profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         profileId: currentProfileId,
-        wipeCache: true 
+        wipeCache: true
       })
     });
-    
     const wipeResponse = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-
     if (!wipeResponse.ok) {
       throw new Error('Failed to wipe cache and reload');
     }
-
-    console.log('Cache wiped and analysis complete');
-    
     const cacheHit = wipeResponse.headers.get('X-Cache-Hit');
     const cacheTimestamp = wipeResponse.headers.get('X-Cache-Timestamp');
     const data = await wipeResponse.json();
-    
     const processed = processAnalysisData(data);
-    
     setLastAnalysisParams({
       walletPubkey: processed.walletPubkey,
       fleetAccounts: processed.uniqueFleetAccounts,
@@ -302,150 +320,28 @@ export async function wipeAndReload(): Promise<void> {
       fleetRentalStatus: processed.fleetRentalStatus,
       fleets: processed.fleets
     });
-    
     try {
       Object.entries(data.feesByFleet || {}).forEach(([name, entry]) => {
         const isRent = processed.rentedFleetNames.has(String(name)) || processed.rentedFleetNames.has(String(name).trim());
         if (isRent) { entry.isRented = true; }
       });
-    } catch {}
-    
+    } catch (err) {
+      console.warn('[wipeAndReload] Error marking rented fleets:', err);
+    }
     updateProgress('Complete!');
     updateCacheTooltip(cacheHit, cacheTimestamp);
     displayResults(data, processed.fleetNames, processed.rentedFleetNames, processed.fleets);
     setCacheIconState('default');
-    setSidebarVisible(true);
-
-  } catch (error) {
-    console.error('Wipe error:', error);
-    resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
-  } finally {
-    stopTimer(timerHandle);
-    setSidebarVisible(true);
-  }
-}
-
-export async function refreshAnalysis(): Promise<void> {
-  if (!currentProfileId) return;
-
-  let timerHandle = null;
-
-  const resultsDiv = document.getElementById('results');
-  const profileIcon = document.getElementById('profileIcon');
-
-  hideCacheTooltipAndSidebar();
-
-  updateProgress('Refreshing fleet data...');
-
-  timerHandle = startTimer(updateTimerInResults);
-
-  setCacheIconState('loading', 'Refreshing...');
-  // Use the update button state for visual disabling; do not change text
-  setCacheButtonState('cacheUpdateBtn', true);
-
-  try {
-    // Fetch with refresh flag
-    console.log('Refreshing fleets for profile:', currentProfileId);
-    const fleetsResponse = await fetch('/api/analyze-profile?wipeCache=true', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profileId: currentProfileId })
-    });
-
-    if (!fleetsResponse.ok) {
-      throw new Error('Failed to fetch fleets');
-    }
-
-    const fleetsData = await fleetsResponse.json();
-    const walletPubkey = fleetsData.walletAuthority;
-    const fleets = fleetsData.fleets;
-
-    updateProgress(`Found ${fleets.length} fleets, collecting accounts...`);
-
-    const { accounts: uniqueFleetAccounts, names: fleetNames, rentalStatus: fleetRentalStatus } = buildFleetAccountsMap(fleets);
-
-    updateProgress('Fetching fresh transaction data...');
-
-    // Validate walletPubkey before making request
-    if (!walletPubkey) {
-      throw new Error('Wallet pubkey not found in fleet data');
-    }
-
-    console.log('[refreshAnalysis] Sending request with wallet:', walletPubkey.substring(0, 8) + '...');
-
-    // Use streaming endpoint with refresh flag
-    /*const response = await fetch('/api/wallet-sage-fees-stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-        walletPubkey: walletPubkey,
-        fleetAccounts: uniqueFleetAccounts,
-        fleetNames: fleetNames,
-        fleetRentalStatus: fleetRentalStatus,
-        hours: 24,
-          refresh: true,
-          enableSubAccountMapping: false
-      })
-    });*/
-
-    const cacheHit = response.headers.get('X-Cache-Hit');
-    const cacheTimestamp = response.headers.get('X-Cache-Timestamp');
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch transaction data: ${response.statusText}`);
-    }
-
-    // Process streaming response
-    const finalData = await readSSEStream(response, {
-      onProgress: (data) => {
-        if (data.feesByFleet) {
-          displayPartialResults(data, fleets, fleetRentalStatus);
-        }
-        const pct = data.percentage || '0';
-        const delay = data.currentDelay || '?';
-        updateProgress(`${data.message || 'Processing...'} (${pct}% - delay: ${delay}ms)`);
-      },
-      onComplete: (data) => {
-        console.log('[refreshAnalysis] Received COMPLETE event');
-        const processedTxs = data.transactionCount24h || 0;
-        const totalSigs = data.totalSignaturesFetched || 0;
-        updateProgress(`Refreshed: ${processedTxs}/${totalSigs} transactions`);
-      },
-      onError: null
-    });
-
-    console.log('[refreshAnalysis] Stream ended. finalData present?', !!finalData);
-
-    const rentedFleetNames = buildRentedFleetNames(fleets, fleetRentalStatus);
-
-    // Render full results with charts
-    console.log('[refreshAnalysis] Rendering final results...');
-    displayResults(finalData, fleetNames, rentedFleetNames, fleets);
-
-    // Update cache tooltip
-    updateCacheTooltip(cacheHit, cacheTimestamp);
-
-    setCacheIconState('default', 'Fresh data. Click to refresh');
-    if (profileIcon) {
-      profileIcon.onclick = (e) => {
-        e.stopPropagation();
-        refreshAnalysis();
-      };
-    }
-
-    // Show sidebar again
-    setSidebarVisible(true);
-    const sidebarProfileId = document.getElementById('sidebarProfileId');
-    if (sidebarProfileId) {
-      sidebarProfileId.textContent = currentProfileId.substring(0, 6) + '...';
-    }
-
-  } catch (error) {
-    console.error('Refresh error:', error);
-    resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
-    // Show sidebar even on error
-  } finally {
-    stopTimer(timerHandle);
-    resetAllCacheButtons();
+    setCacheButtonState('cacheWipeBtn', false);
+    if (progressInterval) clearInterval(progressInterval);
+    if (timerEl) timerEl.style.display = 'none';
+    console.log('[wipeAndReload] Done.');
+  } catch (err) {
+    setCacheIconState('error');
+    setCacheButtonState('cacheWipeBtn', false);
+    if (progressInterval) clearInterval(progressInterval);
+    if (timerEl) timerEl.style.display = 'none';
+    updateProgress('Error during wipe: ' + (err?.message || err));
+    console.error('[wipeAndReload] Error:', err);
   }
 }

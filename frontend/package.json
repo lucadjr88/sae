@@ -3,12 +3,20 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc && tsc-alias && node ../scripts/add-js-extensions.cjs ./dist && npm run copy-assets",
-    "build:watch": "tsc --watch",
-    "copy-assets": "cp -r src/index.html src/styles src/config src/assets dist/ 2>/dev/null || true"
+    "build": "vite build",
+    "build:watch": "tsc --watch --outDir ../dist",
+    "copy-assets": "cp -r src/index.html src/styles src/config src/assets ../dist/ 2>/dev/null || true"
   },
   "devDependencies": {
     "tsc-alias": "^1.8.16",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "@solana/wallet-adapter-backpack": "^0.1.14",
+    "@solana/wallet-adapter-base": "^0.9.27",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-adapter-solflare": "^0.6.32",
+    "@solana/wallet-adapter-wallets": "^0.19.37"
   }
 }
