@@ -67,16 +67,16 @@ if (mainContainer) mainContainer.style.display = 'none';
 if (connectBtn) {
   connectBtn.disabled = false;
   connectBtn.addEventListener('click', () => {
-    console.log('[DEBUG] Connect Wallet button pressed');
+    //console.log('[DEBUG] Connect Wallet button pressed');
     if (!window.wallet) {
       alert('window.wallet non è definito!');
       console.error('[DEBUG] window.wallet non è definito!');
       return;
     }
     // Multi-wallet: mostra sempre il modal custom
-    console.log('[DEBUG] window.wallet prima di connect:', window.wallet);
+    //console.log('[DEBUG] window.wallet prima di connect:', window.wallet);
     window.wallet.connect().then(() => {
-      console.log('[DEBUG] Connect chiamato, stato wallet:', window.wallet);
+      //console.log('[DEBUG] Connect chiamato, stato wallet:', window.wallet);
     }).catch((err) => {
       alert('Errore durante la connessione al wallet: ' + (err?.message || err));
       console.error('[DEBUG] Errore connect wallet:', err);
