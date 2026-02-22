@@ -84,14 +84,14 @@ if (connectBtn) {
   });
 }
 
-      function getWalletIcon(wallet: any): string {
-        if (!wallet) return "src/assets/icons/seedvault2.png";
-        const name = (wallet.adapter?.name || wallet.name || "").toLowerCase();
-        if (name.includes("solflare")) return "https://www.solflare.com/wp-content/uploads/2024/11/App-Icon.svg";
-        if (name.includes("phantom")) return "https://mintcdn.com/phantom-e50e2e68/fkWrmnMWhjoXSGZ9/resources/images/Phantom_SVG_Icon.svg?w=1100&fit=max&auto=format&n=fkWrmnMWhjoXSGZ9&q=85&s=d9602893116f9314145e2a303d675ccc";
-        if (name.includes("backpack")) return "https://lh3.googleusercontent.com/YQnjQjJ6NuY_rxRwy8JA177ONpmPiOdFpud8zK-ebcS8-r3mQzwrzmqlueLSvKw1SsaoeBYua7XePZ632xXM4aHUzw=s60";
-        return "src/assets/icons/seedvault2.png";
-      }
+function getWalletIcon(wallet: any): string {
+  if (!wallet) return "src/assets/icons/seedvault2.png";
+  const name = (wallet.adapter?.name || wallet.name || "").toLowerCase();
+  if (name.includes("solflare")) return "https://www.solflare.com/wp-content/uploads/2024/11/App-Icon.svg";
+  if (name.includes("phantom")) return "https://mintcdn.com/phantom-e50e2e68/fkWrmnMWhjoXSGZ9/resources/images/Phantom_SVG_Icon.svg?w=1100&fit=max&auto=format&n=fkWrmnMWhjoXSGZ9&q=85&s=d9602893116f9314145e2a303d675ccc";
+  if (name.includes("backpack")) return "https://lh3.googleusercontent.com/YQnjQjJ6NuY_rxRwy8JA177ONpmPiOdFpud8zK-ebcS8-r3mQzwrzmqlueLSvKw1SsaoeBYua7XePZ632xXM4aHUzw=s60";
+  return "src/assets/icons/seedvault2.png";
+}
 // --- Minimal Connect Wallet screen logic ---
 window.addEventListener('walletStateChanged', async () => {
   const wallet = window.wallet;
@@ -203,12 +203,12 @@ window.addEventListener('walletStateChanged', async () => {
   }
 });
 
-  const exitStartScreen = () => {
-    if (startScreen) startScreen.style.display = 'none';
-    if (mainContainer) {
-      mainContainer.style.display = 'block';
-      mainContainer.innerHTML = `
-        <div class="hero">
+const exitStartScreen = () => {
+  if (startScreen) startScreen.style.display = 'none';
+  if (mainContainer) {
+    mainContainer.style.display = 'block';
+    mainContainer.innerHTML = `
+        <div id="ricerca_manuale" class="hero">
           <div class="hero-title">Star Atlas Explorer</div>
           <div class="hero-subtitle">POWERED BY THE PEOPLE</div>
         </div>
@@ -216,21 +216,33 @@ window.addEventListener('walletStateChanged', async () => {
           <input type="text" id="profileId" placeholder="Player Profile ID">
           <button id="analyzeBtn">Analyze</button>
         </div>
+
         <div id="results"></div>
+
+        <div id="allert_istruzioni" class="container">
+          <div class="content-column">
+            <svg class="info-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            </svg>
+            <p class="body-medium">
+              You can find your profileId in Sage under Player Information and Details in CSS Starbase // Details
+            </p>
+          </div>
+        </div>
       `;
-      const analyzeBtn = mainContainer.querySelector('#analyzeBtn') as HTMLButtonElement | null;
-      analyzeBtn?.addEventListener('click', () => {
-        const profileId = (mainContainer.querySelector('#profileId') as HTMLInputElement)?.value.trim();
-        if (!profileId) {
-          alert('Inserisci un Player Profile ID!');
-          return;
-        }
-        const resultsDiv = mainContainer.querySelector('#results') as HTMLDivElement;
-        resultsDiv.innerHTML = '<div class="loading">Loading...</div>';
-        if (window.analyzeFees) window.analyzeFees(profileId);
-      });
-    }
-  };
+    const analyzeBtn = mainContainer.querySelector('#analyzeBtn') as HTMLButtonElement | null;
+    analyzeBtn?.addEventListener('click', () => {
+      const profileId = (mainContainer.querySelector('#profileId') as HTMLInputElement)?.value.trim();
+      if (!profileId) {
+        alert('Inserisci un Player Profile ID!');
+        return;
+      }
+      const resultsDiv = mainContainer.querySelector('#results') as HTMLDivElement;
+      resultsDiv.innerHTML = '<div class="loading">Loading...</div>';
+      if (window.analyzeFees) window.analyzeFees(profileId);
+    });
+  }
+};
 
 const initStartScreen = () => {
   const startScreen = document.getElementById('start-screen') as HTMLElement | null;

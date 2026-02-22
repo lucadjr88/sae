@@ -9,7 +9,7 @@
   font-size: 34px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.6), 0 0 20px rgba(255,255,255,0.15);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6), 0 0 20px rgba(255, 255, 255, 0.15);
 }
 
 .hero-subtitle {
@@ -18,7 +18,7 @@
   margin-top: 6px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .charts-row {
@@ -135,7 +135,9 @@
   font-family: 'Roboto Mono', monospace;
 }
 
-.stat-value.highlight { color: #34d399; }
+.stat-value.highlight {
+  color: #34d399;
+}
 
 .start-screen {
   position: fixed;
@@ -168,7 +170,8 @@
   justify-content: center;
   align-items: center;
   gap: 40px;
-  margin-top: 120px; /* Centra i pulsanti verticalmente */
+  margin-top: 120px;
+  /* Centra i pulsanti verticalmente */
 }
 
 .start-button {
@@ -190,8 +193,8 @@
   height: 80px;
   padding: 12px;
   border-radius: 12px;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -224,6 +227,50 @@
 body.start-screen-active {
   overflow: hidden;
 }
+
+
+:root {
+  /* Definisci qui il tuo colore TextSecondary */
+  --text-secondary: #757575;
+}
+
+.container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.content-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* horizontalAlignment = CenterHorizontally */
+  text-align: center;
+  /* textAlign = TextAlign.Center */
+  max-width: 400px;
+  /* Opzionale: per evitare che il testo sia troppo largo */
+}
+
+.info-icon {
+  width: 48px;
+  /* size(48.dp) */
+  height: 48px;
+  color: var(--text-secondary);
+  /* tint = TextSecondary */
+}
+
+.body-medium {
+  margin-top: 16px;
+  /* Spacer(modifier = Modifier.height(16.dp)) */
+  color: var(--text-secondary);
+  font-family: sans-serif;
+  /* Simile al default MaterialTheme */
+  font-size: 0.875rem;
+  /* Scala tipica bodyMedium (14sp) */
+  line-height: 1.25rem;
+  margin-bottom: 0;
+}
+
 
 
 @media (max-width: 640px) {
