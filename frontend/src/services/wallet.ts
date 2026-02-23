@@ -21,8 +21,11 @@ export class Wallet {
     }
 
     async connect() {
+        if (this.isConnecting) return;
         this.isConnecting = true;
+        this.error = null;
         window.dispatchEvent(new Event('walletStateChanged'));
+
         if (this.adapters.length === 0) {
             const adapters = await getWalletAdapters();
             this.adapters = adapters;
@@ -32,25 +35,35 @@ export class Wallet {
                 detect: () => true
             }));
         }
-        // MOBILE: se c'è un solo adapter (MWA), connetti direttamente senza modal
+
+        // MOBILE: Solana Mobile Wallet Adapter pattern fedele agli esempi ufficiali
         if (this.adapters.length === 1 && this.adapters[0].name === 'Solana Mobile Wallet') {
+            // La connessione avviene tramite callback/handler asincrono
             try {
                 const result = await this.adapters[0].connect();
-                this.isConnected = true;
-                this.isConnecting = false;
-                this.publicKey = result.accounts?.[0]?.publicKey || null;
-                this.error = null;
-                this.selected = 0;
-                this.adapter = this.adapters[0];
-                window.dispatchEvent(new Event('walletStateChanged'));
+                if (result && result.accounts && result.accounts[0] && result.accounts[0].publicKey) {
+                    this.isConnected = true;
+                    this.publicKey = result.accounts[0].publicKey;
+                    this.selected = 0;
+                    this.adapter = this.adapters[0];
+                    this.error = null;
+                } else {
+                    this.isConnected = false;
+                    this.publicKey = null;
+                    this.error = 'No account returned by wallet.';
+                }
             } catch (e: any) {
+                this.isConnected = false;
+                this.publicKey = null;
                 this.error = e.message || 'Connection failed';
+                alert('Error during connection: ' + (e.message || e));
+            } finally {
                 this.isConnecting = false;
                 window.dispatchEvent(new Event('walletStateChanged'));
-                alert('Error during connection: ' + (e.message || e));
             }
             return;
         }
+
         // DESKTOP: mostra popup per selezione wallet
         const choice = await this.showWalletModal();
         if (choice === null) {
@@ -63,17 +76,18 @@ export class Wallet {
         try {
             await this.adapters[choice].connect();
             this.isConnected = true;
-            this.isConnecting = false;
             this.publicKey = this.adapters[choice].publicKey || null;
             this.error = null;
             this.selected = choice;
             this.adapter = this.adapters[choice];
-            window.dispatchEvent(new Event('walletStateChanged'));
         } catch (e: any) {
+            this.isConnected = false;
+            this.publicKey = null;
             this.error = e.message || 'Connection failed';
+            alert('Error during connection: ' + (e.message || e));
+        } finally {
             this.isConnecting = false;
             window.dispatchEvent(new Event('walletStateChanged'));
-            alert('Error during connection: ' + (e.message || e));
         }
     }
 
