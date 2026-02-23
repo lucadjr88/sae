@@ -31,21 +31,17 @@ export default defineConfig({
   // Aggiungi i plugin per React e SSL
   plugins: [
     react(),
-    basicSsl() // Questo genera il certificato HTTPS locale necessario per il mobile
+    basicSsl(), // Crea il contesto sicuro HTTPS necessario
   ],
   server: {
-    https: true, // Forza HTTPS
+    host: true,
+    https: true,
     hmr: {
-      protocol: 'wss', // Forza il WebSocket sicuro per evitare blocchi CSP
-    },
-    proxy: {
-      // Se il tuo wallet cerca di parlare con un RPC locale o bridge
-      '/solana-wallet': {
-        target: 'ws://localhost:54490',
-        ws: true,
-      },
+      protocol: 'wss', // Forza il websocket di Vite a essere sicuro
     },
   },
+
+
   build: {
     outDir: 'dist',
     emptyOutDir: true,
