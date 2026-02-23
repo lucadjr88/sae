@@ -23,43 +23,35 @@ export class Wallet {
     async connect() {
         this.isConnecting = true;
         window.dispatchEvent(new Event('walletStateChanged'));
-        // Carica gli adapter SOLO ora
         if (this.adapters.length === 0) {
             const adapters = await getWalletAdapters();
             this.adapters = adapters;
-            // Per compatibilità con showWalletModal, costruiamo walletInfos
             this.walletInfos = adapters.map((adapter: any) => ({
                 name: adapter.name || 'Wallet',
                 icon: adapter.icon || '',
-                detect: () => true // su mobile sempre true, su desktop detection classica
+                detect: () => true
             }));
-            this.adapters.forEach((adapter, idx) => {
-                if (adapter.on) {
-                    adapter.on('connect', () => {
-                        this.isConnected = true;
-                        this.isConnecting = false;
-                        this.publicKey = adapter.publicKey;
-                        this.error = null;
-                        this.selected = idx;
-                        this.adapter = adapter;
-                        window.dispatchEvent(new Event('walletStateChanged'));
-                    });
-                    adapter.on('disconnect', () => {
-                        this.isConnected = false;
-                        this.publicKey = null;
-                        this.selected = null;
-                        this.adapter = null;
-                        window.dispatchEvent(new Event('walletStateChanged'));
-                    });
-                    adapter.on('error', (err: any) => {
-                        this.error = err.message || 'Wallet error';
-                        this.isConnecting = false;
-                        window.dispatchEvent(new Event('walletStateChanged'));
-                    });
-                }
-            });
         }
-        // Mostra popup minimale per selezione wallet
+        // MOBILE: se c'è un solo adapter (MWA), connetti direttamente senza modal
+        if (this.adapters.length === 1 && this.adapters[0].name === 'Solana Mobile Wallet') {
+            try {
+                const result = await this.adapters[0].connect();
+                this.isConnected = true;
+                this.isConnecting = false;
+                this.publicKey = result.accounts?.[0]?.publicKey || null;
+                this.error = null;
+                this.selected = 0;
+                this.adapter = this.adapters[0];
+                window.dispatchEvent(new Event('walletStateChanged'));
+            } catch (e: any) {
+                this.error = e.message || 'Connection failed';
+                this.isConnecting = false;
+                window.dispatchEvent(new Event('walletStateChanged'));
+                alert('Error during connection: ' + (e.message || e));
+            }
+            return;
+        }
+        // DESKTOP: mostra popup per selezione wallet
         const choice = await this.showWalletModal();
         if (choice === null) {
             this.isConnecting = false;
@@ -70,6 +62,13 @@ export class Wallet {
         }
         try {
             await this.adapters[choice].connect();
+            this.isConnected = true;
+            this.isConnecting = false;
+            this.publicKey = this.adapters[choice].publicKey || null;
+            this.error = null;
+            this.selected = choice;
+            this.adapter = this.adapters[choice];
+            window.dispatchEvent(new Event('walletStateChanged'));
         } catch (e: any) {
             this.error = e.message || 'Connection failed';
             this.isConnecting = false;

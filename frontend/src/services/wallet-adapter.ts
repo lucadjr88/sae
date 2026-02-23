@@ -12,17 +12,27 @@ export const APP_IDENTITY = {
 
 export async function getWalletAdapters() {
   if (isMobile()) {
-
-    const authorizationResult = await transact(async (wallet: Web3MobileWallet) => {
-      const authorizationResult = await wallet.authorize({
-        chain: 'solana:mainnet',
-        identity: APP_IDENTITY,
-      });
-
-      /* After approval, signing requests are available in the session. */
-
-      return authorizationResult;
-    });
+    // Minimal, faithful to Solana Mobile Wallet Adapter example
+    return [
+      {
+        name: 'Solana Mobile Wallet',
+        icon: 'src/assets/icons/seedvault2.png',
+        connect: async () => {
+          const result = await transact(async (wallet: Web3MobileWallet) => {
+            return await wallet.authorize({
+              chain: 'solana:mainnet',
+              identity: APP_IDENTITY,
+            });
+          });
+          return result;
+        },
+        // Dummy disconnect and signMessage for interface compatibility
+        disconnect: async () => {},
+        signMessage: async () => null,
+        on: () => {},
+        get publicKey() { return null; },
+      }
+    ];
   } else {
     const { PhantomWalletAdapter } = await import('@solana/wallet-adapter-phantom');
     const { SolflareWalletAdapter } = await import('@solana/wallet-adapter-solflare');
