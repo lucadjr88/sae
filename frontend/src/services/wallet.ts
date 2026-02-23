@@ -17,7 +17,15 @@ export class Wallet {
     selected: number | null = null;
 
     constructor() {
-        getWalletAdapters().then(adapters => {
+        // Non caricare più gli adapter qui: lo farà connect()
+    }
+
+    async connect() {
+        this.isConnecting = true;
+        window.dispatchEvent(new Event('walletStateChanged'));
+        // Carica gli adapter SOLO ora
+        if (this.adapters.length === 0) {
+            const adapters = await getWalletAdapters();
             this.adapters = adapters;
             // Per compatibilità con showWalletModal, costruiamo walletInfos
             this.walletInfos = adapters.map((adapter: any) => ({
@@ -50,12 +58,7 @@ export class Wallet {
                     });
                 }
             });
-        });
-    }
-
-    async connect() {
-        this.isConnecting = true;
-        window.dispatchEvent(new Event('walletStateChanged'));
+        }
         // Mostra popup minimale per selezione wallet
         const choice = await this.showWalletModal();
         if (choice === null) {
