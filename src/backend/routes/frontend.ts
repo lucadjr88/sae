@@ -20,7 +20,7 @@ const frontendPath = isDev
 
 // Aggiungi header CSP permissivo per SPA
 router.use((req, res, next) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; frame-src 'self' https://connect.solflare.com;");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: ws: wss: blob: staratlasexplorer.duckdns.org:*; frame-src 'self' https://connect.solflare.com https://solana-mobile.github.io;");
   next();
 });
 router.use('/', express.static(frontendPath));
