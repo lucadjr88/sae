@@ -1,3 +1,5 @@
+import './styles/mobile.css';
+import { onMobile } from './utils/mobile';
 // @ts-nocheck
 import * as utils from '@utils/utils';
 import "./app/debug.js";
@@ -265,4 +267,9 @@ if (document.readyState === 'loading') {
 } else {
   initStartScreen();
 }
+
+// Logica opzionale per mobile (modulare)
+onMobile(() => {
+  // Inserisci qui eventuali comportamenti specifici per mobile
+});
 

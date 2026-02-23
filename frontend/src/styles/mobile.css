@@ -1,0 +1,17 @@
+@media (max-width: 768px) {
+  body {
+    font-size: 16px;
+    padding: 0 8px;
+  }
+  .sidebar {
+    display: none;
+  }
+  .main-content {
+    width: 100%;
+    padding: 0;
+  }
+    #price-ticker-content {
+    gap: 60px;
+  }
+  /* Altri stili specifici per mobile... */
+}

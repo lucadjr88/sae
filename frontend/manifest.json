@@ -20,11 +20,7 @@
       "src": "assets/icons/favicon512.png",
       "sizes": "512x512",
       "type": "image/png"
-    },
-    {
-      "src": "assets/icons/ic_splash_favicon.png",
-        "sizes": "288x288",
-        "type": "image/png"
     }
+
   ]
 }

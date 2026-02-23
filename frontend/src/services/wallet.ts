@@ -1,16 +1,10 @@
 
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
-import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
-import { BackpackWalletAdapter } from '@solana/wallet-adapter-backpack';
+
 import { PublicKey } from '@solana/web3.js';
+import { getWalletAdapters } from './wallet-adapter';
 
 
-const WALLET_ADAPTERS = [
-    { name: 'Phantom', Adapter: PhantomWalletAdapter, icon: 'https://mintcdn.com/phantom-e50e2e68/fkWrmnMWhjoXSGZ9/resources/images/Phantom_SVG_Icon.svg?w=1100&fit=max&auto=format&n=fkWrmnMWhjoXSGZ9&q=85&s=d9602893116f9314145e2a303d675ccc', detect: () => window.solana && window.solana.isPhantom },
-    { name: 'Solflare', Adapter: SolflareWalletAdapter, icon: 'https://www.solflare.com/wp-content/uploads/2024/11/App-Icon.svg', detect: () => window.solflare },
-    { name: 'Backpack', Adapter: BackpackWalletAdapter, icon: 'https://lh3.googleusercontent.com/YQnjQjJ6NuY_rxRwy8JA177ONpmPiOdFpud8zK-ebcS8-r3mQzwrzmqlueLSvKw1SsaoeBYua7XePZ632xXM4aHUzw=s60', detect: () => window.backpack },
-];
+
 
 export class Wallet {
     isConnected = false;
@@ -19,32 +13,42 @@ export class Wallet {
     error: string | null = null;
     adapter: any = null;
     adapters: any[] = [];
+    walletInfos: any[] = [];
     selected: number | null = null;
 
     constructor() {
-        this.adapters = WALLET_ADAPTERS.map(({ Adapter }) => new Adapter());
-        // Listen to all adapters
-        this.adapters.forEach((adapter, idx) => {
-            adapter.on('connect', () => {
-                this.isConnected = true;
-                this.isConnecting = false;
-                this.publicKey = adapter.publicKey;
-                this.error = null;
-                this.selected = idx;
-                this.adapter = adapter;
-                window.dispatchEvent(new Event('walletStateChanged'));
-            });
-            adapter.on('disconnect', () => {
-                this.isConnected = false;
-                this.publicKey = null;
-                this.selected = null;
-                this.adapter = null;
-                window.dispatchEvent(new Event('walletStateChanged'));
-            });
-            adapter.on('error', (err: any) => {
-                this.error = err.message || 'Wallet error';
-                this.isConnecting = false;
-                window.dispatchEvent(new Event('walletStateChanged'));
+        getWalletAdapters().then(adapters => {
+            this.adapters = adapters;
+            // Per compatibilità con showWalletModal, costruiamo walletInfos
+            this.walletInfos = adapters.map((adapter: any) => ({
+                name: adapter.name || 'Wallet',
+                icon: adapter.icon || '',
+                detect: () => true // su mobile sempre true, su desktop detection classica
+            }));
+            this.adapters.forEach((adapter, idx) => {
+                if (adapter.on) {
+                    adapter.on('connect', () => {
+                        this.isConnected = true;
+                        this.isConnecting = false;
+                        this.publicKey = adapter.publicKey;
+                        this.error = null;
+                        this.selected = idx;
+                        this.adapter = adapter;
+                        window.dispatchEvent(new Event('walletStateChanged'));
+                    });
+                    adapter.on('disconnect', () => {
+                        this.isConnected = false;
+                        this.publicKey = null;
+                        this.selected = null;
+                        this.adapter = null;
+                        window.dispatchEvent(new Event('walletStateChanged'));
+                    });
+                    adapter.on('error', (err: any) => {
+                        this.error = err.message || 'Wallet error';
+                        this.isConnecting = false;
+                        window.dispatchEvent(new Event('walletStateChanged'));
+                    });
+                }
             });
         });
     }
@@ -56,9 +60,9 @@ export class Wallet {
         const choice = await this.showWalletModal();
         if (choice === null) {
             this.isConnecting = false;
-            this.error = 'Nessun wallet rilevato. Installa un wallet Solana compatibile.';
+            this.error = 'No wallet found.';
             window.dispatchEvent(new Event('walletStateChanged'));
-            alert('Nessun wallet rilevato. Installa un wallet Solana compatibile.');
+            alert('No wallet found..');
             return;
         }
         try {
@@ -67,7 +71,7 @@ export class Wallet {
             this.error = e.message || 'Connection failed';
             this.isConnecting = false;
             window.dispatchEvent(new Event('walletStateChanged'));
-            alert('Errore durante la connessione: ' + (e.message || e));
+            alert('Error during connection: ' + (e.message || e));
         }
     }
 
@@ -91,8 +95,8 @@ export class Wallet {
 
     async showWalletModal(): Promise<number|null> {
         return new Promise((resolve) => {
-            // Rileva solo wallet disponibili
-            const detected = WALLET_ADAPTERS.map((w, i) => ({...w, idx: i})).filter(w => w.detect && w.detect());
+            // Usa walletInfos invece di WALLET_ADAPTERS
+            const detected = this.walletInfos.map((w, i) => ({...w, idx: i})).filter(w => w.detect && w.detect());
             let modal = document.getElementById('wallet-modal');
             if (modal) modal.remove();
             modal = document.createElement('div');
@@ -115,7 +119,7 @@ export class Wallet {
                     </button>`
                 ).join('');
             } else {
-                content = `<div style="color:#f87171;font-size:1.1em;margin-bottom:1em;">Nessun wallet rilevato</div>`;
+                content = `<div style="color:#f87171;font-size:1.1em;margin-bottom:1em;">No wallet found</div>`;
             }
             modal.innerHTML = `
                 <div id="wallet-modal-box" style="background:#181c24;padding:2em 1.5em;border-radius:16px;min-width:220px;box-shadow:0 2px 16px #0008;text-align:center;">
