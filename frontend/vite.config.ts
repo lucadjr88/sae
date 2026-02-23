@@ -34,8 +34,6 @@ export default defineConfig({
     basicSsl(), // Crea il contesto sicuro HTTPS necessario
   ],
   server: {
-    host: true,
-    https: true,
     hmr: {
       protocol: 'wss', // Forza il websocket di Vite a essere sicuro
     },
