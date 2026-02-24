@@ -12,7 +12,7 @@ export interface FleetFeeData {
   totalFee: number;
   feePercentage?: number;
   totalOperations: number;
-  isRented?: boolean;
+  isRented?: boolean;                
   operations: { [operationName: string]: OperationStats };
 }
 

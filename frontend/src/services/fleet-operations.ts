@@ -19,8 +19,7 @@ interface FleetNamesMap {
 export function createFleetList(
   data: OperationListData,
   fleetNames: FleetNamesMap,
-  rentedFleetNames: Set<string> = new Set()
-): void {
+  rentedFleetNames: Set<string> = new Set()): void {
   const fleetListDiv = document.getElementById('fleetList') as HTMLDivElement | null;
   if (!fleetListDiv) {
     console.warn('[createFleetList] fleetList element not found');
@@ -29,7 +28,7 @@ export function createFleetList(
 
   // Normalize rented fleet names for case-insensitive matching
   const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
-
+    // Non serve più: la logica di rented è demandata a processAnalysisData
   // List of category names to exclude from Fleet Breakdown
   const excludedCategories = [
     'Starbase Operations',
@@ -49,11 +48,6 @@ export function createFleetList(
   // Filter out categories, keep only actual fleets
   const sortedFleets = (Object.entries(data.feesByFleet) as Array<[string, FleetFeeData]>)
     .sort((a, b) => {
-      const aRented = !!(a[1].isRented || rentedLc.has((fleetNames[a[0]] || a[0] || '').toString().toLowerCase()));
-      const bRented = !!(b[1].isRented || rentedLc.has((fleetNames[b[0]] || b[0] || '').toString().toLowerCase()));
-      // Rented fleets first
-      if (aRented && !bRented) return -1;
-      if (!aRented && bRented) return 1;
       // Then by total fee
       return b[1].totalFee - a[1].totalFee;
     });
@@ -72,29 +66,44 @@ export function createFleetList(
   sortedFleets.forEach(([fleetAccount, fleetData]) => {
     const fleetName = fleetNames[fleetAccount] || fleetAccount;
     const fleetId = 'fleet-' + fleetAccount.substring(0, 8);
-    const isRented = !!(fleetData.isRented || rentedLc.has((fleetName || '').toString().toLowerCase()));
-
     // Debug: log first 3 fleets to verify rental detection
-    if (sortedFleets.indexOf([fleetAccount, fleetData]) < 3) {
-      console.log(`Fleet ${fleetName}: fleetData.isRented=${fleetData.isRented}, in rentedLc=${rentedLc.has((fleetName || '').toString().toLowerCase())}, isRented=${isRented}`);
-    }
+    //if (sortedFleets.indexOf([fleetAccount, fleetData]) < 3) {
+    //  console.log(`Fleet ${fleetName}: fleetData.isRented=${fleetData.isRented}, in rentedLc=${rentedLc.has((fleetName || '').toString().toLowerCase())}, isRented=${isRented}`);
+    //}
 
-    const nameClass = isRented ? 'fleet-name rented-name' : 'fleet-name';
-    const nameInner = isRented
+    const nameClass = fleetData.isRented ? 'fleet-name rented-name' : 'fleet-name';
+    const nameInner = fleetData.isRented
       ? `<span class="rented-name" style="color:#fbbf24;font-weight:800">${fleetName}</span>`
       : `${fleetName}`;
 
-    html += `
-      <div class="fleet-item" onclick="toggleFleet('${fleetId}')">
-        <div class="fleet-header">
-          <div class="${nameClass}">${nameInner}</div>
-          <div class="fleet-ops">${fleetData.totalOperations} ops</div>
-          <div class="fleet-pct">${((fleetData.totalFee / (data.sageFees24h || 1)) * 100).toFixed(1)}%</div>
-            <div class="fleet-sol">${(fleetData.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((fleetData.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span></div>
+    // Definiamo se la flotta ha operazioni
+    const hasOps = Object.keys(fleetData.operations).length > 0;
+
+    if (hasOps) {
+      html += `<div class="fleet-item has-toggle" onclick="toggleFleet('${fleetId}')">`;
+    } else {
+      html += `<div class="fleet-item">`;
+    }
+
+    html += `  
+    <div class="fleet-header" style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+      <div class="${nameClass}" style="flex: 1;">${nameInner}</div>
+      <div class="fleet-ops" style="width: 60px; text-align: right;">${fleetData.totalOperations} ops</div>
+      <div class="fleet-pct" style="width: 50px; text-align: right;">${((fleetData.totalFee / (data.sageFees24h || 1)) * 100).toFixed(1)}%</div>
+      
+      <div class="fleet-sol" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 200px;">
+        ${(fleetData.totalFee / 1e9).toFixed(6)} SOL 
+        <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((fleetData.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
+        
+        <div style="width: 15px; display: flex; justify-content: center;">
+            ${hasOps ? '<span class="fleet-arrow" style="font-size: 10px; color: #7dd3fc;">▼</span>' : ''}
         </div>
-        <div class="fleet-details" id="${fleetId}">
-          <table class="fleet-ops-table">
-    `;
+      </div>
+    </div>
+    <div class="fleet-details" id="${fleetId}">
+      <table class="fleet-ops-table">`;
+
+
     const normalizedOpsMap: Record<string, OperationStats> = {};
     const isCraftingCategory = fleetAccount === 'Crafting Operations';
     (Object.entries(fleetData.operations || {}) as Array<[string, OperationStats]>).forEach(([opName, stats]) => {
@@ -277,21 +286,42 @@ export function createOperationList(
 
     // Calculate percentage of total fees for this operation
     const opPercentage = (opStats.totalFee / data.sageFees24h) * 100;
-    
+
     // For Crafting operation, start collapsed
     const isCrafting = /craft/i.test(operation);
 
-    html += `
-      <div class="fleet-item" onclick="toggleFleet('${opId}')">
-        <div class="fleet-header">
-          <div class="fleet-name">${operation}</div>
-          <div class="fleet-ops">${opStats.count} ops</div>
-          <div class="fleet-pct">${opPercentage.toFixed(1)}%</div>
-            <div class="fleet-sol">${(opStats.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span></div>
+
+
+
+
+    // Verifichiamo se ci sono oggetti per abilitare l'unfold
+    const hasSubOps = opStats.count > 0;
+
+    if (hasSubOps) {
+      html += `
+      <div class="fleet-item has-toggle" onclick="toggleFleet('${opId}')"> `;
+    } else {
+      html += `
+      <div class="fleet-item"> `;
+    }
+
+    html += `  
+    <div class="fleet-header" style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+      <div class="fleet-name" style="flex: 1;">${operation}</div>
+      <div class="fleet-ops" style="width: 60px; text-align: right;">${opStats.count} ops</div>
+      <div class="fleet-pct" style="width: 50px; text-align: right;">${opPercentage.toFixed(1)}%</div>
+      
+      <div class="fleet-sol" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 200px;">
+        ${(opStats.totalFee / 1e9).toFixed(6)} SOL 
+        <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
+        
+        <div class="arrow-container" style="width: 20px; display: flex; justify-content: flex-end;">
+            ${hasSubOps ? '<span class="fleet-arrow" style="font-size: 10px; color: #7dd3fc; cursor: pointer;">▼</span>' : ''}
         </div>
-        <div class="fleet-details" id="${opId}">
-          <table class="fleet-ops-table">
-    `;
+      </div>
+    </div>
+    <div class="fleet-details" id="${opId}">
+      <table class="fleet-ops-table">`;
 
     // For Crafting operation, skip fleet summary row and go directly to details
     if (!isCrafting) {
@@ -479,17 +509,34 @@ export function createOtherOperationsList(
     // Calculate percentage of total fees for this operation
     const opPercentage = (opStats.totalFee / data.sageFees24h) * 100;
 
-    html += `
-      <div class="fleet-item" onclick="toggleFleet('${opId}')">
-        <div class="fleet-header">
-          <div class="fleet-name">${operation}</div>
-          <div class="fleet-ops">${opStats.count} ops</div>
-          <div class="fleet-pct">${opPercentage.toFixed(1)}%</div>
-            <div class="fleet-sol">${(opStats.totalFee / 1e9).toFixed(6)} SOL <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span></div>
+    // Controlliamo se ci sono operazioni per abilitare il toggle
+    const canExpand = opStats.count > 0;
+
+    if (canExpand && opId) {
+      html += `
+      <div class="fleet-item has-toggle" onclick="toggleFleet('${opId}')"> `;
+    } else {
+      html += `
+      <div class="fleet-item"> `;
+    }
+
+    html += `  
+    <div class="fleet-header" style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+      <div class="fleet-name" style="flex: 1;">${operation}</div>
+      <div class="fleet-ops" style="width: 60px; text-align: right;">${opStats.count} ops</div>
+      <div class="fleet-pct" style="width: 50px; text-align: right;">${opPercentage.toFixed(1)}%</div>
+      
+      <div class="fleet-sol" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 210px;">
+        ${(opStats.totalFee / 1e9).toFixed(6)} SOL 
+        <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
+        
+        <div style="width: 15px; display: flex; justify-content: center; margin-left: 5px;">
+            ${canExpand ? '<span class="fleet-arrow" style="font-size: 10px; color: #7dd3fc;">▼</span>' : ''}
         </div>
-        <div class="fleet-details" id="${opId}">
-          <table class="fleet-ops-table">
-    `;
+      </div>
+    </div>
+    <div class="fleet-details" id="${opId}">
+      <table class="fleet-ops-table">`;
 
     // For Crafting operation, skip fleet summary row and go directly to details
     const isCrafting = /craft/i.test(operation);

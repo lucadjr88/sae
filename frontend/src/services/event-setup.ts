@@ -1,7 +1,7 @@
 // public/js/event-setup.ts
 import { updatePriceTicker } from '@app/ticker';
 import { renderPriceTicker } from '@app/renderPriceTicker';
-import { updateCache, refreshAnalysis, wipeAndReload } from './cache-manager';
+import { wipeAndReload } from './cache-manager';
 
 // Define shared types
 type EventHandler<T extends Event> = (ev: T) => void;
@@ -15,17 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
   updatePriceTicker(renderTicker);
   setInterval(() => updatePriceTicker(renderTicker), 60000);
 
-  const cacheUpdateBtn = document.querySelector<HTMLButtonElement>('#cacheUpdateBtn');
   const cacheWipeBtn = document.querySelector<HTMLButtonElement>('#cacheWipeBtn');
 
-  if (cacheUpdateBtn) {
-    const handler: EventHandler<MouseEvent> = (e) => {
-      e.stopPropagation();
-      console.log('Cache update button clicked');
-      updateCache();
-    };
-    cacheUpdateBtn.addEventListener('click', handler);
-  }
 
   if (cacheWipeBtn) {
     const handler: EventHandler<MouseEvent> = (e) => {

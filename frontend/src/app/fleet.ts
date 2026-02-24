@@ -39,7 +39,7 @@ export function createFleetList(
       console.log(`Fleet ${fleetName}: fleetData.isRented=${fleetData.isRented}, in rentedLc=${rentedLc.has((fleetName || '').toString().toLowerCase())}, isRented=${isRented}`);
     }
 
-    const nameClass = isRented ? 'fleet-name rented-name' : 'fleet-name';
+    const nameClass = isRented ? 'fleet-name rented-name' : 'fleet-name';  //isRented variazione per indicare se la flotta è in affitto comprendendo più condizioni (callsign, key, fleetShips)
     const nameInner = isRented
       ? `<span class="rented-name" style="color:#fbbf24;font-weight:800">${fleetName}</span>`
       : `${fleetName}`;

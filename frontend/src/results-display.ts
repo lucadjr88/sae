@@ -146,7 +146,7 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
 
   const sortedFleets = Object.entries(completeFeesByFleet)
     .sort((a, b) => b[1].totalFee - a[1].totalFee)
-    .slice(0, 5); // Top 5 fleets
+    //.slice(0, 5); // Top 5 fleets
 
   // Normalize operation names and aggregate stats
   // Exclude "Unknown" operations from charts and summaries

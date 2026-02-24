@@ -89,56 +89,79 @@ import { setCurrentProfileId, setLastAnalysisParams, setAnalysisStartTime, setPr
 export function processAnalysisData(data: any) {
 	const fleets = data.fleets || [];
 	const walletPubkey = data.walletAuthority || data.feePayer || null;
-	const allFleetAccounts: string[] = [];
 	const fleetNames: { [account: string]: string } = {};
-	const fleetRentalStatus: { [account: string]: boolean } = {};
+	const fleetIsRented: { [account: string]: boolean } = {};
+	// Costruisci set di tutte le chiavi/callsign delle rentedFleets
+	const rentedFleetKeys = new Set();
+	if (Array.isArray(data.rentedFleets)) {
+		data.rentedFleets.forEach(f => {
+			if (typeof f === 'string') {
+				rentedFleetKeys.add(f.trim());
+			} else if (f && typeof f === 'object') {
+				if (f.fleet) rentedFleetKeys.add(String(f.fleet).trim());
+				if (f.fleet_ships) rentedFleetKeys.add(String(f.fleet_ships).trim());
+				if (f.fleet_label) rentedFleetKeys.add(String(f.fleet_label).trim());
+				if (f.callsign) rentedFleetKeys.add(String(f.callsign).trim());
+			}
+		});
+	}
 	fleets.forEach((f: any) => {
 		if (f && f.data) {
-			if (f.data.fleetShips) allFleetAccounts.push(f.data.fleetShips);
-			if (f.key) allFleetAccounts.push(f.key);
-			if (f.data.fuelTank) allFleetAccounts.push(f.data.fuelTank);
-			if (f.data.ammoBank) allFleetAccounts.push(f.data.ammoBank);
-			if (f.data.cargoHold) allFleetAccounts.push(f.data.cargoHold);
-			fleetNames[f.data.fleetShips] = f.callsign;
+			const callsign = f.callsign?.trim();
+			const key = f.key?.trim();
+			const fleetShips = f.data.fleetShips?.trim();
+			let reason = [];
+			if (f.isRented ||  rentedFleetKeys.has(callsign) || rentedFleetKeys.has(key) || rentedFleetKeys.has(fleetShips)) {
+				f.isRented = true;
+				reason.push('isRented:true');
+				console.log('trovata rented fleet:', { callsign, key, fleetShips, reason });
+			}
+			if (f.data.fleetShips) {
+				fleetNames[f.data.fleetShips] = f.callsign;
+				fleetIsRented[f.data.fleetShips] = f.isRented;
+			}
 			fleetNames[f.key] = f.callsign;
-			if (f.data.fuelTank) fleetNames[f.data.fuelTank] = f.callsign;
-			if (f.data.ammoBank) fleetNames[f.data.ammoBank] = f.callsign;
-			if (f.data.cargoHold) fleetNames[f.data.cargoHold] = f.callsign;
-			const initialRented = !!f.isRented;
-			if (f.data.fleetShips) fleetRentalStatus[f.data.fleetShips] = initialRented;
-			if (f.key) fleetRentalStatus[f.key] = initialRented;
-			if (f.data.fuelTank) fleetRentalStatus[f.data.fuelTank] = initialRented;
-			if (f.data.ammoBank) fleetRentalStatus[f.data.ammoBank] = initialRented;
-			if (f.data.cargoHold) fleetRentalStatus[f.data.cargoHold] = initialRented;
+			fleetIsRented[f.key] = f.isRented;
+			if (f.data.fuelTank) {
+				fleetNames[f.data.fuelTank] = f.callsign;
+				fleetIsRented[f.data.fuelTank] = f.isRented;
+			}
+			if (f.data.ammoBank) {
+				fleetNames[f.data.ammoBank] = f.callsign;
+				fleetIsRented[f.data.ammoBank] = f.isRented;
+			}
+			if (f.data.cargoHold) {
+				fleetNames[f.data.cargoHold] = f.callsign;
+				fleetIsRented[f.data.cargoHold] = f.isRented;
+			}
 		}
 	});
-	const uniqueFleetAccounts = [...new Set(allFleetAccounts)];
-	const rentedFleetNames = new Set();
-	try {
-		fleets.forEach(f => {
-			const isRented = !!(fleetRentalStatus[f.key] || fleetRentalStatus[f.data?.fleetShips]);
-			if (isRented) rentedFleetNames.add(f.callsign);
-		});
-	} catch {}
 	return {
 		fleets,
 		walletPubkey,
-		uniqueFleetAccounts,
 		fleetNames,
-		fleetRentalStatus,
-		rentedFleetNames
+		fleetIsRented
 	};
 }
 
+
 export async function analyzeFees(profileIdParam?: string) {
-	let profileId = profileIdParam;
+	// Unificata: profileIdParam può essere string o boolean (per wipeCache)
+	let profileId = typeof profileIdParam === 'string' ? profileIdParam : undefined;
+	let wipeCache = false;
+	if (typeof profileIdParam === 'boolean') {
+		wipeCache = profileIdParam;
+		profileId = currentProfileId;
+	}
+	if (typeof arguments[1] === 'boolean') {
+		wipeCache = arguments[1];
+	}
 	const resultsDiv = document.getElementById('results');
 	const btn = document.getElementById('analyzeBtn');
 	//console.log('[analyzeFees] called with profileIdParam:', profileIdParam);
 	if (!profileId) {
 		const input = document.getElementById('profileId') as HTMLInputElement | null;
 		profileId = input?.value?.trim() || '';
-		//console.log('[analyzeFees] profileId from input:', profileId);
 	}
 	if (!profileId) {
 		alert('Inserisci un Player Profile ID!');
@@ -147,9 +170,6 @@ export async function analyzeFees(profileIdParam?: string) {
 	}
 	setCurrentProfileId(profileId);
 	console.log('[analyzeFees] currentProfileId dopo set:', currentProfileId);
-	//console.log('[analyzeFees] window.currentProfileId dopo set:', window.currentProfileId);
-	//console.log('[analyzeFees] typeof window.currentProfileId:', typeof window.currentProfileId);
-	//console.log('[analyzeFees] window object:', window);
 	const formBox = document.querySelector('.form-box');
 	if (formBox) formBox.style.display = 'none';
 	if (btn) {
@@ -179,8 +199,6 @@ export async function analyzeFees(profileIdParam?: string) {
 		}
 	}, 1000));
 	try {
-		// Call the project's main analyze endpoint directly with profileId.
-		// The backend will derive wallet/fleets and produce the full playload.
 		window.updateProgress('Analyzing profile (this may take a while)...');
 		let data;
 		let cacheHit: string | null = null;
@@ -189,7 +207,7 @@ export async function analyzeFees(profileIdParam?: string) {
 			const response = await fetch('/api/analyze-profile', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ profileId })
+				body: JSON.stringify({ profileId, wipeCache })
 			});
 			cacheHit = response.headers.get('X-Cache-Hit');
 			cacheTimestamp = response.headers.get('X-Cache-Timestamp');
@@ -204,9 +222,8 @@ export async function analyzeFees(profileIdParam?: string) {
 		window.updateProgress(`Analyzed ${processed.fleets.length} fleets`);
 		setLastAnalysisParams({
 			walletPubkey: processed.walletPubkey,
-			fleetAccounts: processed.uniqueFleetAccounts,
 			fleetNames: processed.fleetNames,
-			fleetRentalStatus: processed.fleetRentalStatus,
+			fleetIsRented: processed.fleetIsRented,
 			fleets: processed.fleets
 		});
 		const totalSigs = data.totalSignaturesFetched || 'N/A';
@@ -218,28 +235,17 @@ export async function analyzeFees(profileIdParam?: string) {
 			const profileIconEnd = document.getElementById('profileIcon');
 			if (profileIconEnd) { profileIconEnd.textContent = '👤'; profileIconEnd.title = ''; }
 		} catch (_) {}
-		try {
-			Object.entries(data.feesByFleet || {}).forEach(([name, entry]) => {
-				const isRent = processed.rentedFleetNames.has(String(name)) || processed.rentedFleetNames.has(String(name).trim());
-				if (isRent) { entry.isRented = true; }
-			});
-		} catch {}
 		if (!data.feesByFleet || typeof data.feesByFleet !== 'object') {
 			data.feesByFleet = {};
 		}
-		window.displayResults(data, processed.fleetNames, processed.rentedFleetNames, processed.fleets);
-			//console.log('[analyzeFees] window.currentProfileId prima di displayResults:', window.currentProfileId);
+		// Passa direttamente la mappa fleetIsRented e lascia che la UI usi solo il campo isRented del backend
+		window.displayResults(data, processed.fleetNames, processed.fleetIsRented, processed.fleets);
 		if (data && data.breakdown && data.breakdown.feesByFleet && typeof data.breakdown.feesByFleet === 'object') {
 			displayFleetOperationCharts(data.breakdown.feesByFleet, processed.fleetNames);
-		} else if (data && data.breakdown_pending) {
-			showBreakdownPending();
+
 		} else {
-			// Do not perform any additional backend calls — the frontend must wait
-			// for the playload returned by the initial POST /api/analyze-profile.
-			// Show pending breakdown state instead of triggering other endpoints.
 			showBreakdownPending();
 		}
-		// Sidebar visibility logic removed; should be managed only in results-display.ts
 	} catch (error) {
 		console.error('Analysis error:', error);
 		resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
@@ -250,14 +256,6 @@ export async function analyzeFees(profileIdParam?: string) {
 			btn.textContent = 'Analyze 24h';
 		}
 	}
-}
-
-// Load detailed fleet breakdown and display operation pie charts for each fleet
-async function loadFleetBreakdown(profileId: string, walletPubkey: string, fleetAccounts: string[], fleetNames: { [account: string]: string }, fleetRentalStatus: { [account: string]: boolean }) {
-  // Disabled: prevent any network calls after the user pressed Analyze.
-  // The frontend must wait for the playload returned by the original POST /api/analyze-profile.
-  console.log('loadFleetBreakdown skipped: avoiding additional backend calls.');
-  return;
 }
 
 // Display operation pie charts for each fleet

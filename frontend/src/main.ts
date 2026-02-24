@@ -1,3 +1,18 @@
+// --- ProfileId Cache Helpers ---
+const PROFILEID_CACHE_KEY = 'recentProfileIds';
+function getRecentProfileIds(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILEID_CACHE_KEY) || '[]');
+  } catch { return []; }
+}
+function saveProfileIdToCache(profileId: string) {
+  if (!profileId) return;
+  let ids = getRecentProfileIds();
+  ids = ids.filter(id => id !== profileId); // remove duplicates
+  ids.unshift(profileId);
+  if (ids.length > 8) ids = ids.slice(0, 8);
+  localStorage.setItem(PROFILEID_CACHE_KEY, JSON.stringify(ids));
+}
 import './styles/mobile.css';
 import { onMobile } from './utils/mobile';
 // @ts-nocheck
@@ -215,7 +230,8 @@ const exitStartScreen = () => {
           <div class="hero-subtitle">POWERED BY THE PEOPLE</div>
         </div>
         <div class="form-box centered">
-          <input type="text" id="profileId" placeholder="Player Profile ID">
+          <input type="text" id="profileId" placeholder="Player Profile ID" list="profileId-suggestions">
+          <datalist id="profileId-suggestions"></datalist>
           <button id="analyzeBtn">Analyze</button>
         </div>
 
@@ -232,6 +248,11 @@ const exitStartScreen = () => {
           </div>
         </div>
       `;
+    // Popola suggerimenti
+    const datalist = mainContainer.querySelector('#profileId-suggestions') as HTMLDataListElement | null;
+    if (datalist) {
+      datalist.innerHTML = getRecentProfileIds().map(pid => `<option value="${pid}"></option>`).join('');
+    }
     const analyzeBtn = mainContainer.querySelector('#analyzeBtn') as HTMLButtonElement | null;
     analyzeBtn?.addEventListener('click', () => {
       const profileId = (mainContainer.querySelector('#profileId') as HTMLInputElement)?.value.trim();
@@ -239,6 +260,9 @@ const exitStartScreen = () => {
         alert('Inserisci un Player Profile ID!');
         return;
       }
+      const allert_istruzioni = document.getElementById('allert_istruzioni');
+      allert_istruzioni?.remove();
+      saveProfileIdToCache(profileId);
       const resultsDiv = mainContainer.querySelector('#results') as HTMLDivElement;
       resultsDiv.innerHTML = '<div class="loading">Loading...</div>';
       if (window.analyzeFees) window.analyzeFees(profileId);
