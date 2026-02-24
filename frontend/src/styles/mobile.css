@@ -14,4 +14,24 @@
     gap: 60px;
   }
   /* Altri stili specifici per mobile... */
+
+  /* Layout verticale per la pagina result */
+  .stats-grid,
+  .charts-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+  .chart-card {
+    width: 100% !important;
+    margin-bottom: 12px;
+  }
+  .fleet-list,
+  .operation-list {
+    width: 100% !important;
+  }
+  .section-title {
+    margin-top: 16px;
+  }
+}
 }

@@ -16,7 +16,8 @@ export async function getWalletAdapters() {
     return [
       {
         name: 'Solana Mobile Wallet',
-        icon: 'src/assets/icons/seedvault2.png',
+        icon: 'https://staratlasexplorer.duckdns.org/favicon.ico', // icona remota
+        iconFallback: '/assets/icons/seedvault2.png', // fallback locale
         connect: async () => {
           const result = await transact(async (wallet: Web3MobileWallet) => {
             return await wallet.authorize({
@@ -26,7 +27,6 @@ export async function getWalletAdapters() {
           });
           return result;
         },
-        // Dummy disconnect and signMessage for interface compatibility
         disconnect: async () => {},
         signMessage: async () => null,
         on: () => {},
