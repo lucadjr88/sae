@@ -43,13 +43,31 @@ export class Wallet {
                 const result = await this.adapters[0].connect();
                 console.log('[MOBILE WALLET] connect() result:', result);
                 let pubkey = null;
+                // Caso 1: publicKey base58
                 if (result && result.publicKey) {
                     pubkey = result.publicKey;
-                    console.log('[MOBILE WALLET] publicKey (result.publicKey):', pubkey);
-                } else if (result && result.accounts && result.accounts[0] && result.accounts[0].publicKey) {
+                    console.log('[MOBILE WALLET] publicKey (result.publicKey, base58):', pubkey);
+                }
+                // Caso 2: publicKey in accounts[0].publicKey (base58)
+                else if (result && result.accounts && result.accounts[0] && result.accounts[0].publicKey) {
                     pubkey = result.accounts[0].publicKey;
-                    console.log('[MOBILE WALLET] publicKey (result.accounts[0].publicKey):', pubkey);
-                } else {
+                    console.log('[MOBILE WALLET] publicKey (result.accounts[0].publicKey, base58):', pubkey);
+                }
+                // Caso 3: address in accounts[0].address (base64)
+                else if (result && result.accounts && result.accounts[0] && result.accounts[0].address) {
+                    // Converti base64 → Uint8Array → base58
+                    try {
+                        const base64 = result.accounts[0].address;
+                        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+                        // Importa dinamicamente bs58 per compatibilità
+                        const bs58 = (await import('bs58')).default;
+                        pubkey = bs58.encode(bytes);
+                        console.log('[MOBILE WALLET] publicKey (result.accounts[0].address, base64→base58):', pubkey);
+                    } catch (err) {
+                        console.error('[MOBILE WALLET] Errore conversione base64→base58:', err);
+                    }
+                }
+                else {
                     console.warn('[MOBILE WALLET] Nessuna publicKey trovata nel risultato:', result);
                 }
                 if (pubkey) {
