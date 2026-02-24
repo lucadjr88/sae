@@ -2,13 +2,26 @@
   body {
     font-size: 16px;
     padding: 0 8px;
+    min-height: 100vh;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
   }
   .sidebar {
     display: none;
   }
   .main-content {
-    width: 100%;
+    width: 100vw;
+    max-width: 480px;
+    margin: 0 auto;
     padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
     #price-ticker-content {
     gap: 60px;
@@ -21,17 +34,75 @@
     display: flex !important;
     flex-direction: column !important;
     gap: 16px !important;
+    align-items: center !important;
+    width: 100% !important;
   }
   .chart-card {
     width: 100% !important;
     margin-bottom: 12px;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
   }
   .fleet-list,
   .operation-list {
     width: 100% !important;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
   }
   .section-title {
     margin-top: 16px;
+    text-align: center;
+    width: 100%;
+  }
+  .start-screen__content {
+    width: 100vw;
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .start-hero {
+    width: 100vw;
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .start-buttons {
+    width: 100vw;
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .stat-card {
+    width: 100% !important;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 20px;
+  }
+  .stat-label {
+    font-size: 12px;
+  }
+  /* Forza la visualizzazione delle icone wallet su mobile */
+  .wallet-minimal-icon img,
+  .profile-list-minimal-icon img {
+    width: 32px !important;
+    height: 32px !important;
+    object-fit: contain !important;
+    border-radius: 8px !important;
+    background: #23263a !important;
+    display: block !important;
+    opacity: 1 !important;
   }
 }
 }
