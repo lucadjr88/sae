@@ -93,6 +93,61 @@
   .stat-label {
     font-size: 12px;
   }
+  /* Ottimizzazione layout mobile */
+  .main-content,
+  .start-screen__content,
+  .start-hero,
+  .start-buttons {
+    width: 100vw;
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .profile-card-minimal-wrapper,
+  .profile-card-minimal,
+  .wallet-minimal-header {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    max-width: 480px !important;
+  }
+
+  .section-title {
+    margin-top: 24px;
+    text-align: center;
+    width: 100%;
+  }
+
+  input,
+  button {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    display: block;
+    width: 90% !important;
+    max-width: 400px !important;
+    text-align: center;
+  }
+
+  #price-ticker-content {
+    width: 100vw;
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
+  }
   /* Forza la visualizzazione delle icone wallet su mobile */
   .wallet-minimal-icon img,
   .profile-list-minimal-icon img {
