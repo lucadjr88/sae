@@ -103,13 +103,21 @@ if (connectBtn) {
 
 function getWalletIcon(wallet: any): string {
   if (!wallet ) return "/assets/icons/seedvault2.png";
+
+// 2. Controllo prioritario: Se l'oggetto wallet contiene direttamente il campo 'wallet_icon' (Base64)
+  if (wallet.wallet_icon && wallet.wallet_icon.startsWith("data:image")) {
+    return wallet.wallet_icon;
+  }
+
   const name = (wallet.adapter?.name || wallet.name || "").toLowerCase();
-  console.log('[DEBUG] Determining wallet icon for adapter name:', wallet);
-  if (wallet.includes("solflare")) return "https://www.solflare.com/wp-content/uploads/2024/11/App-Icon.svg";
-  if (wallet.includes("phantom")) return "https://mintcdn.com/phantom-e50e2e68/fkWrmnMWhjoXSGZ9/resources/images/Phantom_SVG_Icon.svg?w=1100&fit=max&auto=format&n=fkWrmnMWhjoXSGZ9&q=85&s=d9602893116f9314145e2a303d675ccc";
-  if (wallet.includes("backpack")) return "https://lh3.googleusercontent.com/YQnjQjJ6NuY_rxRwy8JA177ONpmPiOdFpud8zK-ebcS8-r3mQzwrzmqlueLSvKw1SsaoeBYua7XePZ632xXM4aHUzw=s60";
-  if (wallet.includes("jupiter")) return "https://cryptologos.cc/logos/jupiter-ag-jup-logo.png?v=040";
-  else
+  console.log('[DEBUG] Determining wallet icon for adapter name:', name);
+  if (name.includes("solflare")) return "https://www.solflare.com/wp-content/uploads/2024/11/App-Icon.svg";
+  if (name.includes("phantom")) return "https://mintcdn.com/phantom-e50e2e68/fkWrmnMWhjoXSGZ9/resources/images/Phantom_SVG_Icon.svg?w=1100&fit=max&auto=format&n=fkWrmnMWhjoXSGZ9&q=85&s=d9602893116f9314145e2a303d675ccc";
+  if (name.includes("backpack")) return "https://lh3.googleusercontent.com/YQnjQjJ6NuY_rxRwy8JA177ONpmPiOdFpud8zK-ebcS8-r3mQzwrzmqlueLSvKw1SsaoeBYua7XePZ632xXM4aHUzw=s60";
+  if (name.includes("jupiter")) return "https://cryptologos.cc/logos/jupiter-ag-jup-logo.png?v=040";
+  // Mobile: prova a usare icona remota se disponibile
+  if (wallet.adapter?.icon) return wallet.adapter.icon;
+  if (wallet.icon) return wallet.icon;
   return "/assets/icons/seedvault2.png";
 }
 // --- Minimal Connect Wallet screen logic ---
