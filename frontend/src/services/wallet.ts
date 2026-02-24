@@ -41,25 +41,40 @@ export class Wallet {
             // La connessione avviene tramite callback/handler asincrono
             try {
                 const result = await this.adapters[0].connect();
-                if (result && result.accounts && result.accounts[0] && result.accounts[0].publicKey) {
+                console.log('[MOBILE WALLET] connect() result:', result);
+                let pubkey = null;
+                if (result && result.publicKey) {
+                    pubkey = result.publicKey;
+                    console.log('[MOBILE WALLET] publicKey (result.publicKey):', pubkey);
+                } else if (result && result.accounts && result.accounts[0] && result.accounts[0].publicKey) {
+                    pubkey = result.accounts[0].publicKey;
+                    console.log('[MOBILE WALLET] publicKey (result.accounts[0].publicKey):', pubkey);
+                } else {
+                    console.warn('[MOBILE WALLET] Nessuna publicKey trovata nel risultato:', result);
+                }
+                if (pubkey) {
                     this.isConnected = true;
-                    this.publicKey = result.accounts[0].publicKey;
+                    this.publicKey = pubkey;
                     this.selected = 0;
                     this.adapter = this.adapters[0];
                     this.error = null;
+                    console.log('[MOBILE WALLET] Connessione riuscita, publicKey:', pubkey);
                 } else {
                     this.isConnected = false;
                     this.publicKey = null;
-                    this.error = 'No account returned by wallet.';
+                    this.error = 'No publicKey returned by wallet.';
+                    console.error('[MOBILE WALLET] Connessione fallita, nessuna publicKey.');
                 }
             } catch (e: any) {
                 this.isConnected = false;
                 this.publicKey = null;
                 this.error = e.message || 'Connection failed';
                 alert('Error during connection: ' + (e.message || e));
+                console.error('[MOBILE WALLET] Errore durante la connessione:', e);
             } finally {
                 this.isConnecting = false;
                 window.dispatchEvent(new Event('walletStateChanged'));
+                console.log('[MOBILE WALLET] Stato connessione aggiornato, isConnected:', this.isConnected);
             }
             return;
         }
