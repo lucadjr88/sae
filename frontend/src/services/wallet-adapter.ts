@@ -11,36 +11,12 @@ export const APP_IDENTITY = {
 };
 
 export async function getWalletAdapters() {
-  if (isMobile()) {
-    // Minimal, faithful to Solana Mobile Wallet Adapter example
-    return [
-      {
-        name: 'Solana Mobile Wallet',
-        icon: 'https://staratlasexplorer.duckdns.org/favicon.ico', // icona remota
-        iconFallback: '/assets/icons/seedvault2.png', // fallback locale
-        connect: async () => {
-          const result = await transact(async (wallet: Web3MobileWallet) => {
-            return await wallet.authorize({
-              chain: 'solana:mainnet',
-              identity: APP_IDENTITY,
-            });
-          });
-          return result;
-        },
-        disconnect: async () => {},
-        signMessage: async () => null,
-        on: () => {},
-        get publicKey() { return null; },
-      }
-    ];
-  } else {
-    const { PhantomWalletAdapter } = await import('@solana/wallet-adapter-phantom');
-    const { SolflareWalletAdapter } = await import('@solana/wallet-adapter-solflare');
-    const { BackpackWalletAdapter } = await import('@solana/wallet-adapter-backpack');
-    return [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new BackpackWalletAdapter(),
-    ];
-  }
+  const { PhantomWalletAdapter } = await import('@solana/wallet-adapter-phantom');
+  const { SolflareWalletAdapter } = await import('@solana/wallet-adapter-solflare');
+  const { BackpackWalletAdapter } = await import('@solana/wallet-adapter-backpack');
+  return [
+    new PhantomWalletAdapter(),
+    new SolflareWalletAdapter(),
+    new BackpackWalletAdapter(),
+  ];
 }

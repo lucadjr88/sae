@@ -23,7 +23,24 @@ import './app.js';
 import { formatCraftingType } from '@ui/craftingType';
 import { renderCraftingDetailsRows } from '@ui/renderDetails';
 import { updateProgress, displayPartialResults, displayResults, toggleFleet } from './app';
-import './services/wallet.js';
+import { initializeMobileWallet, connectMobileWallet, getMobilePublicKey, isMobileSessionValid, onMobileConnect, disconnectMobileWallet } from './services/mobile_wallet';
+import { Wallet } from './services/wallet';
+// Setup wallet logic
+import { isMobile } from './utils/mobile';
+if (isMobile()) {
+  initializeMobileWallet();
+  window.wallet = {
+    connect: connectMobileWallet,
+    get publicKey() { return getMobilePublicKey(); },
+    get isConnected() { return isMobileSessionValid(); },
+    disconnect: disconnectMobileWallet,
+  };
+  onMobileConnect(() => {
+    window.dispatchEvent(new Event('walletStateChanged'));
+  });
+} else {
+  window.wallet = new Wallet();
+}
 
 // Define unknown types for now
 type UnknownDecoded = { _brand: "unknown_decoded" };
@@ -50,6 +67,7 @@ declare global {
     progressInterval: number | null;
     lastAnalysisParams: any; // TODO: define proper type
     analyzeFees: (profileIdParam?: string) => void; // TODO: define proper type
+    wallet: any;
   }
 }
 
@@ -58,7 +76,7 @@ window.setSidebarVisible = setSidebarVisible;
 
 // Espone funzioni globali per compatibilità con chiamate legacy e moduli
 window.copyToClipboard = utils.copyToClipboard;
-window.inferRecipeName = utils.inferRecipeName;
+window.inferRecipeName = utils.inferRecipeName as any;
 window.inferMaterialLabel = utils.inferMaterialLabel;
 window.formatCraftingType = formatCraftingType;
 window.renderCraftingDetailsRows = renderCraftingDetailsRows;
@@ -102,15 +120,9 @@ if (connectBtn) {
 }
 
 function getWalletIcon(wallet: any): string {
-  if (!wallet ) return "/assets/icons/seedvault2.png";
-
-// 2. Controllo prioritario: Se l'oggetto wallet contiene direttamente il campo 'wallet_icon' (Base64)
-  if (wallet.wallet_icon && wallet.wallet_icon.startsWith("data:image")) {
-    return wallet.wallet_icon;
-  }
 
   const name = (wallet.adapter?.name || wallet.name || "").toLowerCase();
-  console.log('[DEBUG] Determining wallet icon for adapter name:', name);
+  console.log('[DEBUG WALLET] ', name && 'icona wallet:', wallet.adapter?.icon || wallet.icon);
   if (name.includes("solflare")) return "https://www.solflare.com/wp-content/uploads/2024/11/App-Icon.svg";
   if (name.includes("phantom")) return "https://mintcdn.com/phantom-e50e2e68/fkWrmnMWhjoXSGZ9/resources/images/Phantom_SVG_Icon.svg?w=1100&fit=max&auto=format&n=fkWrmnMWhjoXSGZ9&q=85&s=d9602893116f9314145e2a303d675ccc";
   if (name.includes("backpack")) return "https://lh3.googleusercontent.com/YQnjQjJ6NuY_rxRwy8JA177ONpmPiOdFpud8zK-ebcS8-r3mQzwrzmqlueLSvKw1SsaoeBYua7XePZ632xXM4aHUzw=s60";
