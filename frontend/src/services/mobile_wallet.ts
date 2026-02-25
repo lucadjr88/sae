@@ -21,7 +21,14 @@ export function initializeMobileWallet() {
 
 export async function connectMobileWallet() {
   try {
-    const result = await transact(async (wallet: Web3MobileWallet) => {
+    type MobileWalletAuthorizeResult = {
+      accounts: Array<{ address: string; icon?: string }>;
+      auth_token: string;
+      wallet_uri_base?: string;
+      wallet_icon?: string;
+      [key: string]: any;
+    };
+    const result: MobileWalletAuthorizeResult = await transact(async (wallet: Web3MobileWallet) => {
       return await wallet.authorize({
         chain: "solana:mainnet",
         identity: {
@@ -35,7 +42,7 @@ export async function connectMobileWallet() {
     console.log('[MOBILE WALLET] connectMobileWallet result:', result);
     // Gestione publicKey: base58 o base64
     let pubkey: string | null = null;
-    icon = undefined;
+    icon = result && result.wallet_icon ? result.wallet_icon : undefined;
     if (result && result.accounts && result.accounts[0]) {
       const acc = result.accounts[0];
       if (acc.address) {
@@ -43,9 +50,6 @@ export async function connectMobileWallet() {
         const base64 = acc.address;
         const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
         pubkey = bs58.encode(bytes);
-      }
-      if (acc.icon) {
-        icon = acc.icon;
       }
     }
     publicKey = pubkey;
