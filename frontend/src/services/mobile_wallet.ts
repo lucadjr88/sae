@@ -32,6 +32,7 @@ export async function connectMobileWallet() {
       });
     });
     session = result;
+    console.log('[MOBILE WALLET] connectMobileWallet result:', result);
     // Gestione publicKey: base58 o base64
     let pubkey: string | null = null;
     icon = undefined;
