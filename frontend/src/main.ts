@@ -121,15 +121,24 @@ if (connectBtn) {
 
 function getWalletIcon(wallet: any): string {
 
-  const name = (wallet.adapter?.name || wallet.name || "").toLowerCase();
-  console.log('[DEBUG WALLET] ', name && 'icona wallet:', wallet.adapter?.icon || wallet.icon);
+  // Gestione compatibilità mobile/desktop
+  let name = "";
+  let icon = undefined;
+  if (wallet.adapter) {
+    name = (wallet.adapter.name || wallet.name || "").toLowerCase();
+    icon = wallet.adapter.icon || wallet.icon;
+  } else {
+    // Mobile: wallet non ha adapter, solo icon opzionale
+    name = (wallet.name || "mobile").toLowerCase();
+    icon = wallet.icon;
+  }
+  console.log('[DEBUG WALLET]', { name, icon, wallet });
   if (name.includes("solflare")) return "https://www.solflare.com/wp-content/uploads/2024/11/App-Icon.svg";
   if (name.includes("phantom")) return "https://mintcdn.com/phantom-e50e2e68/fkWrmnMWhjoXSGZ9/resources/images/Phantom_SVG_Icon.svg?w=1100&fit=max&auto=format&n=fkWrmnMWhjoXSGZ9&q=85&s=d9602893116f9314145e2a303d675ccc";
   if (name.includes("backpack")) return "https://lh3.googleusercontent.com/YQnjQjJ6NuY_rxRwy8JA177ONpmPiOdFpud8zK-ebcS8-r3mQzwrzmqlueLSvKw1SsaoeBYua7XePZ632xXM4aHUzw=s60";
   if (name.includes("jupiter")) return "https://cryptologos.cc/logos/jupiter-ag-jup-logo.png?v=040";
-  // Mobile: prova a usare icona remota se disponibile
-  if (wallet.adapter?.icon) return wallet.adapter.icon;
-  if (wallet.icon) return wallet.icon;
+  // Mobile: usa icona se presente
+  if (icon) return icon;
   return "/assets/icons/seedvault2.png";
 }
 // --- Minimal Connect Wallet screen logic ---
