@@ -23,7 +23,7 @@ import './app.js';
 import { formatCraftingType } from '@ui/craftingType';
 import { renderCraftingDetailsRows } from '@ui/renderDetails';
 import { updateProgress, displayPartialResults, displayResults, toggleFleet } from './app';
-import { initializeMobileWallet, connectMobileWallet, getMobilePublicKey, isMobileSessionValid, onMobileConnect, disconnectMobileWallet } from './services/mobile_wallet';
+import { initializeMobileWallet, connectMobileWallet, getMobilePublicKey, isMobileSessionValid, onMobileConnect, disconnectMobileWallet, getMobileIcon } from './services/mobile_wallet';
 import { Wallet } from './services/wallet';
 // Setup wallet logic
 import { isMobile } from './utils/mobile';
@@ -34,6 +34,8 @@ if (isMobile()) {
     get publicKey() { return getMobilePublicKey(); },
     get isConnected() { return isMobileSessionValid(); },
     disconnect: disconnectMobileWallet,
+    get icon() { return getMobileIcon(); },
+    name: "mobile"
   };
   onMobileConnect(() => {
     window.dispatchEvent(new Event('walletStateChanged'));

@@ -6,6 +6,7 @@ import bs58 from "bs58";
 let session: any = null;
 let publicKey: string | null = null;
 let isConnected = false;
+let icon: string | undefined = undefined;
 let connectCallbacks: Array<(pubkey: string) => void> = [];
 let disconnectCallbacks: Array<() => void> = [];
 
@@ -15,6 +16,7 @@ export function initializeMobileWallet() {
   isConnected = false;
   connectCallbacks = [];
   disconnectCallbacks = [];
+  icon = undefined;
 }
 
 export async function connectMobileWallet() {
@@ -32,11 +34,18 @@ export async function connectMobileWallet() {
     session = result;
     // Gestione publicKey: base58 o base64
     let pubkey: string | null = null;
-    if (result && result.accounts && result.accounts[0] && result.accounts[0].address) {
-      // base64 → base58
-      const base64 = result.accounts[0].address;
-      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-      pubkey = bs58.encode(bytes);
+    icon = undefined;
+    if (result && result.accounts && result.accounts[0]) {
+      const acc = result.accounts[0];
+      if (acc.address) {
+        // base64 → base58
+        const base64 = acc.address;
+        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        pubkey = bs58.encode(bytes);
+      }
+      if (acc.icon) {
+        icon = acc.icon;
+      }
     }
     publicKey = pubkey;
     isConnected = !!pubkey;
@@ -44,6 +53,7 @@ export async function connectMobileWallet() {
       connectCallbacks.forEach(cb => cb(pubkey));
     }
     return pubkey;
+
   } catch (err) {
     isConnected = false;
     publicKey = null;
@@ -77,6 +87,10 @@ export async function disconnectMobileWallet() {
   disconnectCallbacks.forEach(cb => cb());
 }
 
+export function getMobileIcon(): string | undefined {
+    console.log('[MOBILE WALLET] getMobileIcon called, current icon:', icon);
+    return icon;
+  }
 // VECCHIO CODICE (src/services/wallet.ts) - NON USARE, SOLO PER CONFRONTO
 /*
         // MOBILE: Solana Mobile Wallet Adapter pattern fedele agli esempi ufficiali
