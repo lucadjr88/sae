@@ -111,7 +111,7 @@ export async function getWalletConnection(wallet: any) {
     const profileListDiv = buttonsContainer.querySelector('#profileList') as HTMLDivElement;
     try {
       //const resp = await fetch(`/api/debug/player-profile-id?wallet=${walletPubKeyStr}`);
-      const resp = await fetch(`http://localhost:3000/api/debug/player-profile-id?wallet=${walletPubKeyStr}`);
+      const resp = await fetch(`/api/debug/player-profile-id?wallet=${walletPubKeyStr}`);
       const data = await resp.json();
       let html = "";
       const titleDiv = buttonsContainer.querySelector('#profileCardTitle') as HTMLDivElement;
