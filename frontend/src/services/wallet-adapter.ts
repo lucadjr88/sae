@@ -1,8 +1,4 @@
-import { isMobile } from '../utils/mobile';
-import {
-  transact,
-  Web3MobileWallet,
-} from "@solana-mobile/mobile-wallet-adapter-protocol-web3js";
+
 
 export const APP_IDENTITY = {
   name: 'React Native dApp',

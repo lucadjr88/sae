@@ -7,4 +7,3 @@ export type ChartDataItem = {
 };
 
 export type PriceData = Record<string, any>;
-

@@ -4,7 +4,7 @@
     "module": "ESNext",
     "lib": ["ES2020", "DOM"],
     "moduleResolution": "node",
-    "outDir": "dist",
+    "outDir": "./dist",
     "rootDir": "./src",
     "strict": false,
     "esModuleInterop": true,
@@ -14,8 +14,16 @@
     "declaration": true,
     "sourceMap": true,
     "allowJs": true,
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+    "baseUrl": "./src",
+    "paths": {
+      "@app/*": ["app/*"],
+      "@services/*": ["services/*"],
+      "@ui/*": ["ui/*"],
+      "@utils/*": ["utils/*"],
+      "@types/*": ["types/*"]
+    }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "trash"]
+  "exclude": ["node_modules", "dist"]
 }

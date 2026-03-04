@@ -1,0 +1,97 @@
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+#price-ticker-bar {
+  width: 100%;
+  min-height: 38px;
+  background: linear-gradient(90deg, #13151f 0%, #1a1f2e 100%);
+  border-top: 1px solid #1e222e;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.12);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  z-index: 1000;
+}
+
+#price-ticker-content {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  will-change: transform;
+  animation: ticker-scroll 20s linear infinite; 
+  opacity: 1 !important;
+  gap: 200px;
+}
+
+.ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+  max-width: 120px;
+  justify-content: center;
+  
+}
+
+.ticker-item img {
+  width: 22px;
+  height: 22px;
+  vertical-align: middle;
+}
+
+.ticker-item span {
+  font-weight: 600;
+  letter-spacing: 1px;
+  font-size: 15px;
+  color: #e2e8f0;
+}
+
+.ticker-symbol {
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.ticker-price {
+  font-size: 15px;
+  color: #e2e8f0;
+}
+
+.ticker-img-error {
+  opacity: 0.3;
+}
+
+@media screen and (hover: none) and (pointer: coarse) and (max-width: 1200px) and (max-height: 2670px),
+screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-height: 1200px) {
+  #price-ticker-bar {
+    min-height: 34px;
+    padding: 0 10px;
+  }
+
+  #price-ticker-content {
+    height: 28px;
+    animation-duration: 16s;
+    gap: 120px;
+  }
+
+  .ticker-item {
+    min-width: 96px;
+    max-width: 96px;
+    gap: 6px;
+  }
+
+  .ticker-item img {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ticker-item span,
+  .ticker-price {
+    font-size: 12px;
+    letter-spacing: 0.4px;
+  }
+}

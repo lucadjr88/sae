@@ -1,0 +1,48 @@
+#privacyPolicyStart {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 55px;
+  z-index: 999;
+  text-align: center;
+  pointer-events: auto;
+}
+
+#privacyPolicySidebar {
+  margin-top: auto;
+  margin-bottom: 55px;
+  text-align: center;
+}
+
+#privacyPolicyStart a,
+#privacyPolicySidebar a {
+  color: #7dd3fc;
+  font-size: 13px;
+  opacity: 0.85;
+  text-decoration: underline;
+}
+
+.privacy-policy-link {
+  color: #7dd3fc;
+  font-size: 13px;
+  opacity: 0.85;
+  text-decoration: underline;
+}
+
+@media screen and (hover: none) and (pointer: coarse) and (max-width: 1200px) and (max-height: 2670px),
+screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-height: 1200px) {
+  #privacyPolicyStart {
+    bottom: 42px;
+  }
+
+  #privacyPolicySidebar {
+    margin-bottom: 42px;
+  }
+
+  #privacyPolicyStart a,
+  #privacyPolicySidebar a,
+  .privacy-policy-link {
+    font-size: 11px;
+    opacity: 0.9;
+  }
+}

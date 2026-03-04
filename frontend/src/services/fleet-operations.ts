@@ -1,13 +1,11 @@
 // public/js/fleet-operations.ts
-import { inferMaterialLabel, normalizeOpName } from '@utils/utils';
+import { normalizeOpName } from '@utils/utils';
 import { renderCraftingDetailsRows } from '@ui/renderDetails';
-import type { CraftingDetail, Prices } from '../types/details';
+//import type { CraftingDetail } from '../types/details';
 import type {
   OperationStats,
   FleetFeeData,
-  FeesByFleet,
   OperationSummary,
-  FeesByOperation,
   FleetOperationInfo,
   OperationListData,
 } from '../types/operation-list.js';
@@ -22,15 +20,16 @@ export function createFleetList(
   rentedFleetNames: Set<string> = new Set()): void {
   const fleetListDiv = document.getElementById('fleetList') as HTMLDivElement | null;
   if (!fleetListDiv) {
-    console.warn('[createFleetList] fleetList element not found');
+    console.error('[createFleetList] CRITICAL: #fleetList element not found - fleet list rendering aborted', rentedFleetNames);
     return;
   }
 
   // Normalize rented fleet names for case-insensitive matching
-  const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
-    // Non serve più: la logica di rented è demandata a processAnalysisData
+  //const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
+  //console.log('[createFleetList] rentedFleetNames:', rentedLc);  
+  // Non serve più: la logica di rented è demandata a processAnalysisData
   // List of category names to exclude from Fleet Breakdown
-  const excludedCategories = [
+  /*const excludedCategories = [
     'Starbase Operations',
     'Configuration',
     'Cargo Management',
@@ -44,24 +43,25 @@ export function createFleetList(
     'Crafting',
     'Crafting Operations'
   ];
-
+  console.log('[createFleetList] excludedCategories:', excludedCategories);*/
   // Filter out categories, keep only actual fleets
   const sortedFleets = (Object.entries(data.feesByFleet) as Array<[string, FleetFeeData]>)
     .sort((a, b) => {
       // Then by total fee
       return b[1].totalFee - a[1].totalFee;
     });
-
+/*
   // DEBUG: Log tutte le operazioni per ogni fleet
   try {
     sortedFleets.forEach(([fleetAccount, fleetData]) => {
+      //console.log(`[createFleetList] Fleet ${fleetNames[fleetAccount] || fleetAccount} data:`, fleetData);
       const ops = Object.keys(fleetData.operations || {});
       if (ops.length > 0) {
-        //console.log(`[createFleetList] Fleet ${fleetNames[fleetAccount] || fleetAccount} ops:`, ops);
+        ////console.log(`[createFleetList] Fleet ${fleetNames[fleetAccount] || fleetAccount} ops:`, ops);
       }
     });
   } catch (e) { console.warn('[createFleetList] DEBUG log error', e); }
-
+*/
   let html = '';
   sortedFleets.forEach(([fleetAccount, fleetData]) => {
     const fleetName = fleetNames[fleetAccount] || fleetAccount;
@@ -73,7 +73,7 @@ export function createFleetList(
 
     const nameClass = fleetData.isRented ? 'fleet-name rented-name' : 'fleet-name';
     const nameInner = fleetData.isRented
-      ? `<span class="rented-name" style="color:#fbbf24;font-weight:800">${fleetName}</span>`
+      ? `<span class="rented-name">${fleetName}</span>`
       : `${fleetName}`;
 
     // Definiamo se la flotta ha operazioni
@@ -86,17 +86,17 @@ export function createFleetList(
     }
 
     html += `  
-    <div class="fleet-header" style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-      <div class="${nameClass}" style="flex: 1;">${nameInner}</div>
-      <div class="fleet-ops" style="width: 60px; text-align: right;">${fleetData.totalOperations} ops</div>
-      <div class="fleet-pct" style="width: 50px; text-align: right;">${((fleetData.totalFee / (data.sageFees24h || 1)) * 100).toFixed(1)}%</div>
+    <div class="fleet-header">
+      <div class="${nameClass} fleet-name-grow">${nameInner}</div>
+      <div class="fleet-ops">${fleetData.totalOperations} ops</div>
+      <div class="fleet-pct">${((fleetData.totalFee / (data.sageFees24h || 1)) * 100).toFixed(1)}%</div>
       
-      <div class="fleet-sol" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 200px;">
-        ${(fleetData.totalFee / 1e9).toFixed(6)} SOL 
-        <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((fleetData.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
+      <div class="fleet-sol">
+        <span class="fleet-sol-value">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</span>
+        <span class="value-usd">($${window.prices && window.prices.solana ? ((fleetData.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
         
-        <div style="width: 15px; display: flex; justify-content: center;">
-            ${hasOps ? '<span class="fleet-arrow" style="font-size: 10px; color: #7dd3fc;">▼</span>' : ''}
+        <div class="fleet-arrow-wrap">
+            ${hasOps ? '<span class="fleet-arrow">▼</span>' : ''}
         </div>
       </div>
     </div>
@@ -145,7 +145,7 @@ export function createFleetList(
             <td>${stats.count}x</td>
             <td>${stats.percentageOfFleet.toFixed(1)}%</td>
             <td>${(stats.totalFee / 1e9).toFixed(6)} SOL</td>
-            <td style="color:#7dd3fc;font-size:13px;">$${window.prices && window.prices.solana ? ((stats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'}</td>
+            <td class="value-usd">$${window.prices && window.prices.solana ? ((stats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'}</td>
           </tr>
         `;
       }
@@ -212,7 +212,7 @@ export function createOperationList(
 ): void {
   const operationListDiv = document.getElementById('operationList') as HTMLDivElement | null;
   if (!operationListDiv) {
-    console.warn('[createOperationList] operationList element not found');
+    console.error('[createOperationList] CRITICAL: #operationList element not found - operation list rendering aborted');
     return;
   }
 
@@ -268,14 +268,6 @@ export function createOperationList(
   const sortedOperations = Object.entries(normalizedFeesByOperation)
     .sort((a, b) => b[1].totalFee - a[1].totalFee);
 
-  // DEBUG: Log tutte le operazioni disponibili e i dati associati
-  try {
-    console.log('[createOperationList] Operazioni disponibili:', sortedOperations.map(([op, stats]) => op));
-    sortedOperations.forEach(([op, stats]) => {
-      //console.log(`[createOperationList] Op: ${op}, count: ${stats.count}, totalFee: ${stats.totalFee}`);
-    });
-  } catch (e) { console.warn('[createOperationList] DEBUG log error', e); }
-
   let html = '';
   sortedOperations.forEach(([operation, opStats]) => {
     const opId = 'op-' + operation.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 20);
@@ -306,17 +298,17 @@ export function createOperationList(
     }
 
     html += `  
-    <div class="fleet-header" style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-      <div class="fleet-name" style="flex: 1;">${operation}</div>
-      <div class="fleet-ops" style="width: 60px; text-align: right;">${opStats.count} ops</div>
-      <div class="fleet-pct" style="width: 50px; text-align: right;">${opPercentage.toFixed(1)}%</div>
+    <div class="fleet-header">
+      <div class="fleet-name">${operation}</div>
+      <div class="fleet-ops">${opStats.count} ops</div>
+      <div class="fleet-pct">${opPercentage.toFixed(1)}%</div>
       
-      <div class="fleet-sol" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 200px;">
-        ${(opStats.totalFee / 1e9).toFixed(6)} SOL 
-        <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
+      <div class="fleet-sol">
+        <span class="fleet-sol-value">${(opStats.totalFee / 1e9).toFixed(6)} SOL</span>
+        <span class="value-usd">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
         
-        <div class="arrow-container" style="width: 20px; display: flex; justify-content: flex-end;">
-            ${hasSubOps ? '<span class="fleet-arrow" style="font-size: 10px; color: #7dd3fc; cursor: pointer;">▼</span>' : ''}
+        <div class="arrow-container fleet-arrow-wrap-end">
+            ${hasSubOps ? '<span class="fleet-arrow fleet-arrow-clickable">▼</span>' : ''}
         </div>
       </div>
     </div>
@@ -327,9 +319,8 @@ export function createOperationList(
     if (!isCrafting) {
       fleets.forEach(fleet => {
         const nameClass = fleet.isRented ? 'rented-name' : '';
-        const nameStyle = fleet.isRented ? 'color:#fbbf24;font-weight:800' : '';
         const fleetNameHtml = fleet.isRented
-          ? `<span class="${nameClass}" style="${nameStyle}">${fleet.fleetName}</span>`
+          ? `<span class="${nameClass}">${fleet.fleetName}</span>`
           : fleet.fleetName;
 
         // Calculate percentage of this operation's fees from this fleet
@@ -341,7 +332,7 @@ export function createOperationList(
             <td>${fleet.count}x</td>
             <td>${fleetOpPercentage.toFixed(1)}%</td>
             <td>${(fleet.totalFee / 1e9).toFixed(6)} SOL</td>
-            <td style="color:#7dd3fc;font-size:13px;">$${window.prices && window.prices.solana ? ((fleet.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'}</td>
+            <td class="value-usd">$${window.prices && window.prices.solana ? ((fleet.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'}</td>
           </tr>
         `;
       });
@@ -356,15 +347,15 @@ export function createOperationList(
         html += `
           <tr>
             <td colspan="5">
-              <div class="op-details" style="padding-top:6px;">
+              <div class="op-details op-details-top-gap">
                 <table class="fleet-ops-table crafting-details-table">
                   <thead>
-                    <tr style="background:#1e293b;">
+                    <tr class="op-details-header-row">
                       <th>Tx</th>
                       <th>Burned</th>
                       <th>Claimed</th>
-                      <th style="text-align:right;">Fee (SOL)</th>
-                      <th style="text-align:right;">Fee (USD)</th>
+                      <th class="text-right">Fee (SOL)</th>
+                      <th class="text-right">Fee (USD)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -378,11 +369,11 @@ export function createOperationList(
           const claimedList = (d.claimed || []).map((c: any) => `${c.mint.substring(0, 8)}... (${c.amount.toFixed(2)})`).join('<br>');
           html += `
             <tr>
-              <td><span data-copy style="cursor:pointer;color:#60a5fa;text-decoration:underline;" onclick="copyToClipboard('${sig}', event)" title="Click to copy">${sigShort}</span></td>
-              <td style="font-size:11px;color:#fbbf24;">${burnedList || '-'}</td>
-              <td style="font-size:11px;color:#34d399;">${claimedList || '-'}</td>
-              <td style="text-align:right;">${feeSol}</td>
-              <td style="text-align:right;color:#7dd3fc;">${feeUsd}</td>
+              <td><span data-copy class="copy-link" onclick="copyToClipboard('${sig}', event)" title="Click to copy">${sigShort}</span></td>
+              <td class="detail-burned">${burnedList || '-'}</td>
+              <td class="detail-claimed">${claimedList || '-'}</td>
+              <td class="text-right">${feeSol}</td>
+              <td class="text-right value-usd">${feeUsd}</td>
             </tr>
           `;
         });
@@ -417,27 +408,11 @@ export function createOtherOperationsList(
 ): void {
   const otherOperationsDiv = document.getElementById('otherOperationsList') as HTMLDivElement | null;
   if (!otherOperationsDiv) {
-    console.warn('[createOtherOperationsList] otherOperationsList element not found');
+    console.error('[createOtherOperationsList] CRITICAL: #otherOperationsList element not found - other operations rendering aborted');
     return;
   }
 
   const rentedLc = new Set(Array.from(rentedFleetNames).map(n => (n || '').toString().toLowerCase()));
-
-  // List of category names excluded from Fleet Breakdown
-  const excludedCategories = [
-    'Starbase Operations',
-    'Configuration',
-    'Cargo Management',
-    'Crew Management',
-    'Survey & Discovery',
-    'Player Profile',
-    'Fleet Rentals',
-    'Universe Management',
-    'Game Management',
-    'Other Operations',
-    'Crafting',
-    'Crafting Operations'
-  ];
 
   // Build a map of operation -> list of fleets with that operation
   // Include operations from all fleets so "All Other Operations" can list
@@ -490,11 +465,17 @@ export function createOtherOperationsList(
   // 'Unknown' may not be tied to a fleet), we will render with an empty
   // fleet list in that case.
   const otherOperations = Object.entries(normalizedFeesByOperation)
-    .filter(([operation, opStats]) => !includedOperations.has(operation))
+    .filter(([operation]) => !includedOperations.has(operation))
     .sort((a, b) => b[1].totalFee - a[1].totalFee);
 
+  const unknownIndex = otherOperations.findIndex(([operation]) => operation.toLowerCase() === 'unknown');
+  if (unknownIndex > 0) {
+    const [unknownEntry] = otherOperations.splice(unknownIndex, 1);
+    otherOperations.unshift(unknownEntry);
+  }
+
   if (otherOperations.length === 0) {
-    otherOperationsDiv.innerHTML = '<p style="color:#666;padding:10px;">No other operations found.</p>';
+    otherOperationsDiv.innerHTML = '<p class="other-ops-empty">No other operations found.</p>';
     return;
   }
 
@@ -521,17 +502,17 @@ export function createOtherOperationsList(
     }
 
     html += `  
-    <div class="fleet-header" style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-      <div class="fleet-name" style="flex: 1;">${operation}</div>
-      <div class="fleet-ops" style="width: 60px; text-align: right;">${opStats.count} ops</div>
-      <div class="fleet-pct" style="width: 50px; text-align: right;">${opPercentage.toFixed(1)}%</div>
+    <div class="fleet-header">
+      <div class="fleet-name">${operation}</div>
+      <div class="fleet-ops">${opStats.count} ops</div>
+      <div class="fleet-pct">${opPercentage.toFixed(1)}%</div>
       
-      <div class="fleet-sol" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 210px;">
-        ${(opStats.totalFee / 1e9).toFixed(6)} SOL 
-        <span style="color:#7dd3fc;font-size:13px;">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
+      <div class="fleet-sol">
+        <span class="fleet-sol-value">${(opStats.totalFee / 1e9).toFixed(6)} SOL</span>
+        <span class="value-usd">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
         
-        <div style="width: 15px; display: flex; justify-content: center; margin-left: 5px;">
-            ${canExpand ? '<span class="fleet-arrow" style="font-size: 10px; color: #7dd3fc;">▼</span>' : ''}
+        <div class="fleet-arrow-wrap fleet-arrow-wrap-offset">
+            ${canExpand ? '<span class="fleet-arrow">▼</span>' : ''}
         </div>
       </div>
     </div>
@@ -543,10 +524,8 @@ export function createOtherOperationsList(
 
     if (!isCrafting) {
       fleets.forEach(fleet => {
-        const nameClass = fleet.isRented ? 'rented-name' : '';
-        const nameStyle = fleet.isRented ? 'color:#fbbf24;font-weight:800' : '';
         const fleetNameHtml = fleet.isRented
-          ? `<span style="${nameStyle}">${fleet.fleetName}</span>`
+          ? `<span class="rented-name">${fleet.fleetName}</span>`
           : fleet.fleetName;
 
         html += `
@@ -555,7 +534,7 @@ export function createOtherOperationsList(
               <td>${fleet.count}x</td>
               <td>${fleet.percentageOfFleet.toFixed(1)}%</td>
               <td>${(fleet.totalFee / 1e9).toFixed(6)} SOL</td>
-              <td style="color:#7dd3fc;font-size:13px;">$${window.prices && window.prices.solana ? ((fleet.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'}</td>
+              <td class="value-usd">$${window.prices && window.prices.solana ? ((fleet.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'}</td>
             </tr>
           `;
       });
@@ -567,7 +546,7 @@ export function createOtherOperationsList(
       html += `
             <tr>
               <td colspan="5">
-                <div class="op-details" style="padding-top:6px;">
+                <div class="op-details op-details-top-gap">
                   <table class="fleet-ops-table">
                     <tbody>
       `;

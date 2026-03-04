@@ -1,0 +1,59 @@
+.background-image {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  /*background-attachment: scroll;*/
+  z-index: -1;
+  mask-image: linear-gradient(to bottom, 
+    rgba(255,255,255,1) 0%, 
+    rgba(255,255,255,1) 180px,
+    rgba(255,255,255,0.15) 300px,
+    rgba(255,255,255,0.05) 600px,
+    rgba(255,255,255,0.05) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, 
+    rgba(255,255,255,1) 0%, 
+    rgba(255,255,255,1) 180px,
+    rgba(255,255,255,0.15) 300px,
+    rgba(255,255,255,0.05) 600px,
+    rgba(255,255,255,0.05) 100%);
+}
+
+.app-version {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  color: #b8c0cc;
+  font-size: 13px;
+  opacity: 0.85;
+  z-index: 1001;
+}
+
+@media screen and (hover: none) and (pointer: coarse) and (max-width: 1200px) and (max-height: 2670px),
+screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-height: 1200px) {
+  .background-image {
+    background-position: center center;
+    mask-image: linear-gradient(to bottom,
+      rgba(255,255,255,1) 0%,
+      rgba(255,255,255,1) 130px,
+      rgba(255,255,255,0.18) 230px,
+      rgba(255,255,255,0.08) 460px,
+      rgba(255,255,255,0.05) 100%);
+    -webkit-mask-image: linear-gradient(to bottom,
+      rgba(255,255,255,1) 0%,
+      rgba(255,255,255,1) 130px,
+      rgba(255,255,255,0.18) 230px,
+      rgba(255,255,255,0.08) 460px,
+      rgba(255,255,255,0.05) 100%);
+  }
+
+  .app-version {
+    top: 10px;
+    right: 12px;
+    font-size: 11px;
+  }
+}

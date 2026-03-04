@@ -1,25 +1,16 @@
 {
-  "name": "sae-frontend",
-  "version": "1.0.0",
+  "name": "vite_server",
+  "private": true,
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "build:watch": "tsc --watch --outDir ../dist",
-    "copy-assets": "cp -r src/index.html src/styles src/config src/assets ../dist/ 2>/dev/null || true"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
   },
   "devDependencies": {
-    "@vitejs/plugin-basic-ssl": "^2.1.4",
-    "@vitejs/plugin-react": "^5.1.4",
-    "tsc-alias": "^1.8.16",
-    "typescript": "^5.7.3",
-    "vite": "^7.3.1"
-  },
-  "dependencies": {
-    "@solana-mobile/wallet-adapter-mobile": "^2.2.5",
     "@solana/wallet-adapter-backpack": "^0.1.14",
-    "@solana/wallet-adapter-base": "^0.9.27",
-    "@solana/wallet-adapter-react-ui": "^0.9.39",
-    "@solana/wallet-adapter-solflare": "^0.6.32",
-    "@solana/wallet-adapter-wallets": "^0.19.37"
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
   }
 }

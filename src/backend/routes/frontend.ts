@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 const isDev = process.argv.includes('tsx');
 const frontendPath = isDev
   ? path.join(__dirname, '../../../frontend/src')
-  : path.join(__dirname, '../../../frontend/dist');
+  : path.join(__dirname, '../../');
 
 // Aggiungi header CSP permissivo per SPA
 router.use((req, res, next) => {

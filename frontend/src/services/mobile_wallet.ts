@@ -1,4 +1,4 @@
-// src/services/mobile_wallet.ts
+
 import { transact, Web3MobileWallet } from "@solana-mobile/mobile-wallet-adapter-protocol-web3js";
 import bs58 from "bs58";
 
@@ -39,7 +39,7 @@ export async function connectMobileWallet() {
       });
     });
     session = result;
-    console.log('[MOBILE WALLET] connectMobileWallet result:', result);
+    console.log('[MOBILE WALLET] connectMobileWallet result:', session);
     // Gestione publicKey: base58 o base64
     let pubkey: string | null = null;
     icon = result && result.wallet_icon ? result.wallet_icon : undefined;

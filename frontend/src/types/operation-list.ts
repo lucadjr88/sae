@@ -49,4 +49,3 @@ export interface OperationListData {
   feesByOperation: FeesByOperation;
   sageFees24h: number;
 }
-

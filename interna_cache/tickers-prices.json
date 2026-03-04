@@ -1,1 +1,22 @@
-{"bitcoin":{"usd":67552,"last_updated_at":1771798003},"solana":{"usd":83.49,"last_updated_at":1771797984},"star-atlas":{"usd":0.00019602,"last_updated_at":1771797968},"star-atlas-dao":{"usd":0.01601676,"last_updated_at":1771797969},"wpac":{"usd":0.0136218421947351,"last_updated_at":1771798011}}
+{
+    "bitcoin": {
+        "usd": 68333,
+        "last_updated_at": 1772578433
+    },
+    "solana": {
+        "usd": 86.4,
+        "last_updated_at": 1772578432
+    },
+    "star-atlas": {
+        "usd": 0.00018377,
+        "last_updated_at": 1772578430
+    },
+    "star-atlas-dao": {
+        "usd": 0.01367334,
+        "last_updated_at": 1772578430
+    },
+    "wpac": {
+        "usd": 0.0187223453821214,
+        "last_updated_at": 1772578439
+    }
+}

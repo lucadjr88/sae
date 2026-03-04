@@ -16,4 +16,3 @@ export type BurnedMaterial = any;
 export type ClaimedItem = any;
 export type MaterialEntry = any;
 export type DecodedGeneric = any;
-

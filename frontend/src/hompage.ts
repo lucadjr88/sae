@@ -1,0 +1,240 @@
+
+import './style.css';
+import './ui/styles/heroTitle_elements.css';
+import './ui/styles/startButtons.css';
+import './ui/styles/privacyPolicy.css';
+import './ui/styles/footBar.css';
+import './ui/styles/alertInstructions.css';
+import './ui/styles/manualLogin.css';
+import './ui/styles/loading.css';
+import './ui/styles/sideBar.css';
+import './ui/styles/resultsComponent.css';
+import './ui/styles/backGround.css';
+
+import { createHeroTitle } from './ui/elements/heroTitle_elements';
+import { createStartButtonsElement } from './ui/elements/startButtons';
+import { createPrivacyPolicyStartElement } from './ui/elements/privacyPolicy';
+import { createFootBarElement } from './ui/elements/footBar';
+import { createBackground } from './ui/elements/backGround';
+import { connectedWalletIcon } from '@utils/state';
+
+
+import { createLoadingElement } from './ui/elements/loading';
+import { analyzeFees } from './services/api';
+
+export function createHomePage(): void {
+  const mainContainer = document.querySelector<HTMLDivElement>('#mainContainer')!;
+
+  mainContainer.innerHTML = ''; // Clear previous content
+
+  const backgroundDiv = document.createElement('div');
+  backgroundDiv.id = 'background-container';
+  backgroundDiv.appendChild(createBackground());
+  mainContainer.appendChild(backgroundDiv);
+
+  const heroDiv = document.createElement('div');
+  heroDiv.id = 'hero-container';
+  heroDiv.appendChild(createHeroTitle());
+
+  const startDiv = document.createElement('div');
+  startDiv.id = 'buttons-container';
+  startDiv.appendChild(createStartButtonsElement());
+
+  const privacyDiv = document.createElement('div');
+  privacyDiv.id = 'privacy-container';
+  privacyDiv.appendChild(createPrivacyPolicyStartElement());
+
+  const priceTickerBar = document.createElement('div');
+  priceTickerBar.id = 'price-ticker-container';
+  priceTickerBar.appendChild(createFootBarElement());
+
+  mainContainer.appendChild(heroDiv);
+  mainContainer.appendChild(startDiv);
+  mainContainer.appendChild(privacyDiv);
+  mainContainer.appendChild(priceTickerBar);
+}
+
+export function getWalletIcon(wallet: any): string {
+
+  // Gestione compatibilità mobile/desktop
+  let name = "";
+  let icon = undefined;
+  if (wallet.adapter) {
+    name = (wallet.adapter.name || wallet.name || "").toLowerCase();
+    icon = wallet.adapter.icon || wallet.icon;
+  } else {
+    // Mobile: wallet non ha adapter, solo icon opzionale
+    name = (wallet.name || "mobile").toLowerCase();
+    icon = wallet.icon;
+  }
+  console.log('[DEBUG WALLET]', { name, icon, wallet });
+  /*if (name.includes("solflare")) return "https://www.solflare.com/wp-content/uploads/2024/11/App-Icon.svg";
+  if (name.includes("phantom")) return "https://mintcdn.com/phantom-e50e2e68/fkWrmnMWhjoXSGZ9/resources/images/Phantom_SVG_Icon.svg?w=1100&fit=max&auto=format&n=fkWrmnMWhjoXSGZ9&q=85&s=d9602893116f9314145e2a303d675ccc";
+  if (name.includes("backpack")) return "https://lh3.googleusercontent.com/YQnjQjJ6NuY_rxRwy8JA177ONpmPiOdFpud8zK-ebcS8-r3mQzwrzmqlueLSvKw1SsaoeBYua7XePZ632xXM4aHUzw=s60";
+  if (name.includes("jupiter")) return "https://cryptologos.cc/logos/jupiter-ag-jup-logo.png?v=040";
+  */// Mobile: usa icona se presente
+  if (icon) return icon;
+  return './assets/icons/seedvault2-BDxeTkcJ.png';
+}
+
+
+
+export async function getWalletConnection(wallet: any) {
+
+  const buttonsContainer = document.getElementById('buttons-container') as HTMLDivElement | null;
+  if (buttonsContainer) {
+    console.log('[DEBUG] walletStateChanged event received, wallet state:', wallet);
+    if (!wallet.publicKey) {
+      console.warn('[DEBUG] Wallet publicKey is null, aborting wallet display');
+      return;
+    }
+    const walletPubKeyStr = wallet.publicKey.toString();
+    //buttonsContainer.style.display = 'block';
+    // Titolo hero, poi wallet header, poi card profili
+    buttonsContainer.innerHTML = `
+        <div class="profile-card-minimal-wrapper">
+          <div class="wallet-minimal-header">
+            <img src="${connectedWalletIcon}" alt="Wallet" class="wallet-minimal-icon">
+            <div class="wallet-minimal-info">
+              <div class="wallet-minimal-label">Wallet Connected</div>
+              <div class="wallet-minimal-pubkey">${walletPubKeyStr.slice(0, 6)}...${walletPubKeyStr.slice(-8)}</div>
+            </div>
+          </div>
+          <div class="profile-card-minimal">
+            <div class="profile-card-minimal-title" id="profileCardTitle">CHOOSE PLAYER PROFILE</div>
+            <div class="profile-list-minimal" id="profileList">Caricamento...</div>
+          </div>
+        </div>
+        <div id="results"></div>
+      `;
+    // Carica lista profili associati al wallet
+    const profileListDiv = buttonsContainer.querySelector('#profileList') as HTMLDivElement;
+    try {
+      //const resp = await fetch(`/api/debug/player-profile-id?wallet=${walletPubKeyStr}`);
+      const resp = await fetch(`http://localhost:3000/api/debug/player-profile-id?wallet=${walletPubKeyStr}`);
+      const data = await resp.json();
+      let html = "";
+      const titleDiv = buttonsContainer.querySelector('#profileCardTitle') as HTMLDivElement;
+      if (Array.isArray(data.variants) && data.variants.length > 0 && data.variants.some((v: any) => v.profileId)) {
+        html = data.variants
+          .filter((v: any) => v.profileId)
+          .map((v: any, idx: number, arr: any[]) =>
+            `<div class=\"profile-list-minimal-item\" data-profileid=\"${v.profileId}\">\n  <span class=\"profile-list-minimal-icon profile-list-minimal-icon-primary\">&#128100;</span>\n  <span class=\"profile-list-minimal-id\">${v.profileId}</span>\n</div>\n${idx < arr.length - 1 ? '<div class=\\"profile-list-minimal-divider\\"></div>' : ''}`
+          ).join('');
+        if (titleDiv) {
+          titleDiv.textContent = 'CHOOSE PLAYER PROFILE';
+          titleDiv.classList.remove('profile-card-minimal-title-error');
+        }
+      } else {
+        // Nessun profilo trovato
+        if (titleDiv) {
+          titleDiv.textContent = 'NO PROFILE FOUND';
+          titleDiv.classList.add('profile-card-minimal-title-error');
+        }
+      }
+      // Voce "Type in manually..." sempre presente
+      html += `<div class=\"profile-list-minimal-divider\"></div>\n<div class=\"profile-list-minimal-item manual\" id=\"manualProfileEntry\">\n  <span class=\"profile-list-minimal-icon profile-list-minimal-icon-manual\">&#9998;</span>\n  <span class=\"profile-list-minimal-id manual\">Type in manually...</span>\n</div>`;
+      profileListDiv.innerHTML = html;
+
+      // Aggiungi listener click su ogni profilo
+      const sidebarWalletInfo = document.getElementById('sidebarWalletInfo');
+
+      profileListDiv.querySelectorAll('.profile-list-minimal-item').forEach(item => {
+        item.addEventListener('click', (e: any) => {
+          if (item.id === 'manualProfileEntry') {
+            // Richiama la stessa funzione del pulsante 'enter no wallet'
+            // Nascondi info wallet nella sidebar
+            if (sidebarWalletInfo) {
+              sidebarWalletInfo.innerHTML = '';
+              sidebarWalletInfo.style.display = 'none';
+            }
+            manualProfileEntryListener();
+            console.log('[DEBUG] Manual profile entry selected', { item, e });
+            return;
+          }
+          const pid = item.getAttribute('data-profileid');
+
+          
+
+          const resultsDiv = buttonsContainer.querySelector('#results') as HTMLDivElement;
+          resultsDiv.innerHTML = '<div class="loading">Loading...</div>';
+          console.log('[DEBUG] Ricerca tramite wallet:', pid);
+          analyzeFees(pid);
+
+          //if (window.analyzeFees) window.analyzeFees(pid);
+        });
+      });
+
+    } catch (e) {
+      profileListDiv.innerHTML = '<span>Errore nel caricamento profili.</span>';
+    }
+  }
+}
+// --- ProfileId Cache Helpers ---
+const PROFILEID_CACHE_KEY = 'recentProfileIds';
+export function getRecentProfileIds(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILEID_CACHE_KEY) || '[]');
+  } catch { return []; }
+}
+
+export function saveProfileIdToCache(profileId: string) {
+  if (!profileId) return;
+  let ids = getRecentProfileIds();
+  ids = ids.filter(id => id !== profileId); // remove duplicates
+  ids.unshift(profileId);
+  if (ids.length > 8) ids = ids.slice(0, 8);
+  localStorage.setItem(PROFILEID_CACHE_KEY, JSON.stringify(ids));
+}
+
+export function manualProfileEntryListener() {
+  const buttonsContainer = document.getElementById('buttons-container') as HTMLDivElement | null;
+  if (buttonsContainer) {
+    console.log('[manualProfileEntryListener] Setting up manual profile entry form');
+    //buttonsContainer.style.display = 'block';
+    console.log('[DEBUG] manualProfileEntryListener called');
+    buttonsContainer.innerHTML = `
+
+        <div class="form-box centered">
+          <input type="text" id="profileId" placeholder="Player Profile ID" list="profileId-suggestions">
+          <datalist id="profileId-suggestions"></datalist>
+          <button id="analyzeBtn">Analyze</button>
+        </div>
+        
+        <div id="results" class="is-hidden"></div>
+
+        <div id="allert_istruzioni" class="container">
+          <div class="content-column">
+            <svg class="info-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            </svg>
+            <p class="body-medium">
+              You can find your profileId in Sage under Player Information and Details in CSS Starbase // Details
+            </p>
+          </div>
+        </div></div>
+      `;
+    // Popola suggerimenti
+    const datalist = buttonsContainer.querySelector('#profileId-suggestions') as HTMLDataListElement | null;
+    if (datalist) {
+      datalist.innerHTML = getRecentProfileIds().map(pid => `<option value="${pid}"></option>`).join('');
+    }
+    const analyzeBtn = buttonsContainer.querySelector('#analyzeBtn') as HTMLButtonElement | null;
+    analyzeBtn?.addEventListener('click', () => {
+
+      const profileId = (buttonsContainer.querySelector('#profileId') as HTMLInputElement)?.value.trim();
+      if (!profileId) {
+        alert('Inserisci un Player Profile ID!');
+        return;
+      }
+      const allert_istruzioni = document.getElementById('allert_istruzioni');
+      allert_istruzioni?.remove();
+      saveProfileIdToCache(profileId);
+
+      const loading = createLoadingElement('Processing transaction data, this may take up to 5 minutes depending on your tx/day...<br>Analyzing profile (this may take a while)...');
+      buttonsContainer.appendChild(loading);
+      console.log('[manualProfileEntryListener] Calling analyzeFees with profileId:', profileId);
+      analyzeFees(profileId);
+    });
+  }
+}

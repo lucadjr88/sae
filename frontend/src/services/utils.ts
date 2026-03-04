@@ -1,6 +1,6 @@
 
 // Copy to clipboard helper with visual feedback
-import { DecodedInstruction, BurnedMaterial, ClaimedItem, MaterialEntry } from '../types/common';
+import type { DecodedInstruction, BurnedMaterial, ClaimedItem, MaterialEntry } from './common';
 export function copyToClipboard(text: string, event: MouseEvent | KeyboardEvent): void {
 	navigator.clipboard.writeText(text).then(() => {
 		// Show tooltip feedback
@@ -23,9 +23,8 @@ export function copyToClipboard(text: string, event: MouseEvent | KeyboardEvent)
 }
 
 // Derive a product/recipe name for crafting without falling back to burned materials
-export function inferRecipeName(decoded: DecodedInstruction | null, burns: BurnedMaterial[], claims: ClaimedItem[]): string | null {//burns: BurnedMaterial[],
+export function inferRecipeName(decoded: DecodedInstruction | null, _burns: BurnedMaterial[], claims: ClaimedItem[]): string | null {
 	// Prefer claimed items (produced outputs)
-	console.log('inferRecipeName burns:', burns);
 	try {
 		const c = claims && claims.length > 0 ? claims[0] : null;
 		const mat = c?.material || c?.item;
@@ -118,11 +117,4 @@ export function normalizeOpName(opName: string): string {
 	return mapping[lower] || opName;
 }
 
-// Type guard functions
-//function isDecodedInstruction(obj: any): obj is DecodedInstruction {
- // return obj && typeof obj === 'object' && ('recipeName' in obj || 'actions' in obj);
-//}
 
-//function isValidMaterialEntry(obj: any): obj is MaterialEntry {
- // return obj && typeof obj === 'object' && ('material' in obj || 'recipe' in obj || 'decodedMaterial' in obj);
-//}
