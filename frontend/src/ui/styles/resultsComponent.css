@@ -27,11 +27,13 @@
 
 .results-content-column {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  width: 100%;
+  width: auto;
   margin: 15px 15px;
+  box-sizing: border-box;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -434,8 +436,7 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
   }
 
   .main-container-results {
-    height: auto;
-    min-height: 100vh;
+    height: 100vh;
   }
 
   .results-content-column {
