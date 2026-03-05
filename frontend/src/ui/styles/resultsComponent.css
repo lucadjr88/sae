@@ -28,7 +28,8 @@
 .results-content-column {
   flex: 1;
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden; /* invece di overflow: auto */
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   width: auto;
@@ -100,6 +101,7 @@
   background: #13151f;
   border: 1px solid #1e222e;
   padding: 8px;
+  max-width: 100%;
 }
 
 .chart-title {
@@ -115,6 +117,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-width: 100%;
 }
 
 .pie-chart {
@@ -418,6 +421,7 @@
   display: flex;
   gap: 20px;
   align-items: center;
+  max-width: 100%;
 }
 
 @media screen and (hover: none) and (pointer: coarse) and (max-width: 1200px) and (max-height: 2670px),
@@ -439,13 +443,12 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     height: 100vh;
   }
 
-  .results-content-column {
-    margin: 10px 8px;
-  }
+
 
   .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
     margin-bottom: 8px;
+    max-width: 100%;
   }
 
   .stat-card {
