@@ -75,58 +75,53 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
 
   createResultPage();
 
-  // Sidebar auto-hide after 10 seconds + toggle on click
-  const colonna1 = document.getElementById('colonna1');
-  const colonna2 = document.getElementById('colonna2');
-  let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Sidebar auto-hide after 10 seconds + toggle on click (mobile only)
+  const isMobile = window.matchMedia('(max-width: 1200px) and (max-height: 2670px), (max-width: 2670px) and (max-height: 1200px)').matches;
 
-  const startHideTimer = () => {
-    if (hideTimeout) clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(() => {
+  if (isMobile) {
+    const colonna1 = document.getElementById('colonna1');
+    const colonna2 = document.getElementById('colonna2');
+    let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const startHideTimer = () => {
+      if (hideTimeout) clearTimeout(hideTimeout);
+      hideTimeout = setTimeout(() => {
+        colonna1?.classList.add('sidebar-hidden');
+      }, 10000);
+    };
+
+    const showSidebar = () => {
+      colonna1?.classList.remove('sidebar-hidden');
+      document.body.classList.remove('sidebar-is-hidden');
+      startHideTimer();
+    };
+
+    const hideSidebar = () => {
       colonna1?.classList.add('sidebar-hidden');
-    }, 10000);
-  };
+      document.body.classList.add('sidebar-is-hidden');
+      if (hideTimeout) clearTimeout(hideTimeout);
+    };
 
-  const showSidebar = () => {
-    colonna1?.classList.remove('sidebar-hidden');
-    document.body.classList.remove('sidebar-is-hidden');
+    // Click on colonna2 to hide sidebar
+    colonna2?.addEventListener('click', hideSidebar);
+
+    // Click on toggle tab to show sidebar
+    const sidebarToggle = document.createElement('div');
+    sidebarToggle.id = 'sidebar-toggle-tab';
+    sidebarToggle.className = 'sidebar-toggle-tab';
+    sidebarToggle.innerHTML = '◀';
+    sidebarToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showSidebar();
+    });
+    document.body.appendChild(sidebarToggle);
+
     startHideTimer();
-  };
-
-  const hideSidebar = () => {
-    colonna1?.classList.add('sidebar-hidden');
-    document.body.classList.add('sidebar-is-hidden');
-    if (hideTimeout) clearTimeout(hideTimeout);
-  };
-
-  // Click on colonna2 to hide sidebar
-  colonna2?.addEventListener('click', hideSidebar);
-
-  // Click on toggle tab to show sidebar
-  const sidebarToggle = document.createElement('div');
-  sidebarToggle.id = 'sidebar-toggle-tab';
-  sidebarToggle.className = 'sidebar-toggle-tab';
-  sidebarToggle.innerHTML = '◀';
-  sidebarToggle.addEventListener('click', (e) => {
-    e.stopPropagation();
-    showSidebar();
-  });
-  document.body.appendChild(sidebarToggle);
-
-  startHideTimer();
+  }
 
   // Parallax shrink effect on hero image during scroll
+  const colonna2 = document.getElementById('colonna2');
   const heroLogo = document.querySelector('.hero-logo') as HTMLImageElement | null;
-  if (colonna2 && heroLogo) {
-    const minScale = 0.1;
-    const maxScroll = 300;
-    colonna2.addEventListener('scroll', () => {
-      const scrollY = colonna2.scrollTop;
-      const scale = Math.max(minScale, 1 - (scrollY / maxScroll) * (1 - minScale));
-      heroLogo.style.transform = `scale(${scale})`;
-      heroLogo.style.opacity = `${Math.max(0.3, 1 - scrollY / 500)}`;
-    });
-  }
 
   // Show and update sidebar
   const sidebar = document.getElementById('sidebar');

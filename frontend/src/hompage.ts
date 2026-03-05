@@ -154,8 +154,8 @@ export async function getWalletConnection(wallet: any) {
           }
           const pid = item.getAttribute('data-profileid');
 
-          
-
+          const profileCardWrapper = buttonsContainer.querySelector('.profile-card-minimal-wrapper') as HTMLDivElement;
+          profileCardWrapper.style.display = 'none';
           const resultsDiv = buttonsContainer.querySelector('#results') as HTMLDivElement;
           resultsDiv.innerHTML = '<div class="loading">Loading...</div>';
           console.log('[DEBUG] Ricerca tramite wallet:', pid);

@@ -247,3 +247,15 @@ body.sidebar-is-hidden .sidebar-toggle-tab {
   border-color: #34d399;
   color: #34d399;
 }
+
+/* Desktop: hide toggle tab and keep sidebar fixed */
+@media (min-width: 1201px), (min-height: 1201px) {
+  .sidebar-toggle-tab {
+    display: none !important;
+  }
+
+  .results-sidebar-column.sidebar-hidden {
+    transform: none;
+    width: 60px;
+  }
+}
