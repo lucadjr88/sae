@@ -97,7 +97,7 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
     const startHideTimer = () => {
       if (hideTimeout) clearTimeout(hideTimeout);
       hideTimeout = setTimeout(() => {
-        colonna1?.classList.add('sidebar-hidden');
+        hideSidebar();
       }, 10000);
     };
 
