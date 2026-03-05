@@ -2,7 +2,7 @@
   left: 0;
   top: 0;
   width: 60px;
-  height: 100vh;
+  height: 100dvh;
   background: rgba(19, 21, 31, 0.95);
   border-right: 1px solid #1e222e;
   display: flex;
@@ -213,4 +213,37 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
   .cache-tooltip-age {
     font-size: 10px;
   }
+}
+.sidebar-toggle-tab {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 60px;
+  background: rgba(19, 21, 31, 0.95);
+  border: 1px solid #1e222e;
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  color: #7dd3fc;
+  transition: all 0.3s ease;
+  z-index: 99;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.sidebar-is-hidden .sidebar-toggle-tab {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar-toggle-tab:hover {
+  background: rgba(19, 21, 31, 0.98);
+  border-color: #34d399;
+  color: #34d399;
 }

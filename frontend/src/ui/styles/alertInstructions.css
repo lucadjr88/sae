@@ -30,7 +30,7 @@
 @media screen and (hover: none) and (pointer: coarse) and (max-width: 1200px) and (max-height: 2670px),
 screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-height: 1200px) {
   .container {
-    padding: 0 16px;
+    padding: 30px 40px;
     box-sizing: border-box;
   }
 

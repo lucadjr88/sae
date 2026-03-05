@@ -86,8 +86,7 @@ export function drawPieChart(
 
     legendHtml += `
       <tr>
-        <td><div class="chart-legend-color-dot" style="background: ${item.color};"></div></td>
-        <td>${item.label}</td>
+        <td style="color: ${item.color}; font-weight: 500;">${item.label}</td>
         <td>${item.count} ops</td>
         <td>${percentage}%</td>
         <td>${solValue} SOL <span class="value-usd">($${usdValue})</span></td>

@@ -17,12 +17,20 @@
 
 .main-container-results {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
 }
 
 .results-sidebar-column {
   padding-right: 1px;
   align-items: flex-start;
+  transition: transform 0.3s ease, width 0.3s ease;
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.results-sidebar-column.sidebar-hidden {
+  transform: translateX(-60px);
+  width: 0;
 }
 
 .results-content-column {
@@ -145,29 +153,29 @@
   border: none;
 }
 
-.chart-legend td:nth-child(1) {
-  width: 8px;
-  padding-right: 6px;
+.chart-legend tr {
+  border-left: 3px solid transparent;
+  padding-left: 4px;
 }
 
-.chart-legend td:nth-child(2) {
+.chart-legend td:nth-child(1) {
   color: #b8c0cc;
   white-space: nowrap;
 }
 
-.chart-legend td:nth-child(3),
-.chart-legend td:nth-child(4) {
+.chart-legend td:nth-child(2),
+.chart-legend td:nth-child(3) {
   text-align: right;
   color: #7a8ba0;
   white-space: nowrap;
   font-size: 10px;
 }
 
-.chart-legend td:nth-child(4) {
+.chart-legend td:nth-child(3) {
   min-width: 40px;
 }
 
-.chart-legend td:nth-child(5) {
+.chart-legend td:nth-child(4) {
   text-align: right;
   color: #34d399;
   font-family: 'Roboto Mono', monospace;
@@ -370,11 +378,7 @@
   vertical-align: middle;
 }
 
-.chart-legend-color-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 1px;
-}
+
 
 .copy-link {
   cursor: pointer;
