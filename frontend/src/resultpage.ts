@@ -119,9 +119,6 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
     startHideTimer();
   }
 
-  // Parallax shrink effect on hero image during scroll
-  const colonna2 = document.getElementById('colonna2');
-  const heroLogo = document.querySelector('.hero-logo') as HTMLImageElement | null;
 
   // Show and update sidebar
   const sidebar = document.getElementById('sidebar');
