@@ -83,6 +83,17 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
     const colonna2 = document.getElementById('colonna2');
     let hideTimeout: ReturnType<typeof setTimeout> | null = null;
 
+       // Click on toggle tab to show sidebar
+    const sidebarToggle = document.createElement('div');
+    sidebarToggle.id = 'sidebar-toggle-tab';
+    sidebarToggle.className = 'sidebar-toggle-tab';
+    sidebarToggle.innerHTML = '◀';
+    sidebarToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showSidebar();
+    });
+    document.body.appendChild(sidebarToggle);
+
     const startHideTimer = () => {
       if (hideTimeout) clearTimeout(hideTimeout);
       hideTimeout = setTimeout(() => {
@@ -105,18 +116,30 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
     // Click on colonna2 to hide sidebar
     colonna2?.addEventListener('click', hideSidebar);
 
-    // Click on toggle tab to show sidebar
-    const sidebarToggle = document.createElement('div');
-    sidebarToggle.id = 'sidebar-toggle-tab';
-    sidebarToggle.className = 'sidebar-toggle-tab';
-    sidebarToggle.innerHTML = '◀';
-    sidebarToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      showSidebar();
-    });
-    document.body.appendChild(sidebarToggle);
+ 
 
     startHideTimer();
+  }
+
+  // Hero logo shrink/fade on results scroll
+  const contentColumn = document.getElementById('colonna2') as HTMLDivElement | null;
+  const heroLogo = document.querySelector('.hero-logo') as HTMLImageElement | null;
+  if (contentColumn && heroLogo) {
+    const minScale = 0.1;
+    const minOpacity = 0.3;
+    const maxScrollForScale = 300;
+    const maxScrollForOpacity = 500;
+
+    heroLogo.style.transform = 'scale(1)';
+    heroLogo.style.opacity = '1';
+
+    contentColumn.addEventListener('scroll', () => {
+      const scrollY = contentColumn.scrollTop;
+      const scale = Math.max(minScale, 1 - (scrollY / maxScrollForScale) * (1 - minScale));
+      const opacity = Math.max(minOpacity, 1 - scrollY / maxScrollForOpacity);
+      heroLogo.style.transform = `scale(${scale})`;
+      heroLogo.style.opacity = `${opacity}`;
+    });
   }
 
 

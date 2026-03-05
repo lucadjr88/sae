@@ -156,8 +156,12 @@ export async function getWalletConnection(wallet: any) {
 
           const profileCardWrapper = buttonsContainer.querySelector('.profile-card-minimal-wrapper') as HTMLDivElement;
           profileCardWrapper.style.display = 'none';
-          const resultsDiv = buttonsContainer.querySelector('#results') as HTMLDivElement;
-          resultsDiv.innerHTML = '<div class="loading">Loading...</div>';
+          const resultsDiv = buttonsContainer.querySelector('#results') as HTMLDivElement | null;
+          if (resultsDiv) {
+            resultsDiv.innerHTML = '';
+            const loading = createLoadingElement('Processing transaction data, this may take up to 5 minutes depending on your tx/day...<br>Analyzing profile (this may take a while)...');
+            resultsDiv.appendChild(loading);
+          }
           console.log('[DEBUG] Ricerca tramite wallet:', pid);
           analyzeFees(pid);
 
