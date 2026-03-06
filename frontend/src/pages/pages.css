@@ -5,6 +5,7 @@
     font-family: Arial, sans-serif;
     line-height: 1.6;
 }
+
 .instructions {
     padding: 20px;
     max-width: 800px;
@@ -12,6 +13,7 @@
     font-family: Arial, sans-serif;
     line-height: 1.6;
 }
+
 .instructions .instruction-image {
     display: block;
     margin: 20px auto;

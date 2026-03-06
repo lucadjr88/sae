@@ -1,6 +1,7 @@
 // Modulo per la Sidebar: esporta funzione per creare la struttura reale della sidebar
 // Copiata da index.html e main.ts
 
+import { createPrivacyPolicySidebarElement } from "./privacyPolicy";
 import { toggleSwitchHTML } from "./toggleSwitch";
 
 export function createSidebarElement(): HTMLDivElement {
@@ -84,17 +85,9 @@ toggleSwitchContainer.innerHTML = toggleSwitchHTML;
 sidebar.appendChild(toggleSwitchContainer);
 
 // 6. Privacy Policy
-const privacyPolicySidebar = document.createElement('div');
+const privacyPolicySidebar = createPrivacyPolicySidebarElement();
 privacyPolicySidebar.id = 'privacyPolicySidebar';
 
-const privacyPolicyLink = document.createElement('a');
-privacyPolicyLink.className = 'privacy-policy-link';
-privacyPolicyLink.href = 'https://sites.google.com/view/policy-staratlasexplorer/home-page';
-privacyPolicyLink.target = '_blank';
-privacyPolicyLink.rel = 'noopener';
-privacyPolicyLink.textContent = 'Privacy Policy';
-
-privacyPolicySidebar.appendChild(privacyPolicyLink);
 sidebar.appendChild(privacyPolicySidebar);
 
 // 7. Infine, aggiungi la sidebar al body (o a un altro contenitore nel DOM)

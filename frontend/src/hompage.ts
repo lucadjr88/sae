@@ -17,6 +17,7 @@ import { createPrivacyPolicyStartElement } from './ui/elements/privacyPolicy';
 import { createFootBarElement } from './ui/elements/footBar';
 import { createBackground } from './ui/elements/backGround';
 import { connectedWalletIcon } from '@utils/state';
+import defaultWalletIcon from './assets/icons/seedvault2.png';
 
 
 import { createLoadingElement } from './ui/elements/loading';
@@ -75,7 +76,7 @@ export function getWalletIcon(wallet: any): string {
   if (name.includes("jupiter")) return "https://cryptologos.cc/logos/jupiter-ag-jup-logo.png?v=040";
   */// Mobile: usa icona se presente
   if (icon) return icon;
-  return './assets/icons/seedvault2-BDxeTkcJ.png';
+  return defaultWalletIcon;
 }
 
 
