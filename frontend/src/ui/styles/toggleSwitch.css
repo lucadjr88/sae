@@ -1,0 +1,90 @@
+.toggle-switch-container {
+    top: 50%;
+    transform: translateY(-50%); /* Centra il contenitore rispetto alla sua altezza */
+    position: fixed;
+  }
+
+  .vertical-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 120px;
+  }
+
+  /* Nascondiamo l'input checkbox standard */
+  .vertical-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  /* Lo sfondo dello switch (Slider) */
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(65, 70, 97, 0.692);
+    transition: .4s;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0; /* Ridotto leggermente per far toccare le icone ai bordi */
+    box-sizing: border-box;
+  }
+
+  /* Il "pallino" mobile (Pointer) */
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 55px; /* La tua altezza desiderata */
+    width: 44px;  /* Quasi quanto lo slider (50px) */
+    left: 3px;    /* Centrato orizzontalmente rispetto ai 50px dello slider */
+    top: 2.5px;   /* Posizione iniziale sopra la prima icona */
+    background-color: #272c44d4;
+    transition: 0.4s ease-in-out;
+    border-radius: 8px; /* Arrotondato come lo sfondo */
+    z-index: 2;
+    box-shadow: 0 2px 5px #0003;
+  }
+
+  /* Colore dello sfondo quando attivato */
+  input:checked + .slider {
+    background-color: #173f5f7b;
+  }
+
+  /* MOVIMENTO: La corsa del pallino */
+  /* Calcolo: Altezza Tot (120) - Altezza Pallino (55) - Margine totale (5) = 60px */
+  input:checked + .slider:before {
+    transform: translateY(60px);
+  }
+
+  /* Stile delle icone */
+  .toggleSwitch-icon {
+    width: 50px;
+    height: 50px;
+    z-index: 1; /* Sotto il pallino */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.3s; /* Transizione fluida per l'evidenza */
+  }
+
+  /* Effetto evidenza: l'icona non coperta dal pallino diventa semitrasparente */
+  input:checked + .slider .toggleSwitch-icon:first-child {
+    opacity: 0.4;
+  }
+  input:not(:checked) + .slider .toggleSwitch-icon:last-child {
+    opacity: 0.4;
+  }
+
+  .toggleSwitch-icon img {
+    max-width: 80%; /* Lascia un po' di respiro rispetto ai bordi del pallino */
+    max-height: 80%;
+    display: block;
+    pointer-events: none;
+  }

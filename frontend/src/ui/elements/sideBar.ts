@@ -1,6 +1,8 @@
 // Modulo per la Sidebar: esporta funzione per creare la struttura reale della sidebar
 // Copiata da index.html e main.ts
 
+import { toggleSwitchHTML } from "./toggleSwitch";
+
 export function createSidebarElement(): HTMLDivElement {
 // 1. Il contenitore principale della Sidebar
 const sidebar = document.createElement('div');
@@ -73,6 +75,13 @@ cacheTooltip.className = 'cache-tooltip';
     cacheTooltip.appendChild(cacheWipeBtn);
 
 sidebar.appendChild(cacheTooltip);
+
+// 5. Toggle Switch (Contenitore)
+const toggleSwitchContainer = document.createElement('div');
+toggleSwitchContainer.id = 'toggleSwitchContainer';
+toggleSwitchContainer.className = 'toggle-switch-container';
+toggleSwitchContainer.innerHTML = toggleSwitchHTML;
+sidebar.appendChild(toggleSwitchContainer);
 
 // 6. Privacy Policy
 const privacyPolicySidebar = document.createElement('div');

@@ -4,6 +4,7 @@ import path from 'path';
 import { orchestrateFleetsForProfile } from './fleetOrchestrator';
 import { setCache, getCache } from '../utils/cache';
 import buildFeesDetailed from '../utils/buildFeesDetailed';
+import { decodeResources } from '../utils/resources_analyses';
 import { getWalletAuthorityUtil } from '../utils/getWalletAuthority';
 import { getWalletTxsUtil } from '../utils/getWalletTxs';
 
@@ -144,6 +145,18 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 console.error('[analyze-profile] failed to save playload cache', saveErr);
             }
 
+            // FASE 8: RESOURCE FLOWS ANALYSIS
+            let finalPayload = merged;
+            try {
+                console.log("###################### FASE 8: RESOURCE FLOWS ANALYSIS #########################");
+                const resourceFlows = await decodeResources(profileId as string);
+                finalPayload = Object.assign({}, merged, { resourceFlows });
+                await setCache('playload', 'latest', finalPayload, profileId as string);
+                console.log("###################### FINE FASE 8 #########################");
+            } catch (phase8Err) {
+                console.warn('[analyze-profile] Phase 8 skipped, returning base payload', phase8Err);
+            }
+
             // Clean up all cache except playload/latest.json (unless cachePersist is true)
             if (!cachePersist) {
                 try {
@@ -181,7 +194,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
             console.log("###################### FINE FASE 7: FINE FLUSSO ANALYZE #########################");
             res.set('X-Cache-Hit', 'miss');
             res.set('X-Cache-Timestamp', String(Date.now()));
-            return res.json(merged);
+            return res.json(finalPayload);
         } catch (e) {
             console.error('[analyze-profile] buildFeesDetailed failed', e);
 

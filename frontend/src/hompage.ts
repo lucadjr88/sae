@@ -21,6 +21,7 @@ import { connectedWalletIcon } from '@utils/state';
 
 import { createLoadingElement } from './ui/elements/loading';
 import { analyzeFees } from './services/api';
+import { createManualLoginElement } from '@ui/elements/manualLogin';
 
 export function createHomePage(): void {
   const mainContainer = document.querySelector<HTMLDivElement>('#mainContainer')!;
@@ -197,27 +198,8 @@ export function manualProfileEntryListener() {
     console.log('[manualProfileEntryListener] Setting up manual profile entry form');
     //buttonsContainer.style.display = 'block';
     console.log('[DEBUG] manualProfileEntryListener called');
-    buttonsContainer.innerHTML = `
-
-        <div class="form-box centered">
-          <input type="text" id="profileId" placeholder="Player Profile ID" list="profileId-suggestions">
-          <datalist id="profileId-suggestions"></datalist>
-          <button id="analyzeBtn">Analyze</button>
-        </div>
-        
-        <div id="results" class="is-hidden"></div>
-
-        <div id="allert_istruzioni" class="container">
-          <div class="content-column">
-            <svg class="info-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-            </svg>
-            <p class="body-medium">
-              You can find your profileId in Sage under Player Information and Details in CSS Starbase // Details
-            </p>
-          </div>
-        </div></div>
-      `;
+    buttonsContainer.innerHTML = '';
+    buttonsContainer.appendChild(createManualLoginElement());
     // Popola suggerimenti
     const datalist = buttonsContainer.querySelector('#profileId-suggestions') as HTMLDataListElement | null;
     if (datalist) {

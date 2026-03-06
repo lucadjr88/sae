@@ -7,6 +7,7 @@ import getFleetsRouter from './backend/routes/get-fleets';
 import { pricesRouter } from './backend/routes/prices';
 import frontendRouter from './backend/routes/frontend';
 import authRouter from './backend/routes/auth.js';
+import resourceFlowsRouter from './backend/routes/resource-flows';
 import { startNonInvasiveMetricsLogger } from './utils/rpc/metrics';
 
 const PORT = 3000;
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use('/auth', authRouter);
 app.use('/api', pricesRouter);
 app.use('/api', analyzeProfileRouter);
+app.use('/api', resourceFlowsRouter);
 app.use('/api/debug', debugRouter);
 app.use('/api/debug', getFleetsRouter);
 

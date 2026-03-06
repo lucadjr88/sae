@@ -4,9 +4,6 @@
 import { normalizeOpName } from '@services/utils';
 import type { FleetsRequest, FleetsResponse, WalletSageFeesStreamRequest, FleetBreakdownRequest, FleetBreakdownResponse, ApiError } from '@types/api';
 import type { FeesByFleet } from '@types/operation-list';
-import { updateCacheTooltip } from '@services/wipe_reload';
-import { displayResults } from '../resultpage';
-import { wallet } from './wallet';
 
 async function fetchJson<Req, Res>(url: string, init: RequestInit & { body?: Req }): Promise<Res> {
 	const headers = { 'Content-Type': 'application/json', ...init.headers };
@@ -26,14 +23,72 @@ async function fetchJson<Req, Res>(url: string, init: RequestInit & { body?: Req
 	}
 }
 
+export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: string | null) {
+	const profileIcon = document.getElementById('profileIcon');
+	const cacheTooltip = document.getElementById('cacheTooltip');
+	// Ensure any inline display:none set by hideCacheTooltipAndSidebar is cleared
+	if (cacheTooltip) cacheTooltip.style.display = '';
+	const cacheTooltipIcon = document.getElementById('cacheTooltipIcon');
+	const cacheTooltipTitle = document.getElementById('cacheTooltipTitle');
+	const cacheTooltipStatus = document.getElementById('cacheTooltipStatus');
+	const cacheTooltipAge = document.getElementById('cacheTooltipAge');
+	if (profileIcon && cacheTooltip) {
+		// ensure no stale status classes remain before applying new state
+		profileIcon.classList.remove('cache-fresh', 'cache-stale');
+		profileIcon.title = '';
+		profileIcon.style.opacity = '1';
+		let hideTimeout = null;
+		profileIcon.onmouseenter = () => {
+			if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; }
+			cacheTooltip.classList.add('visible');
+		};
+		profileIcon.onmouseleave = () => {
+			hideTimeout = setTimeout(() => { cacheTooltip.classList.remove('visible'); }, 200);
+		};
+		cacheTooltip.onmouseenter = () => { if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; } };
+		cacheTooltip.onmouseleave = () => { cacheTooltip.classList.remove('visible'); };
+		const cacheUpdateBtn = document.getElementById('cacheUpdateBtn');
+		const cacheWipeBtn = document.getElementById('cacheWipeBtn');
+		if (cacheTimestamp) {
+			const cacheAge = Date.now() - parseInt(cacheTimestamp);
+			const sixHoursMs = 6 * 60 * 60 * 1000;
+			const ageMinutes = (cacheAge / 60000).toFixed(1);
+			const ageHours = (cacheAge / 3600000).toFixed(1);
+			if (cacheAge < sixHoursMs) {
+				// recent data -> green background
+				profileIcon.classList.add('cache-fresh');
+				cacheTooltipIcon.textContent = cacheHit === 'disk' ? '✅' : '✨';
+				cacheTooltipTitle.textContent = cacheHit === 'disk' ? 'Cache Fresh' : 'Fresh Data';
+				cacheTooltipStatus.textContent = cacheHit === 'disk' ? 'Data loaded from cache' : 'Just fetched from API';
+				cacheTooltipAge.textContent = ageHours < 1 ? `Age: ${ageMinutes} minutes` : `Age: ${ageHours} hours`;
+			} else {
+				// stale data -> red background
+				profileIcon.classList.add('cache-stale');
+				cacheTooltipIcon.textContent = '⚠️';
+				cacheTooltipTitle.textContent = 'Cache Stale';
+				cacheTooltipStatus.textContent = 'Cache is older than 6 hours';
+				cacheTooltipAge.textContent = `Age: ${ageHours} hours`;
+			}
+		} else {
+			// no timestamp -> treat as fresh (green)
+			profileIcon.classList.add('cache-fresh');
+			cacheTooltipIcon.textContent = '✨';
+			cacheTooltipTitle.textContent = 'Fresh Data';
+			cacheTooltipStatus.textContent = 'Just fetched from API';
+			cacheTooltipAge.textContent = 'No cached data';
+		}
+		const updateBtn = document.getElementById('cacheUpdateBtn');
+		const wipeBtn = document.getElementById('cacheWipeBtn');
+		if (updateBtn) { updateBtn.disabled = false; }
+		if (wipeBtn) { wipeBtn.disabled = false; }
+	}
+}
 
+import { setCurrentProfileId, setLastAnalysisParams, setAnalysisStartTime, setProgressInterval, progressInterval, currentProfileId } from '@utils/state';
 
-import { setCurrentProfileId, setLastAnalysisParams, setAnalysisStartTime, setProgressInterval, progressInterval, currentProfileId, connectedWalletPublicKey } from '@utils/state';
-import { updateProgress as updateProgressFunc } from '@ui/elements/loading';
-
-export function processAnalysisData(data: any, walletPublicKey?: string | null) {
+export function processAnalysisData(data: any) {
 	const fleets = data.fleets || [];
-	const walletPubkey = walletPublicKey || data.walletAuthority || data.feePayer || null;
+	const walletPubkey = data.walletAuthority || data.feePayer || null;
 	const fleetNames: { [account: string]: string } = {};
 	const fleetIsRented: { [account: string]: boolean } = {};
 	// Costruisci set di tutte le chiavi/callsign delle rentedFleets
@@ -59,7 +114,7 @@ export function processAnalysisData(data: any, walletPublicKey?: string | null) 
 			if (f.isRented || rentedFleetKeys.has(callsign) || rentedFleetKeys.has(key) || rentedFleetKeys.has(fleetShips)) {
 				f.isRented = true;
 				reason.push('isRented:true');
-				//console.log('trovata rented fleet:', { callsign, key, fleetShips, reason });
+				console.log('trovata rented fleet:', { callsign, key, fleetShips, reason });
 			}
 			if (f.data.fleetShips) {
 				fleetNames[f.data.fleetShips] = f.callsign;
@@ -90,33 +145,42 @@ export function processAnalysisData(data: any, walletPublicKey?: string | null) 
 }
 
 
-export async function analyzeFees(profileId: string, wipeCache: boolean = false) {
-    const buttonsContainer = document.getElementById('buttons-container') as HTMLDivElement | null;
-    const btn = buttonsContainer?.querySelector('#analyzeBtn') as HTMLButtonElement | null;
-    const resultsDiv = document.getElementById('results') as HTMLDivElement | null;
-
-    // Validazione semplice
-    if (!profileId) {
-        alert('Inserisci un Player Profile ID!');
+export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = false) {
+	// Unificata: profileIdParam può essere string o boolean (per wipeCache, default false). Se è boolean, è wipeCache e profileId viene preso da currentProfileId. Se è string, è profileId e wipeCache viene da argomento 2 o default false.
+	let profileId = typeof profileIdParam === 'string' ? profileIdParam : undefined;
+	//let wipeCache = false;
+	if (typeof profileIdParam === 'boolean') {
+		wipeCache = profileIdParam;
+		profileId = currentProfileId;
+	}
+	if (typeof arguments[1] === 'boolean') {
+		wipeCache = arguments[1];
+	}
+	const buttonsContainer = document.getElementById('buttons-container') as HTMLDivElement | null;
+	const btn = buttonsContainer?.querySelector('#analyzeBtn') as HTMLButtonElement | null;
+	console.log('[analyzeFees] called with profileIdParam:', profileIdParam);
+	if (!profileId) {
+		const input = buttonsContainer?.querySelector('#profileId') as HTMLInputElement | null;
+		profileId = input?.value?.trim() || '';
+	}
+	if (!profileId) {
+		alert('Inserisci un Player Profile ID!');
 		console.warn('[analyzeFees] profileId missing, aborting');
 		return;
-    }
-
-    //console.log(`[analyzeFees] Analisi avviata per: ${profileId} (wipeCache: ${wipeCache})`);
-
+	}
 	setCurrentProfileId(profileId);
-	//console.log('[analyzeFees] currentProfileId dopo set:', currentProfileId);
+	console.log('[analyzeFees] currentProfileId dopo set:', currentProfileId);
 	const formBox = document.querySelector('.form-box');
-	if (formBox) formBox.classList.add('is-hidden');
+	if (formBox) formBox.style.display = 'none';
 	if (btn) {
 		btn.disabled = true;
 		btn.textContent = 'Loading...';
 	}
 
-	//console.log('[analyzeFees] About to call updateProgress()');
+	console.log('[analyzeFees] About to call updateProgress()');
 	try {
-		updateProgressFunc();
-		//console.log('[analyzeFees] updateProgress() completed successfully');
+		window.updateProgress();
+		console.log('[analyzeFees] updateProgress() completed successfully');
 	} catch (error) {
 		console.error('[analyzeFees] Error in updateProgress():', error);
 	}
@@ -125,13 +189,12 @@ export async function analyzeFees(profileId: string, wipeCache: boolean = false)
 		let data;
 		let cacheHit: string | null = null;
 		let cacheTimestamp: string | null = null;
-		//console.log('[analyzeFees] About to fetch /api/analyze-profile');
+		console.log('[analyzeFees] About to fetch /api/analyze-profile');
 		try {
-			const walletPubkey = wallet.publicKey?.toString() || null;
 			const response = await fetch('/api/analyze-profile', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ profileId, wipeCache, walletPubkey })
+				body: JSON.stringify({ profileId, wipeCache })
 			});
 			cacheHit = response.headers.get('X-Cache-Hit');
 			cacheTimestamp = response.headers.get('X-Cache-Timestamp');
@@ -139,79 +202,62 @@ export async function analyzeFees(profileId: string, wipeCache: boolean = false)
 				throw new Error('analyze-profile request failed: ' + response.statusText);
 			}
 			data = await response.json();
-			//console.log('[analyzeFees] Fetch successful, data:', data);
+			console.log('[analyzeFees] Fetch successful, data:', data);
 		} catch (error) {
 			throw new Error('analyze-profile request failed: ' + (error.message || error));
 		}
-		//console.log('[analyzeFees] About to process data');
-		const walletPublicKeyString = connectedWalletPublicKey || wallet.publicKey?.toString() || null;
-		const processed = processAnalysisData(data, walletPublicKeyString);
-		//console.log('Data processed for display:', processed);
-		//console.log('[analyzeFees] About to call setLastAnalysisParams');
+		console.log('[analyzeFees] About to process data');
+		const processed = processAnalysisData(data);
+		console.log('Data processed for display:', processed);
+		//window.updateProgress(`Analyzed ${processed.fleets.length} fleets`);
 		setLastAnalysisParams({
-			//walletPubkey: processed.walletPubkey,
+			walletPubkey: processed.walletPubkey,
 			fleetNames: processed.fleetNames,
 			fleetIsRented: processed.fleetIsRented,
 			fleets: processed.fleets
 		});
-		//console.log('[analyzeFees] setLastAnalysisParams completed');
 		const totalSigs = data.totalSignaturesFetched || 'N/A';
 		const processedTxs = data.transactionCount24h || 0;
 		const cacheMsg = data.fromCache ? ' (from cache)' : '';
-		if (!data.feesByFleet || typeof data.feesByFleet !== 'object') {
-			data.feesByFleet = {};
-		}
-		//console.log('[analyzeFees] About to call displayResults');
-		// Passa direttamente la mappa fleetIsRented e lascia che la UI usi solo il campo isRented del backend
-		displayResults(data, processed.fleetNames, processed.fleetIsRented, processed.fleets);
-		//console.log('[analyzeFees] displayResults completed');
-		//console.log('[analyzeFees] About to call updateCacheTooltip');
+		//window.updateProgress(`Completed: ${processedTxs}/${totalSigs} transactions${cacheMsg}`);
 		updateCacheTooltip(cacheHit, cacheTimestamp);
-		//console.log('[analyzeFees] updateCacheTooltip completed');
 		try {
 			const profileIconEnd = document.getElementById('profileIcon');
 			if (profileIconEnd) { profileIconEnd.textContent = '👤'; profileIconEnd.title = ''; }
 		} catch (_) { }
+		if (!data.feesByFleet || typeof data.feesByFleet !== 'object') {
+			data.feesByFleet = {};
+		}
+		// Passa direttamente la mappa fleetIsRented e lascia che la UI usi solo il campo isRented del backend
+		window.displayResults(data, processed.fleetNames, processed.fleetIsRented, processed.fleets);
 		if (data && data.breakdown && data.breakdown.feesByFleet && typeof data.breakdown.feesByFleet === 'object') {
-			//console.log('[analyzeFees] About to call displayFleetOperationCharts');
-			//displayFleetOperationCharts(data.breakdown.feesByFleet, processed.fleetNames);
-			//console.log('[analyzeFees] displayFleetOperationCharts completed');
+			displayFleetOperationCharts(data.breakdown.feesByFleet, processed.fleetNames);
 			const sidebar = document.getElementById('sidebar');
-			if (sidebar) sidebar.classList.remove('is-hidden');
+			if (sidebar) sidebar.style.display = '';
 		} else {
-			console.error('[analyzeFees] Data validation failed, missing breakdown:', data);
-			const resultsDiv = document.getElementById('results');
-			if (resultsDiv) resultsDiv.innerHTML = `<div class="error">Error: ${data}</div>`;
+			console.error('Data error:', data);
+			resultsDiv.innerHTML = `<div class="error">Error: ${data}</div>`;
 		}
 	} catch (error) {
-		console.error('[analyzeFees] Caught error:', error);
-		const resultsDiv = document.getElementById('results');
-		if (resultsDiv) resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+		console.error('Analysis error:', error);
+		resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
 	} finally {
-		//console.log('[analyzeFees] Entering finally block');
 		if (progressInterval) { clearInterval(progressInterval); setProgressInterval(null); }
 		if (btn) {
 			btn.disabled = false;
 			btn.textContent = 'Analyze 24h';
 		}
-		//console.log('[analyzeFees] Function completed');
 	}
 }
 
 // Display operation pie charts for each fleet
-/*function displayFleetOperationCharts(feesByFleet: FeesByFleet, fleetNames: { [account: string]: string }) {
+function displayFleetOperationCharts(feesByFleet: FeesByFleet, fleetNames: { [account: string]: string }) {
 	const resultsDiv = document.getElementById('results');
-	if (!resultsDiv) {
-		console.error('[displayFleetOperationCharts] CRITICAL: #results element not found - charts aborted');
-		return;
-	}
+	if (!resultsDiv) return;
 
 	// Find the fleet list section
 	const fleetListSection = resultsDiv.querySelector('.fleet-list-section');
-	if (!fleetListSection) {
-		console.error('[displayFleetOperationCharts] CRITICAL: .fleet-list-section not found - charts aborted');
-		return;
-	}
+	if (!fleetListSection) return;
 
 	// Create a new section for fleet operation charts
 	const chartsSection = document.createElement('div');
@@ -220,10 +266,7 @@ export async function analyzeFees(profileId: string, wipeCache: boolean = false)
 
 	// For each fleet with operations data, create a pie chart
 	Object.entries(feesByFleet).forEach(([fleetKey, fleetData]) => {
-		if (!fleetData.operations || Object.keys(fleetData.operations).length === 0) {
-			console.warn('[displayFleetOperationCharts] Skipping fleet %s - no operations', fleetKey);
-			return;
-		}
+		if (!fleetData.operations || Object.keys(fleetData.operations).length === 0) return;
 
 		const fleetName = fleetNames[fleetKey] || fleetKey;
 
@@ -232,7 +275,7 @@ export async function analyzeFees(profileId: string, wipeCache: boolean = false)
 		chartContainer.className = 'fleet-chart-container';
 		chartContainer.innerHTML = `
 			<h3>${fleetName}</h3>
-			<div class="fleet-chart-row">
+			<div style="display: flex; gap: 20px; align-items: center;">
 				<canvas id="chart-${fleetKey}" width="200" height="200"></canvas>
 				<div id="legend-${fleetKey}"></div>
 			</div>
@@ -267,7 +310,7 @@ export async function analyzeFees(profileId: string, wipeCache: boolean = false)
 
 	// Insert the charts section after the fleet list
 	fleetListSection.parentNode.insertBefore(chartsSection, fleetListSection.nextSibling);
-}*/
+}
 
 // Get color for operation type
 function getOperationColor(opType: string) {
@@ -293,10 +336,7 @@ function getOperationColor(opType: string) {
 // Show a simple pending UI for breakdown without making extra network calls
 export function showBreakdownPending() {
 	const resultsDiv = document.getElementById('results');
-	if (!resultsDiv) {
-		console.error('[showBreakdownPending] CRITICAL: #results element not found - pending message aborted');
-		return;
-	}
+	if (!resultsDiv) return;
 	// remove previous pending marker
 	const existing = resultsDiv.querySelector('.breakdown-pending');
 	if (existing) existing.remove();

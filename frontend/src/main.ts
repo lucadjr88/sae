@@ -9,6 +9,7 @@ import "./ui/styles/privacyPolicy.css";
 import "./ui/styles/resultsComponent.css";
 import "./ui/styles/sideBar.css";
 import "./ui/styles/startButtons.css";
+import "./ui/styles/toggleSwitch.css";
 import { createHomePage, getWalletConnection, manualProfileEntryListener, getWalletIcon } from "./hompage";
 
 import { Wallet } from './services/wallet';
