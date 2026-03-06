@@ -2,6 +2,8 @@
 
 // Implementazione reale spostata da app
 import { normalizeOpName } from '@services/utils';
+import { updateProgress } from '@ui/elements/loading';
+import { displayResults } from '../resultpage';
 import type { FleetsRequest, FleetsResponse, WalletSageFeesStreamRequest, FleetBreakdownRequest, FleetBreakdownResponse, ApiError } from '@types/api';
 import type { FeesByFleet } from '@types/operation-list';
 
@@ -179,7 +181,7 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 
 	console.log('[analyzeFees] About to call updateProgress()');
 	try {
-		window.updateProgress();
+		updateProgress();
 		console.log('[analyzeFees] updateProgress() completed successfully');
 	} catch (error) {
 		console.error('[analyzeFees] Error in updateProgress():', error);
@@ -229,18 +231,24 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 			data.feesByFleet = {};
 		}
 		// Passa direttamente la mappa fleetIsRented e lascia che la UI usi solo il campo isRented del backend
-		window.displayResults(data, processed.fleetNames, processed.fleetIsRented, processed.fleets);
+		displayResults(data, processed.fleetNames, processed.fleetIsRented, processed.fleets);
 		if (data && data.breakdown && data.breakdown.feesByFleet && typeof data.breakdown.feesByFleet === 'object') {
 			displayFleetOperationCharts(data.breakdown.feesByFleet, processed.fleetNames);
 			const sidebar = document.getElementById('sidebar');
 			if (sidebar) sidebar.style.display = '';
 		} else {
 			console.error('Data error:', data);
-			resultsDiv.innerHTML = `<div class="error">Error: ${data}</div>`;
+			const resultsDiv = document.getElementById('results') as HTMLDivElement | null;
+			if (resultsDiv) {
+				resultsDiv.innerHTML = `<div class="error">Error: ${data}</div>`;
+			}
 		}
 	} catch (error) {
 		console.error('Analysis error:', error);
-		resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+		const resultsDiv = document.getElementById('results') as HTMLDivElement | null;
+		if (resultsDiv) {
+			resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+		}
 	} finally {
 		if (progressInterval) { clearInterval(progressInterval); setProgressInterval(null); }
 		if (btn) {

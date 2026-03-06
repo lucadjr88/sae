@@ -2,6 +2,7 @@
     top: 50%;
     transform: translateY(-50%); /* Centra il contenitore rispetto alla sua altezza */
     position: fixed;
+    visibility: hidden; /* Nascondiamo il contenitore finché non è pronto */
   }
 
   .vertical-switch {
