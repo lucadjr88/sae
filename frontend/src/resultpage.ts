@@ -432,6 +432,6 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
   // Create other operations list (operations not shown in the main summary)
   const includedOperations = new Set(sortedOps.map(([name]) => name));
   createOtherOperationsList(data as any, fleetNames, new Set(Object.keys(data.feesByFleet || {}).filter(k => (data.feesByFleet as any)[k]?.isRented)), includedOperations);
-
+  startHideTimer();
   //console.log('[displayResults] Results displayed successfully');
 }
