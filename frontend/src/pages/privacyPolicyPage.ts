@@ -59,7 +59,7 @@ function renderPrivacyPolicyPage(): void {
       <h2>6. User Rights</h2>
       <p>Under the GDPR, you have the right to access, rectify, and erase your data. Since we do not store personal data, these rights are limited to the public wallet address and associated profileid. You can request deletion of your profileid and associated cached data by contacting us.</p>
 
-      <h2>6. Contact</h2>
+      <h2>7. Contact</h2>
       <p>This project is operated by staratlasexplorer.duckdns.org.</p>
       <p>If you have any questions or to exercise your rights, please contact us.</p>
       <p>Email: lucadjr88@gmail.com</p>

@@ -109,7 +109,8 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
 
     const hideSidebar = () => {
       colonna1?.classList.add('sidebar-hidden');
-      document.body.classList.add('sidebar-is-hidden');
+      document.body.classList.add('sidebar-is-hidden');//nasconde sidebar
+      document.getElementById('cacheTooltip')?.classList.remove('visible'); // nasconde tooltip cache se aperto
       if (hideTimeout) clearTimeout(hideTimeout);
     };
 
