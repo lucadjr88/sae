@@ -27,7 +27,7 @@
   width: 60px;
   flex-shrink: 0;
   position: relative;
-  z-index: 1100;
+  z-index: 2;
 }
 
 .results-sidebar-column.sidebar-hidden {
@@ -65,6 +65,8 @@
   background: #13151f;
   border: 1px solid #1e222e;
   margin: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 .stat-label {

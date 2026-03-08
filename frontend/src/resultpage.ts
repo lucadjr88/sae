@@ -61,7 +61,7 @@ export function createResultPage(): void {
 
   colonna2.appendChild(heroDiv);
   colonna2.appendChild(resultDiv);
-  colonna2.appendChild(priceTickerBar);
+  mainContainer.appendChild(priceTickerBar);
 }
 
 

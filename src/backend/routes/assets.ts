@@ -70,6 +70,10 @@ router.get('/assets/manifest', (req, res) => {
       // Seedvault icon
       const seedvaultFile = assetFiles.find(f => f.startsWith('seedvault2-'));
       if (seedvaultFile) manifest.assets.iconSeedvault = `/api/assets/${seedvaultFile}`;
+
+      // Manual icon
+      const manualFile = assetFiles.find(f => f.startsWith('writing'));
+      if (manualFile) manifest.assets.iconManual = `/api/assets/${manualFile}`;
       
       // Resources icon
       const resourcesFile = assetFiles.find(f => f.startsWith('resources_icon-'));
