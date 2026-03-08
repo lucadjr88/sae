@@ -78,12 +78,36 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
   // Sidebar auto-hide after 10 seconds + toggle on click (mobile only)
   const isMobile = window.matchMedia('(max-width: 1200px) and (max-height: 2670px), (max-width: 2670px) and (max-height: 1200px)').matches;
 
-  if (isMobile) {
-    const colonna1 = document.getElementById('colonna1');
-    const colonna2 = document.getElementById('colonna2');
-    let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+  const colonna1 = document.getElementById('colonna1');
+  const colonna2 = document.getElementById('colonna2');
+  let hideTimeout: ReturnType<typeof setTimeout> | null = null;
 
-       // Click on toggle tab to show sidebar
+  const startHideTimer = () => {
+    if (hideTimeout) clearTimeout(hideTimeout);
+    hideTimeout = setTimeout(() => {
+      hideSidebar();
+    }, 10000);
+  };
+
+  const showSidebar = () => {
+    colonna1?.classList.remove('sidebar-hidden');
+    document.body.classList.remove('sidebar-is-hidden');
+    startHideTimer();
+  };
+
+  const hideSidebar = () => {
+    colonna1?.classList.add('sidebar-hidden');
+    document.body.classList.add('sidebar-is-hidden');//nasconde sidebar
+    document.getElementById('cacheTooltip')?.classList.remove('visible'); // nasconde tooltip cache se aperto
+    if (hideTimeout) clearTimeout(hideTimeout);
+  };
+
+
+  if (isMobile) {
+
+
+
+    // Click on toggle tab to show sidebar
     const sidebarToggle = document.createElement('div');
     sidebarToggle.id = 'sidebar-toggle-tab';
     sidebarToggle.className = 'sidebar-toggle-tab';
@@ -94,32 +118,8 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
     });
     document.body.appendChild(sidebarToggle);
 
-    const startHideTimer = () => {
-      if (hideTimeout) clearTimeout(hideTimeout);
-      hideTimeout = setTimeout(() => {
-        hideSidebar();
-      }, 10000);
-    };
-
-    const showSidebar = () => {
-      colonna1?.classList.remove('sidebar-hidden');
-      document.body.classList.remove('sidebar-is-hidden');
-      startHideTimer();
-    };
-
-    const hideSidebar = () => {
-      colonna1?.classList.add('sidebar-hidden');
-      document.body.classList.add('sidebar-is-hidden');//nasconde sidebar
-      document.getElementById('cacheTooltip')?.classList.remove('visible'); // nasconde tooltip cache se aperto
-      if (hideTimeout) clearTimeout(hideTimeout);
-    };
-
     // Click on colonna2 to hide sidebar
     colonna2?.addEventListener('click', hideSidebar);
-
- 
-
-    startHideTimer();
   }
 
   // Hero logo shrink/fade on results scroll
@@ -135,15 +135,9 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
     heroLogo.style.opacity = '1';
 
     contentColumn.addEventListener('scroll', () => {
-      // Hide cache tooltip and sidebar if open when scrolling
-      const cacheTooltip = document.getElementById('cacheTooltip');
-      if (cacheTooltip && cacheTooltip.classList.contains('visible')) {
-        cacheTooltip.classList.remove('visible');
-      }
-      const colonna1 = document.getElementById('colonna1');
-      if (colonna1 && !colonna1.classList.contains('sidebar-hidden')) {
-        colonna1.classList.add('sidebar-hidden');
-      }
+
+      hideSidebar();
+
       const scrollY = contentColumn.scrollTop;
       const scale = Math.max(minScale, 1 - (scrollY / maxScrollForScale) * (1 - minScale));
       const opacity = Math.max(minOpacity, 1 - scrollY / maxScrollForOpacity);
