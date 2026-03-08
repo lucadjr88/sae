@@ -12,7 +12,7 @@ export function createBackground(): HTMLElement {
     // App version
     const versionDiv = document.createElement('div');
     versionDiv.className = 'app-version';
-    versionDiv.textContent = 'Sae v1.1';
+    versionDiv.textContent = 'Sae v1.2';
 
     // Wrapper per entrambi
     const wrapper = document.createElement('div');

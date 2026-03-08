@@ -49,8 +49,7 @@ export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: stri
 		};
 		cacheTooltip.onmouseenter = () => { if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; } };
 		cacheTooltip.onmouseleave = () => { cacheTooltip.classList.remove('visible'); };
-		const cacheUpdateBtn = document.getElementById('cacheUpdateBtn');
-		const cacheWipeBtn = document.getElementById('cacheWipeBtn');
+
 		if (cacheTimestamp) {
 			const cacheAge = Date.now() - parseInt(cacheTimestamp);
 			const sixHoursMs = 6 * 60 * 60 * 1000;
@@ -79,10 +78,6 @@ export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: stri
 			cacheTooltipStatus.textContent = 'Just fetched from API';
 			cacheTooltipAge.textContent = 'No cached data';
 		}
-		const updateBtn = document.getElementById('cacheUpdateBtn');
-		const wipeBtn = document.getElementById('cacheWipeBtn');
-		if (updateBtn) { updateBtn.disabled = false; }
-		if (wipeBtn) { wipeBtn.disabled = false; }
 	}
 }
 
@@ -222,7 +217,7 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		const processedTxs = data.transactionCount24h || 0;
 		const cacheMsg = data.fromCache ? ' (from cache)' : '';
 		//window.updateProgress(`Completed: ${processedTxs}/${totalSigs} transactions${cacheMsg}`);
-		updateCacheTooltip(cacheHit, cacheTimestamp);
+		
 		try {
 			const profileIconEnd = document.getElementById('profileIcon');
 			if (profileIconEnd) { profileIconEnd.textContent = '👤'; profileIconEnd.title = ''; }
@@ -243,6 +238,7 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 				resultsDiv.innerHTML = `<div class="error">Error: ${data}</div>`;
 			}
 		}
+		updateCacheTooltip(cacheHit, cacheTimestamp);
 	} catch (error) {
 		console.error('Analysis error:', error);
 		const resultsDiv = document.getElementById('results') as HTMLDivElement | null;

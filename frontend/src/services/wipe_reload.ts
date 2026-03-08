@@ -1,7 +1,6 @@
 
 import { analyzeFees } from '@services/api';
 import { createLoadingElement } from '@ui/elements/loading';
-import { currentProfileId } from "@utils/state";
 
 export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: string | null) {
     //console.log('[updateCacheTooltip] called with cacheHit:', cacheHit, 'cacheTimestamp:', cacheTimestamp);
@@ -70,16 +69,11 @@ export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: stri
         cacheTooltipAge.textContent = 'No cached data';
     }
 
-    const wipeBtn = document.getElementById('cacheWipeBtn') as HTMLButtonElement | null;
-
-    if (wipeBtn) {
-        wipeBtn.disabled = false;
-        wipeBtn.onclick = () => { wipeAndReload(currentProfileId); };
-    }
-    //console.log('[updateCacheTooltip] completed successfully');
 }
 
+// chiamata da addEventListener del bottone "Wipe Cache" on sideBar.ts, che a sua volta chiama analyzeFees con forceReload=true, forzando il backend a bypassare la cache e aggiornare i dati, e poi aggiorna il tooltip della cache di conseguenza
 export function wipeAndReload(profileId?: string): void {
+    console.log('[wipeAndReload] called with profileId:', profileId);
     const resultsContainer = document.getElementById('results') as HTMLDivElement | null;
     if (!resultsContainer) {
         console.error('[wipeAndReload] resultsContainer not found');

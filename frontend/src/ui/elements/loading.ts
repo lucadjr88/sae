@@ -6,7 +6,7 @@ export function createLoadingElement(message: string): HTMLDivElement {
     const div = document.createElement('div');
     div.className = 'loading';
     div.id = 'loading';
-    div.innerHTML = message + '<span id="secondsSpan">- 0s</span>';
+    div.innerHTML = message + '<br><span id="secondsSpan">- 0s</span>';
 
     return div;
 }

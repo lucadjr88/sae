@@ -1,8 +1,10 @@
 // Modulo per la Sidebar: esporta funzione per creare la struttura reale della sidebar
 // Copiata da index.html e main.ts
 
+import { wipeAndReload } from "@services/wipe_reload";
 import { createPrivacyPolicySidebarElement } from "./privacyPolicy";
 import { toggleSwitchHTML } from "./toggleSwitch";
+import { currentProfileId } from "@utils/state";
 
 export function createSidebarElement(): HTMLDivElement {
 // 1. Il contenitore principale della Sidebar
@@ -73,6 +75,12 @@ cacheTooltip.className = 'cache-tooltip';
     cacheWipeBtn.id = 'cacheWipeBtn';
     cacheWipeBtn.className = 'cache-tooltip-btn cache-tooltip-btn-danger';
     cacheWipeBtn.textContent = '🗑️ Wipe & Reload';
+
+    cacheWipeBtn.addEventListener('click', () => {
+        cacheTooltip.className = 'cache-tooltip'; // Rimuove la classe 'visible' per nascondere il tooltip
+        wipeAndReload(currentProfileId || undefined);
+    });
+
     cacheTooltip.appendChild(cacheWipeBtn);
 
 sidebar.appendChild(cacheTooltip);
