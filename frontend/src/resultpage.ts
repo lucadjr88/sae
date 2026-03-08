@@ -135,6 +135,15 @@ export function displayResults(data: DisplayData, fleetNames: Record<string, str
     heroLogo.style.opacity = '1';
 
     contentColumn.addEventListener('scroll', () => {
+      // Hide cache tooltip and sidebar if open when scrolling
+      const cacheTooltip = document.getElementById('cacheTooltip');
+      if (cacheTooltip && cacheTooltip.classList.contains('visible')) {
+        cacheTooltip.classList.remove('visible');
+      }
+      const colonna1 = document.getElementById('colonna1');
+      if (colonna1 && !colonna1.classList.contains('sidebar-hidden')) {
+        colonna1.classList.add('sidebar-hidden');
+      }
       const scrollY = contentColumn.scrollTop;
       const scale = Math.max(minScale, 1 - (scrollY / maxScrollForScale) * (1 - minScale));
       const opacity = Math.max(minOpacity, 1 - scrollY / maxScrollForOpacity);
