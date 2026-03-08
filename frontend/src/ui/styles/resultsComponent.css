@@ -26,6 +26,8 @@
   transition: transform 0.3s ease, width 0.3s ease;
   width: 60px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1100;
 }
 
 .results-sidebar-column.sidebar-hidden {
@@ -45,6 +47,8 @@
   box-sizing: border-box;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  position: relative;
+  z-index: 1;
 }
 
 .results-content-column::-webkit-scrollbar {
