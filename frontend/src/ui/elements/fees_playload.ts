@@ -3,7 +3,7 @@ import { normalizeOpName } from '@/services/utils';
 import { drawPieChart } from '@/services/charts';
 import { createFleetList, createOperationList, createOtherOperationsList } from '@/services/fleet-operations';
 import { toggleFleet } from '@/utils/ui';
-import { showSidebar, hideSidebar, startHideTimer } from '@/ui/elements/sideBar';
+import { showSidebar, hideSidebar, startHideTimer, canHideSidebarFromScroll } from '@/ui/elements/sideBar';
 import { setCachedFeeView, initializeToggleSwitch } from '@/ui/elements/toggleSwitch';
 import { createResultPage } from '@/resultpage';
 
@@ -62,8 +62,9 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
     heroLogo.style.opacity = '1';
 
     contentColumn.addEventListener('scroll', () => {
-
-      hideSidebar();
+      if (!isMobile || canHideSidebarFromScroll()) {
+        hideSidebar();
+      }
 
       const scrollY = contentColumn.scrollTop;
       const scale = Math.max(minScale, 1 - (scrollY / maxScrollForScale) * (1 - minScale));

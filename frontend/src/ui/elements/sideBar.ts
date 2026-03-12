@@ -7,11 +7,25 @@ import { toggleSwitchHTML } from "@/ui/elements/toggleSwitch";
 import { currentProfileId } from "@/utils/state";
 
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+  let suppressScrollHideUntil = 0;
+
+  const clearHideTimer = () => {
+    if (hideTimeout) {
+      clearTimeout(hideTimeout);
+      hideTimeout = null;
+    }
+  };
+
+  const suppressScrollHideFor = (milliseconds: number) => {
+    suppressScrollHideUntil = Date.now() + milliseconds;
+  };
+
+  export const canHideSidebarFromScroll = () => Date.now() >= suppressScrollHideUntil;
 
     
 
   export const startHideTimer = () => {
-    if (hideTimeout) clearTimeout(hideTimeout);
+    clearHideTimer();
     hideTimeout = setTimeout(() => {
       hideSidebar();
     }, 5000);
@@ -21,6 +35,8 @@ import { currentProfileId } from "@/utils/state";
     const colonna1 = document.getElementById('colonna1');
     colonna1?.classList.remove('sidebar-hidden');
     document.body.classList.remove('sidebar-is-hidden');
+    // Ignore scroll-triggered auto-hide briefly after opening from the toggle.
+    suppressScrollHideFor(450);
     startHideTimer();
   };
 
@@ -30,7 +46,7 @@ import { currentProfileId } from "@/utils/state";
     colonna1?.classList.add('sidebar-hidden');
     document.body.classList.add('sidebar-is-hidden');//nasconde sidebar
     document.getElementById('cacheTooltip')?.classList.remove('visible'); // nasconde tooltip cache se aperto
-    if (hideTimeout) clearTimeout(hideTimeout);
+    clearHideTimer();
   };
 
 
@@ -41,7 +57,7 @@ const sidebar = document.createElement('div');
 sidebar.id = 'sidebar';
 sidebar.className = 'sidebar';
 sidebar.onclick = () => {
-    if (hideTimeout) clearTimeout(hideTimeout);
+  clearHideTimer();
     startHideTimer();
 };
 
