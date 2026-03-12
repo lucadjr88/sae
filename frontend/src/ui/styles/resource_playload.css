@@ -230,6 +230,7 @@
 
 .resource-ops-table {
   border-collapse: collapse;
+      width: 100%;
 }
 
 .summary-ops-table {
