@@ -1,9 +1,9 @@
-import '../ui/styles/backGround.css';
-import '../ui/styles/heroTitle_elements.css';
-import './pages.css';
+import '@/ui/styles/backGround.css';
+import '@/ui/styles/heroTitle_elements.css';
+import '@/pages/pages.css';
 
-import { createBackground } from '../ui/elements/backGround';
-import { createHeroTitle } from '../ui/elements/heroTitle_elements';
+import { createBackground } from '@/ui/elements/backGround';
+import { createHeroTitle } from '@/ui/elements/heroTitle_elements';
 
 function renderPrivacyPolicyPage(): void {
   const mainContainer = document.querySelector<HTMLDivElement>('#mainContainer');

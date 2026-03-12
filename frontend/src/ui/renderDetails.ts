@@ -1,5 +1,5 @@
 // Render crafting details rows
-import { inferRecipeName, inferMaterialLabel, normalizeOpName } from '@utils/utils';
+import { inferRecipeName, inferMaterialLabel, normalizeOpName } from '@/utils/utils';
 export function renderCraftingDetailsRows(details: any[], maxDetails: number = 50): string {
   let html: string = '';
   details.slice(0, maxDetails).forEach(d => {

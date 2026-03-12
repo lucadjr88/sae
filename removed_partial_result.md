@@ -15,7 +15,7 @@ Processa lo stream tramite readSSEStream, che chiama:
 onProgress: esegue displayPartialResults(data, fleets, fleetRentalStatus) (visualizza risultati parziali, inclusi i rented).
 onComplete: visualizza i risultati finali.
 Costruisce la lista dei rented fleet tramite buildRentedFleetNames(fleets, fleetRentalStatus).
-Visualizza i risultati finali con displayResults.
+Visualizza i risultati finali con displayFeeResults.
 Rent detecting:
 
 Avviene sia durante lo stream (visualizzazione incrementale) che alla fine.
@@ -30,7 +30,7 @@ Attende la risposta completa (nessun stream, solo batch).
 Processa i dati finali con processAnalysisData.
 Costruisce la lista dei rented fleet tramite processed.rentedFleetNames.
 Cicla su data.feesByFleet e marca i fleet come rented se presenti in rentedFleetNames.
-Visualizza i risultati finali con displayResults.
+Visualizza i risultati finali con displayFeeResults.
 Rent detecting:
 
 Avviene solo sui dati finali, dopo che l’analisi è completata.
@@ -50,5 +50,5 @@ Visualizzare i risultati parziali man mano che arrivano, come in updateCache.
 Alla fine, visualizzare i risultati completi con:
 
 
-displayResults(data, fleetNames, rentedFleetNames);
+displayFeeResults(data, fleetNames, rentedFleetNames);
 Questa patch permette di ripristinare la UX reattiva e la visualizzazione incrementale dei rented fleet.

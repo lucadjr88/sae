@@ -1,28 +1,28 @@
 
-import './style.css';
-import './ui/styles/heroTitle_elements.css';
-import './ui/styles/startButtons.css';
-import './ui/styles/privacyPolicy.css';
-import './ui/styles/footBar.css';
-import './ui/styles/alertInstructions.css';
-import './ui/styles/manualLogin.css';
-import './ui/styles/loading.css';
-import './ui/styles/sideBar.css';
-import './ui/styles/resultsComponent.css';
-import './ui/styles/backGround.css';
+import '@/style.css';
+import '@/ui/styles/heroTitle_elements.css';
+import '@/ui/styles/startButtons.css';
+import '@/ui/styles/privacyPolicy.css';
+import '@/ui/styles/footBar.css';
+import '@/ui/styles/alertInstructions.css';
+import '@/ui/styles/manualLogin.css';
+import '@/ui/styles/loading.css';
+import '@/ui/styles/sideBar.css';
+import '@/ui/styles/resultsComponent.css';
+import '@/ui/styles/backGround.css';
 
-import { createHeroTitle } from './ui/elements/heroTitle_elements';
-import { createStartButtonsElement } from './ui/elements/startButtons';
-import { createPrivacyPolicyStartElement } from './ui/elements/privacyPolicy';
-import { createFootBarElement } from './ui/elements/footBar';
-import { createBackground } from './ui/elements/backGround';
-import { connectedWalletIcon } from '@utils/state';
-import defaultWalletIcon from './assets/icons/seedvault2.png';
+import { createHeroTitle } from '@/ui/elements/heroTitle_elements';
+import { createStartButtonsElement } from '@/ui/elements/startButtons';
+import { createPrivacyPolicyStartElement } from '@/ui/elements/privacyPolicy';
+import { createFootBarElement } from '@/ui/elements/footBar';
+import { createBackground } from '@/ui/elements/backGround';
+import { connectedWalletIcon } from '@/utils/state';
+import defaultWalletIcon from '@/assets/icons/seedvault2.png';
 
 
-import { createLoadingElement } from './ui/elements/loading';
-import { analyzeFees } from './services/api';
-import { createManualLoginElement } from '@ui/elements/manualLogin';
+import { createLoadingElement } from '@/ui/elements/loading';
+import { analyzeFees } from '@/services/api';
+import { createManualLoginElement } from '@/ui/elements/manualLogin';
 
 export function createHomePage(): void {
   const mainContainer = document.querySelector<HTMLDivElement>('#mainContainer')!;

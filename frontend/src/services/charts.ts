@@ -1,6 +1,6 @@
 // Chart rendering logic extracted from app
 
-import type { ChartDataItem, PriceData } from '../types/charts';
+import type { ChartDataItem, PriceData } from '@/types/charts';
 
 // Use Chart from global window (loaded via CDN in HTML)
 declare const Chart: any;

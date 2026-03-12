@@ -124,7 +124,7 @@ npm run build → tsc && vite build
 4. **resultpage.ts** - Page builder:
    - Crea layout risultati (sidebar + results grid)
    - Cache tooltip updates
-   - `displayResults()` funzione principale
+   - `displayFeeResults()` funzione principale
 
 5. **api.ts** - API integration:
    - `processAnalysisData()` - Elabora response dal backend
@@ -200,9 +200,9 @@ npm run build → tsc && vite build
 2. Quando utente clicca "Analyze":
    ├─ Chiama analyzeFees() da api.ts
    ├─ Backend ritorna dati flotte+ops
-   └─ displayResults() renderizza pagina risultati
+   └─ displayFeeResults() renderizza pagina risultati
 
-3. displayResults() deve:
+3. displayFeeResults() deve:
    ├─ Creare layout
    ├─ Calcolare statistiche
    ├─ Chiamare createFleetList(), createOperationList(), createOtherOperationsList()
@@ -217,7 +217,7 @@ npm run build → tsc && vite build
    - Necessario: Verificare `/api/fleets`, `/api/fees`, etc in backend
 
 2. **Window Global Functions:**
-   - `main.ts` dichiara funzioni globali (analyzeFees, displayResults, etc)
+   - `main.ts` dichiara funzioni globali (analyzeFees, displayFeeResults, etc)
    - Necessario: Verificare se sono effettivamente assignate al `window` object
 
 3. **DOM Elements:**
@@ -300,7 +300,7 @@ npm run build → tsc && vite build
 ```typescript
 // Verificare funzioni globali assignate:
 // window.analyzeFees
-// window.displayResults
+// window.displayFeeResults
 // window.toggleFleet
 // window.drawPieChart
 // window.createFleetList

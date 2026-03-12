@@ -21,7 +21,50 @@ const MATERIAL_REGISTRY: Record<string, MaterialInfo> = {
     category: 'consumable',
     decimals: 0
   },
+  fueL3hBZjLLLJHiFH9cqZoozTG3XQZ53diwFPwbzNim: {
+    name: 'Fuel',
+    symbol: 'FUEL',
+    category: 'fuel',
+    decimals: 0
+  },
+  SDUsgfSZaDhhZ76U3ZgvtFiXsfnHbf2VrzYxjBZ5YbM: {
+    name: 'Survey Data Unit',
+    symbol: 'SDU',
+    category: 'resource',
+    decimals: 0
+  },
 };
+
+const MATERIAL_PREFIX_REGISTRY: Array<{ prefix: string; info: MaterialInfo }> = [
+  {
+    prefix: 'food',
+    info: { name: 'Food', symbol: 'FOOD', category: 'consumable', decimals: 0 }
+  },
+  {
+    prefix: 'ammo',
+    info: { name: 'Ammo', symbol: 'AMMO', category: 'consumable', decimals: 0 }
+  },
+  {
+    prefix: 'fuel',
+    info: { name: 'Fuel', symbol: 'FUEL', category: 'fuel', decimals: 0 }
+  },
+  {
+    prefix: 'hydr',
+    info: { name: 'Hydrogen', symbol: 'HYDR', category: 'fuel', decimals: 0 }
+  },
+  {
+    prefix: 'sdu',
+    info: { name: 'Survey Data Unit', symbol: 'SDU', category: 'resource', decimals: 0 }
+  },
+  {
+    prefix: 'atlas',
+    info: { name: 'Atlas', symbol: 'ATLAS', category: 'token', decimals: 0 }
+  },
+  {
+    prefix: 'polis',
+    info: { name: 'Polis', symbol: 'POLIS', category: 'token', decimals: 0 }
+  }
+];
 
 type MaterialInfo = {
   name: string;
@@ -123,6 +166,21 @@ type ResourceFlowSummary = {
   byOperation: Record<string, OperationResourceFlow>;
 };
 
+function toUiAmount(amountRaw: unknown, decimalsRaw: unknown): number {
+  const amount = Number(amountRaw);
+  const decimals = Number(decimalsRaw);
+
+  if (!Number.isFinite(amount)) {
+    return 0;
+  }
+
+  if (!Number.isFinite(decimals) || decimals <= 0) {
+    return amount;
+  }
+
+  return amount / Math.pow(10, decimals);
+}
+
 function extractTokenDeltas(op: any): TokenDeltaResult {
   const pre = (op.txInfo?.preTokenBalances as any[]) || [];
   const post = (op.txInfo?.postTokenBalances as any[]) || [];
@@ -143,15 +201,15 @@ function extractTokenDeltas(op: any): TokenDeltaResult {
     if (preBalance && !postBalance) {
       burned.push({
         mint: preBalance.mint,
-        amount: preBalance.uiTokenAmount.uiAmount,
-        owner: preBalance.owner,
+        amount: toUiAmount(preBalance.uiTokenAmount?.amount, preBalance.uiTokenAmount?.decimals),
+        owner: preBalance.owner || '',
         decimals: preBalance.uiTokenAmount.decimals
       });
     } else if (!preBalance && postBalance) {
       minted.push({
         mint: postBalance.mint,
-        amount: postBalance.uiTokenAmount.uiAmount,
-        owner: postBalance.owner,
+        amount: toUiAmount(postBalance.uiTokenAmount?.amount, postBalance.uiTokenAmount?.decimals),
+        owner: postBalance.owner || '',
         decimals: postBalance.uiTokenAmount.decimals
       });
     } else if (preBalance && postBalance) {
@@ -196,6 +254,13 @@ function getMaterialInfo(mint: string): Partial<MaterialInfo> {
   if (MATERIAL_REGISTRY[mint]) {
     return MATERIAL_REGISTRY[mint];
   }
+
+  const mintLower = mint.toLowerCase();
+  const byPrefix = MATERIAL_PREFIX_REGISTRY.find((entry) => mintLower.startsWith(entry.prefix));
+  if (byPrefix) {
+    return byPrefix.info;
+  }
+
   return {
     name: `Token ${mint.substring(0, 8)}...`,
     symbol: mint.substring(0, 4).toUpperCase(),
@@ -216,19 +281,35 @@ async function loadFleets(profileId: string): Promise<Map<string, FleetInfo>> {
     if (!raw) continue;
 
     try {
-      const fleetData = JSON.parse(raw);
-      const fleet = fleetData.data || fleetData;
-      const key = fleetData.key || file.replace(/\.json$/, '');
+      const fleetFile = JSON.parse(raw);
+      const fleetContainer = fleetFile.data || fleetFile;
+      const fleet = fleetContainer.data || fleetContainer;
+
+      const key =
+        fleetFile.key ||
+        fleetContainer.key ||
+        fleet.pubkey ||
+        file.replace(/\.json$/, '');
+
+      const callsign =
+        fleet.callsign ||
+        fleet.fleet_label ||
+        fleet.label ||
+        `Fleet-${key.substring(0, 8)}`;
+
+      const cargoHold = fleet.cargoHold || fleet.cargo_hold;
+      const ammoBank = fleet.ammoBank || fleet.ammo_bank;
+      const fuelTank = fleet.fuelTank || fleet.fuel_tank;
 
       fleetsMap.set(key, {
         key,
-        callsign: fleet.callsign || `Fleet-${key.substring(0, 8)}`,
-        cargoKey: fleet.cargoHold,
-        cargoHold: fleet.cargoHold,
-        ammoKey: fleet.ammoBank,
-        ammoBank: fleet.ammoBank,
-        fuelKey: fleet.fuelTank,
-        fuelTank: fleet.fuelTank
+        callsign,
+        cargoKey: cargoHold,
+        cargoHold,
+        ammoKey: ammoBank,
+        ammoBank,
+        fuelKey: fuelTank,
+        fuelTank
       });
     } catch (e) {
       console.log(`[loadFleets] skipped malformed file ${file}`);
@@ -314,10 +395,107 @@ function extractOperationName(op: any): string {
   return (op.instructionName || op.instruction || 'Unknown').toString();
 }
 
+function normalizeOperationKey(operationName: string): string {
+  return operationName.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function canOperationClaimResources(operationName: string): boolean {
+  const key = normalizeOperationKey(operationName);
+  if (key.includes('burncraftingconsumables')) {
+    return false;
+  }
+
+  return key.includes('claimcraftingoutputs') || key.includes('mine') || key.includes('buy') || key.includes('scan');
+}
+
+function canOperationBurnResources(operationName: string): boolean {
+  const key = normalizeOperationKey(operationName);
+
+  if (key.includes('createstarbaseupgraderesourceprocess')) {
+    return false;
+  }
+
+  if (key.includes('burncraftingconsumables')) {
+    return true;
+  }
+
+  if (
+    key.includes('submitstarbaseupgraderesource') ||
+    key.includes('createstarbaseupgraderesourceprocess') ||
+    key.includes('depositcraftingingredient') ||
+    key.includes('startcraftingprocess') ||
+    key.includes('closeupgradeprocess')
+  ) {
+    return true;
+  }
+
+  return key.includes('mine') || key.includes('subwarp') || key.includes('warp') || key.includes('scan') || key.includes('sell');
+}
+
+function operationHasDecodedName(op: any, normalizedName: string): boolean {
+  if (!Array.isArray(op?.decoded) || !normalizedName) {
+    return false;
+  }
+
+  const expected = normalizeOperationKey(normalizedName);
+  return op.decoded.some((entry: any) => {
+    const name = entry?.name;
+    if (!name) return false;
+    return normalizeOperationKey(String(name)) === expected;
+  });
+}
+
+function buildOwnedAccountOwners(fleetsMap: Map<string, FleetInfo>): Set<string> {
+  const owners = new Set<string>();
+
+  for (const fleet of fleetsMap.values()) {
+    const keys = [
+      fleet.cargoKey,
+      fleet.cargoHold,
+      fleet.ammoKey,
+      fleet.ammoBank,
+      fleet.fuelKey,
+      fleet.fuelTank
+    ];
+
+    for (const key of keys) {
+      if (key && key.trim()) {
+        owners.add(key);
+      }
+    }
+  }
+
+  return owners;
+}
+
+async function loadStarbaseCargoOwners(profileId: string): Promise<Set<string>> {
+  const owners = new Set<string>();
+  const cached = await getCache('cargo-ids', 'starbase', profileId);
+  const payload = cached?.data || cached;
+  const starbaseCargoIds = Array.isArray(payload?.starbaseCargoIds) ? payload.starbaseCargoIds : [];
+
+  for (const cargoId of starbaseCargoIds) {
+    if (typeof cargoId !== 'string') {
+      continue;
+    }
+    const trimmed = cargoId.trim();
+    if (trimmed) {
+      owners.add(trimmed);
+    }
+  }
+
+  return owners;
+}
+
 async function decodeResources(profileId: string): Promise<ResourceFlowSummary> {
   console.log(`[decodeResources] START profileId=${profileId}`);
   const fleetsMap = await loadFleets(profileId);
   const operations = await loadOperationsFromCache(profileId);
+  const baseOwnedAccountOwners = buildOwnedAccountOwners(fleetsMap);
+  const starbaseCargoOwners = await loadStarbaseCargoOwners(profileId);
+  for (const owner of starbaseCargoOwners) {
+    baseOwnedAccountOwners.add(owner);
+  }
 
   const byFleet = new Map<string, FleetResourceFlow>();
   const byMaterial = new Map<string, MaterialFlowAggregate>();
@@ -348,9 +526,73 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
     transactionsProcessed += 1;
 
     const deltas = extractTokenDeltas(op);
-    const operationName = extractOperationName(op);
+    const extractedOperationName = extractOperationName(op);
     const fleetKey = op._fleetKey;
-    const fleet = fleetKey ? fleetsMap.get(fleetKey) : null;
+    const hasSubmitStarbaseUpgradeResource = operationHasDecodedName(op, 'SubmitStarbaseUpgradeResource');
+    const hasCraftingClaimOutputs = operationHasDecodedName(op, 'ClaimCraftingOutputs');
+    const hasScanForSurveyDataUnits = operationHasDecodedName(op, 'ScanForSurveyDataUnits');
+    const hasBurnCraftingConsumables = operationHasDecodedName(op, 'BurnCraftingConsumables');
+    const hasStarbaseUpgradeBurn =
+      hasSubmitStarbaseUpgradeResource ||
+      operationHasDecodedName(op, 'CreateStarbaseUpgradeResourceProcess') ||
+      operationHasDecodedName(op, 'DepositCraftingIngredient') ||
+      operationHasDecodedName(op, 'StartCraftingProcess') ||
+      operationHasDecodedName(op, 'CloseUpgradeProcess');
+    const isMixedCraftFlow = hasCraftingClaimOutputs && hasBurnCraftingConsumables;
+    const operationName = hasCraftingClaimOutputs
+      ? 'ClaimCraftingOutputs'
+      : hasSubmitStarbaseUpgradeResource
+        ? 'SubmitStarbaseUpgradeResource'
+        : extractedOperationName;
+    const operationCanClaim = canOperationClaimResources(operationName) || hasCraftingClaimOutputs;
+    const operationCanBurn =
+      canOperationBurnResources(operationName) ||
+      hasBurnCraftingConsumables ||
+      hasSubmitStarbaseUpgradeResource;
+    const shouldDiscoverClaimOwners = hasCraftingClaimOutputs || hasScanForSurveyDataUnits;
+    const shouldDiscoverBurnOwners = hasBurnCraftingConsumables || hasStarbaseUpgradeBurn;
+    const claimOwners = new Set<string>();
+    const burnOwners = new Set<string>();
+    const claimMints = new Set<string>();
+    const opOwnedOwners = new Set<string>(baseOwnedAccountOwners);
+
+    if (shouldDiscoverClaimOwners) {
+      for (const delta of deltas.deltas) {
+        if (delta.delta > 0 && delta.owner && delta.owner.trim()) {
+          claimOwners.add(delta.owner);
+          claimMints.add(delta.mint);
+          opOwnedOwners.add(delta.owner);
+        }
+      }
+
+      for (const minted of deltas.minted) {
+        if (minted.amount > 0 && minted.owner && minted.owner.trim()) {
+          claimOwners.add(minted.owner);
+          claimMints.add(minted.mint);
+          opOwnedOwners.add(minted.owner);
+        }
+      }
+    }
+
+    if (shouldDiscoverBurnOwners) {
+      for (const delta of deltas.deltas) {
+        if (delta.delta < 0 && delta.owner && delta.owner.trim()) {
+          burnOwners.add(delta.owner);
+          opOwnedOwners.add(delta.owner);
+        }
+      }
+
+      for (const burned of deltas.burned) {
+        if (burned.amount > 0 && burned.owner && burned.owner.trim()) {
+          burnOwners.add(burned.owner);
+          opOwnedOwners.add(burned.owner);
+        }
+      }
+    }
+
+    if (!operationCanClaim && !operationCanBurn) {
+      continue;
+    }
 
     // Initialize operation if not exists
     if (!byOperation.has(operationName)) {
@@ -368,15 +610,122 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
       opRecord.fleets.push(fleetKey);
     }
 
-    // Process deltas
-    for (const delta of deltas.deltas) {
-      const flowType = classifyTokenFlow(delta, fleet);
-      const materialInfo = getMaterialInfo(delta.mint);
+    const operationKey = normalizeOperationKey(operationName);
+    const isMoveSubwarpOperation = operationKey.includes('fleetstatehandlermovesubwarp');
+    const mintOwnedFlows = new Map<string, { in: number; out: number }>();
+    const mintGlobalFlows = new Map<string, { in: number; out: number }>();
 
-      // Initialize material if not exists
-      if (!byMaterial.has(delta.mint)) {
-        byMaterial.set(delta.mint, {
-          mint: delta.mint,
+    for (const delta of deltas.deltas) {
+      const globalFlow = mintGlobalFlows.get(delta.mint) || { in: 0, out: 0 };
+      if (delta.delta > 0) {
+        globalFlow.in += delta.delta;
+      } else {
+        globalFlow.out += Math.abs(delta.delta);
+      }
+      mintGlobalFlows.set(delta.mint, globalFlow);
+
+      if (!delta.owner || !opOwnedOwners.has(delta.owner)) {
+        continue;
+      }
+
+      if (isMixedCraftFlow) {
+        if (delta.delta > 0) {
+          if (!claimOwners.has(delta.owner) && !baseOwnedAccountOwners.has(delta.owner)) {
+            continue;
+          }
+        } else if (delta.delta < 0) {
+          if (!burnOwners.has(delta.owner) && !baseOwnedAccountOwners.has(delta.owner)) {
+            continue;
+          }
+
+          if (claimMints.has(delta.mint)) {
+            continue;
+          }
+        }
+      }
+
+      const flow = mintOwnedFlows.get(delta.mint) || { in: 0, out: 0 };
+      if (delta.delta > 0) {
+        flow.in += delta.delta;
+      } else {
+        flow.out += Math.abs(delta.delta);
+      }
+      mintOwnedFlows.set(delta.mint, flow);
+    }
+
+    if (operationCanClaim) {
+      for (const minted of deltas.minted) {
+        if (!minted.owner || !opOwnedOwners.has(minted.owner)) {
+          continue;
+        }
+
+        if (minted.amount <= 0) {
+          continue;
+        }
+
+        if (isMixedCraftFlow && !claimOwners.has(minted.owner) && !baseOwnedAccountOwners.has(minted.owner)) {
+          continue;
+        }
+
+        const flow = mintOwnedFlows.get(minted.mint) || { in: 0, out: 0 };
+        flow.in += minted.amount;
+        mintOwnedFlows.set(minted.mint, flow);
+      }
+    }
+
+    if (operationCanBurn) {
+      for (const burned of deltas.burned) {
+        if (!burned.owner || !opOwnedOwners.has(burned.owner)) {
+          continue;
+        }
+
+        if (burned.amount <= 0) {
+          continue;
+        }
+
+        if (isMixedCraftFlow) {
+          if (!burnOwners.has(burned.owner) && !baseOwnedAccountOwners.has(burned.owner)) {
+            continue;
+          }
+
+          if (claimMints.has(burned.mint)) {
+            continue;
+          }
+        }
+
+        const flow = mintOwnedFlows.get(burned.mint) || { in: 0, out: 0 };
+        flow.out += burned.amount;
+        mintOwnedFlows.set(burned.mint, flow);
+      }
+    }
+
+    for (const [mint, flow] of mintOwnedFlows.entries()) {
+      const internalTransferAmount = isMixedCraftFlow ? 0 : Math.min(flow.in, flow.out);
+      const effectiveIn = Math.max(0, flow.in - internalTransferAmount);
+      const effectiveOut = Math.max(0, flow.out - internalTransferAmount);
+      const filteredIn = operationCanClaim ? effectiveIn : 0;
+      let filteredOut = operationCanBurn ? effectiveOut : 0;
+
+      if (isMoveSubwarpOperation && filteredOut > 0) {
+        const globalFlow = mintGlobalFlows.get(mint) || { in: 0, out: 0 };
+        const globalInternalTransferAmount = Math.min(globalFlow.in, globalFlow.out);
+        const globalEffectiveOut = Math.max(0, globalFlow.out - globalInternalTransferAmount);
+        filteredOut = Math.min(filteredOut, globalEffectiveOut);
+      }
+
+      if (mint === 'SDUsgfSZaDhhZ76U3ZgvtFiXsfnHbf2VrzYxjBZ5YbM' && !hasSubmitStarbaseUpgradeResource) {
+        filteredOut = 0;
+      }
+
+      if (filteredIn <= 0 && filteredOut <= 0) {
+        continue;
+      }
+
+      const materialInfo = getMaterialInfo(mint);
+
+      if (!byMaterial.has(mint)) {
+        byMaterial.set(mint, {
+          mint,
           name: materialInfo.name || 'Unknown',
           symbol: materialInfo.symbol || 'UNK',
           category: materialInfo.category || 'unknown',
@@ -387,42 +736,35 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
           topFleets: []
         });
       }
-      const matRecord = byMaterial.get(delta.mint)!;
+      const matRecord = byMaterial.get(mint)!;
 
-      // Aggregate by flow direction
-      const isInflow = delta.delta > 0;
-      const amount = Math.abs(delta.delta);
+      if (filteredIn > 0) {
+        matRecord.totalIn += filteredIn;
+        totalMaterialsIn += filteredIn;
+        opRecord.materialsProduced[mint] = (opRecord.materialsProduced[mint] || 0) + filteredIn;
+      }
 
-      if (isInflow) {
-        matRecord.totalIn += amount;
-        totalMaterialsIn += amount;
-        opRecord.materialsProduced[delta.mint] = (opRecord.materialsProduced[delta.mint] || 0) + amount;
-      } else {
-        matRecord.totalOut += amount;
-        totalMaterialsOut += amount;
-        opRecord.materialsConsumed[delta.mint] = (opRecord.materialsConsumed[delta.mint] || 0) + amount;
+      if (filteredOut > 0) {
+        matRecord.totalOut += filteredOut;
+        totalMaterialsOut += filteredOut;
+        opRecord.materialsConsumed[mint] = (opRecord.materialsConsumed[mint] || 0) + filteredOut;
       }
 
       matRecord.net = matRecord.totalIn - matRecord.totalOut;
 
-      // Track by operation
       if (!matRecord.operations[operationName]) {
         matRecord.operations[operationName] = { in: 0, out: 0, count: 0 };
       }
-      if (isInflow) {
-        matRecord.operations[operationName].in += amount;
-      } else {
-        matRecord.operations[operationName].out += amount;
-      }
+      matRecord.operations[operationName].in += filteredIn;
+      matRecord.operations[operationName].out += filteredOut;
       matRecord.operations[operationName].count += 1;
 
-      // Track by fleet (if associated)
       if (fleetKey && byFleet.has(fleetKey)) {
         const fleetRecord = byFleet.get(fleetKey)!;
 
-        if (!fleetRecord.materials[delta.mint]) {
-          fleetRecord.materials[delta.mint] = {
-            mint: delta.mint,
+        if (!fleetRecord.materials[mint]) {
+          fleetRecord.materials[mint] = {
+            mint,
             name: materialInfo.name || 'Unknown',
             in: 0,
             out: 0,
@@ -431,24 +773,23 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
           };
         }
 
-        const fleetMatRecord = fleetRecord.materials[delta.mint];
-        if (isInflow) {
-          fleetMatRecord.in += amount;
-          fleetRecord.totalMaterialsIn += amount;
-        } else {
-          fleetMatRecord.out += amount;
-          fleetRecord.totalMaterialsOut += amount;
+        const fleetMatRecord = fleetRecord.materials[mint];
+        if (filteredIn > 0) {
+          fleetMatRecord.in += filteredIn;
+          fleetRecord.totalMaterialsIn += filteredIn;
         }
+        if (filteredOut > 0) {
+          fleetMatRecord.out += filteredOut;
+          fleetRecord.totalMaterialsOut += filteredOut;
+        }
+
         fleetMatRecord.net = fleetMatRecord.in - fleetMatRecord.out;
 
         if (!fleetMatRecord.operations[operationName]) {
           fleetMatRecord.operations[operationName] = { in: 0, out: 0, count: 0 };
         }
-        if (isInflow) {
-          fleetMatRecord.operations[operationName].in += amount;
-        } else {
-          fleetMatRecord.operations[operationName].out += amount;
-        }
+        fleetMatRecord.operations[operationName].in += filteredIn;
+        fleetMatRecord.operations[operationName].out += filteredOut;
         fleetMatRecord.operations[operationName].count += 1;
       }
     }

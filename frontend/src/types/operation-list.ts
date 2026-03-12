@@ -1,4 +1,4 @@
-import { CraftingDetail } from './details';
+import { CraftingDetail } from '@/types/details';
 
 export interface OperationStats {
   count: number;

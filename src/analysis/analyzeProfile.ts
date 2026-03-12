@@ -5,11 +5,11 @@ import { orchestrateFleetsForProfile } from './fleetOrchestrator';
 import { setCache, getCache } from '../utils/cache';
 import buildFeesDetailed from '../utils/buildFeesDetailed';
 import { decodeResources } from '../utils/resources_analyses';
+import { deriveStarbaseCargoIdsForProfile } from '../utils/deriveStarbaseCargoIdsForProfile';
 import { getWalletAuthorityUtil } from '../utils/getWalletAuthority';
 import { getWalletTxsUtil } from '../utils/getWalletTxs';
 
 const router = Router();
-
 async function clearNamespaces(profileId: string) {
     const toClear = ['sage-ops', 'unknown', 'fleet-breakdowns', 'player-ops', 'reports', 'playload'];
     for (const ns of toClear) {
@@ -65,12 +65,34 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
             try {
                 const cachedPlayload = await getCache('playload', 'latest', profileId);
                 if (cachedPlayload && cachedPlayload.data) {
+                    let payloadData = cachedPlayload.data;
+
+                    try {
+                        const cachedStarbaseCargo = await getCache('cargo-ids', 'starbase', profileId);
+                        if (!cachedStarbaseCargo || !cachedStarbaseCargo.data) {
+                            await deriveStarbaseCargoIdsForProfile(profileId as string);
+                        }
+                    } catch (starbaseCacheHitErr) {
+                        console.warn('[analyze-profile] Failed deriving starbase cargo IDs on cache hit', starbaseCacheHitErr);
+                    }
+
+                    if (!payloadData.resourceFlows || typeof payloadData.resourceFlows !== 'object') {
+                        try {
+                            console.log('[analyze-profile] Cached playload missing resourceFlows, rebuilding Phase 8');
+                            const resourceFlows = await decodeResources(profileId as string);
+                            payloadData = Object.assign({}, payloadData, { resourceFlows });
+                            await setCache('playload', 'latest', payloadData, profileId as string);
+                        } catch (phase8CacheHitErr) {
+                            console.warn('[analyze-profile] Failed rebuilding resourceFlows on cache hit', phase8CacheHitErr);
+                        }
+                    }
+
                     console.log('[analyze-profile] Serving cached playload');
                     if (cachedPlayload.savedAt) {
                         res.set('X-Cache-Hit', 'disk');
                         res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
                     }
-                    return res.json(cachedPlayload.data);
+                    return res.json(payloadData);
                 }
             } catch (cacheErr) {
                 console.log('[analyze-profile] No cached playload found, proceeding with analysis');
@@ -117,6 +139,16 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         const req6: any = { query: { profileId } };
         const res6: any = { json: (data: any) => data, status: () => res6, send: () => { } };
         const breakdown = await associateSageOpsToFleetsHandler(req6, res6);
+
+        // FASE 6B: DERIVE STARBASE CARGO IDS
+        try {
+            console.log("###################### FASE 6B: DERIVE STARBASE CARGO IDS #########################");
+            const starbaseCargo = await deriveStarbaseCargoIdsForProfile(profileId as string);
+            console.log(`[analyze-profile] Starbase cargo IDs derived: ${starbaseCargo.starbaseCargoIds.length}`);
+        } catch (phase6bErr) {
+            console.warn('[analyze-profile] Phase 6B failed, continuing without starbase cargo cache', phase6bErr);
+        }
+
         console.log("###################### FINE FASE 6, INIZIO FASE 7: PLAYLOAD #########################");
 
         // FASE 7: PLAYLOAD (aggregazione finale, identica a GET /api/debug/playload)

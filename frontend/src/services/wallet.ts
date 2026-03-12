@@ -1,7 +1,7 @@
 
 
 import { PublicKey } from '@solana/web3.js';
-import { getWalletAdapters } from './wallet-adapter';
+import { getWalletAdapters } from '@/services/wallet-adapter';
 
 
 

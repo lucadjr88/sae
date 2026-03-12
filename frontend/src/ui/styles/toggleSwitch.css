@@ -2,7 +2,7 @@
     top: 50%;
     transform: translateY(-50%); /* Centra il contenitore rispetto alla sua altezza */
     position: fixed;
-    visibility: hidden; /* Nascondiamo il contenitore finché non è pronto */
+    /*visibility: hidden; /* Nascondiamo il contenitore finché non è pronto */
   }
 
   .vertical-switch {
@@ -27,7 +27,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(65, 70, 97, 0.692);
+    background-color: #8e97c852;;
     transition: .4s;
     border-radius: 12px;
     display: flex;
@@ -42,24 +42,18 @@
   .slider:before {
     position: absolute;
     content: "";
-    height: 55px; /* La tua altezza desiderata */
-    width: 44px;  /* Quasi quanto lo slider (50px) */
-    left: 3px;    /* Centrato orizzontalmente rispetto ai 50px dello slider */
-    top: 2.5px;   /* Posizione iniziale sopra la prima icona */
-    background-color: #272c44d4;
+    height: 64px; /* La tua altezza desiderata */
+    width: 51px;  /* Quasi quanto lo slider (50px) */
+    left: 0px;    /* Centrato orizzontalmente rispetto ai 50px dello slider */
+    top: -0.5px;   /* Posizione iniziale sopra la prima icona */
+    background-color: #272c44e0;
     transition: 0.4s ease-in-out;
     border-radius: 8px; /* Arrotondato come lo sfondo */
     z-index: 2;
     box-shadow: 0 2px 5px #0003;
   }
 
-  /* Colore dello sfondo quando attivato */
-  input:checked + .slider {
-    background-color: #173f5f7b;
-  }
-
-  /* MOVIMENTO: La corsa del pallino */
-  /* Calcolo: Altezza Tot (120) - Altezza Pallino (55) - Margine totale (5) = 60px */
+  /* Calcolo: Altezza Tot (120) - Altezza Pallino (64) - Margine totale (5) = 51px */
   input:checked + .slider:before {
     transform: translateY(60px);
   }
@@ -72,20 +66,12 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: opacity 0.3s; /* Transizione fluida per l'evidenza */
-  }
-
-  /* Effetto evidenza: l'icona non coperta dal pallino diventa semitrasparente */
-  input:checked + .slider .toggleSwitch-icon:first-child {
-    opacity: 0.4;
-  }
-  input:not(:checked) + .slider .toggleSwitch-icon:last-child {
-    opacity: 0.4;
+    /*transition: opacity 0.3s; /* Transizione fluida per l'evidenza */
   }
 
   .toggleSwitch-icon img {
-    max-width: 80%; /* Lascia un po' di respiro rispetto ai bordi del pallino */
-    max-height: 80%;
+    max-width: 100%; /* Lascia un po' di respiro rispetto ai bordi del pallino */
+    max-height: 100%;
     display: block;
     pointer-events: none;
   }

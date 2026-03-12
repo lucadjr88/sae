@@ -1,21 +1,23 @@
-import "./style.css";
-import "./ui/styles/alertInstructions.css";
-import "./ui/styles/backGround.css";
-import "./ui/styles/footBar.css";
-import "./ui/styles/heroTitle_elements.css";
-import "./ui/styles/loading.css";
-import "./ui/styles/manualLogin.css";
-import "./ui/styles/privacyPolicy.css";
-import "./ui/styles/resultsComponent.css";
-import "./ui/styles/sideBar.css";
-import "./ui/styles/startButtons.css";
-import "./ui/styles/toggleSwitch.css";
-import { createHomePage, getWalletConnection, manualProfileEntryListener, getWalletIcon } from "./hompage";
+import "@/style.css";
+import "@/ui/styles/alertInstructions.css";
+import "@/ui/styles/backGround.css";
+import "@/ui/styles/footBar.css";
+import "@/ui/styles/heroTitle_elements.css";
+import "@/ui/styles/loading.css";
+import "@/ui/styles/manualLogin.css";
+import "@/ui/styles/fees_playload.css";
+import "@/ui/styles/privacyPolicy.css";
+import "@/ui/styles/resultsComponent.css";
+import "@/ui/styles/resource_playload.css";
+import "@/ui/styles/sideBar.css";
+import "@/ui/styles/startButtons.css";
+import "@/ui/styles/toggleSwitch.css";
+import { createHomePage, getWalletConnection, manualProfileEntryListener, getWalletIcon } from "@/hompage";
 
-import { Wallet } from './services/wallet';
-import { setConnectedWalletPublicKey, setConnectedWalletIcon } from './utils/state';
+import { Wallet } from '@/services/wallet';
+import { setConnectedWalletPublicKey, setConnectedWalletIcon } from '@/utils/state';
 // Setup wallet logic
-import { isMobile } from './services/mobile';
+import { isMobile } from '@/services/mobile';
 import {
   initializeMobileWallet,
   connectMobileWallet,
@@ -24,7 +26,7 @@ import {
   disconnectMobileWallet,
   getMobileIcon,
   onMobileConnect
-} from './services/mobile_wallet';
+} from '@/services/mobile_wallet';
 
 declare global {
   interface Window {
@@ -33,6 +35,37 @@ declare global {
   }
 }
 
+window.addEventListener('error', (event) => {
+  const message = typeof event.message === 'string'
+    ? event.message
+    : typeof event.error?.message === 'string'
+      ? event.error.message
+      : '';
+
+  if (!message) {
+    return;
+  }
+
+  // Verifichiamo se l'errore contiene le parole chiave di Phantom
+  const isPhantomError = message.includes("Could not establish connection") ||
+                         message.includes("PHANTOM");
+
+  if (isPhantomError) {
+    console.warn("Rilevato errore Phantom. Tentativo di ripristino...");
+    
+    // Usiamo il sessionStorage per evitare loop infiniti
+    const reloadCount = parseInt(sessionStorage.getItem('phantom_reload_count') || '0', 10);
+    
+    if (reloadCount < 1) { // Limita a un solo tentativo automatico
+      sessionStorage.setItem('phantom_reload_count', (reloadCount + 1).toString());
+      window.location.reload();
+    } else {
+      console.error("Il ricaricamento automatico non ha risolto l'errore di Phantom.");
+      // Opzionale: pulisci il contatore dopo un po'
+      setTimeout(() => sessionStorage.removeItem('phantom_reload_count'), 5000);
+    }
+  }
+}, true);
 
 if (isMobile()) {
     initializeMobileWallet();

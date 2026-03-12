@@ -1,11 +1,11 @@
-import '../ui/styles/backGround.css';
-import '../ui/styles/heroTitle_elements.css';
-import './pages.css';
+import '@/ui/styles/backGround.css';
+import '@/ui/styles/heroTitle_elements.css';
+import '@/pages/pages.css';
 
-import istruzione1 from '../assets/istruzione1.png';
-import istruzione2 from '../assets/istruzione2.png';
-import { createBackground } from '../ui/elements/backGround';
-import { createHeroTitle } from '../ui/elements/heroTitle_elements';
+import istruzione1 from '@/assets/istruzione1.png';
+import istruzione2 from '@/assets/istruzione2.png';
+import { createBackground } from '@/ui/elements/backGround';
+import { createHeroTitle } from '@/ui/elements/heroTitle_elements';
 
 function renderInstructionsPage(): void {
   const mainContainer = document.querySelector<HTMLDivElement>('#mainContainer');

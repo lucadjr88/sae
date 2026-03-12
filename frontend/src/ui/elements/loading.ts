@@ -1,6 +1,6 @@
 // Modulo per l'elemento di loading
 // Esporta funzione per creare la struttura reale dell'elemento di loading
-import { progressInterval, setAnalysisStartTime, setProgressInterval } from '@utils/state';
+import { progressInterval, setAnalysisStartTime, setProgressInterval } from '@/utils/state';
 
 export function createLoadingElement(message: string): HTMLDivElement {
     const div = document.createElement('div');

@@ -1,11 +1,12 @@
 // @ts-nocheck
 
-// Implementazione reale spostata da app
-import { normalizeOpName } from '@services/utils';
-import { updateProgress } from '@ui/elements/loading';
-import { displayResults } from '../resultpage';
-import type { FleetsRequest, FleetsResponse, WalletSageFeesStreamRequest, FleetBreakdownRequest, FleetBreakdownResponse, ApiError } from '@types/api';
-import type { FeesByFleet } from '@types/operation-list';
+// Implementazione reale spostata da ap
+import { normalizeOpName } from '@/services/utils';
+import { updateProgress } from '@/ui/elements/loading';
+import { displayFeeResults } from '@/ui/elements/fees_playload';
+import { displayResourceResults } from '@/ui/elements/resource_playload';
+import type { FleetsRequest, FleetsResponse, WalletSageFeesStreamRequest, FleetBreakdownRequest, FleetBreakdownResponse, ApiError } from '@/types/api';
+import type { FeesByFleet } from '@/types/operation-list';
 
 async function fetchJson<Req, Res>(url: string, init: RequestInit & { body?: Req }): Promise<Res> {
 	const headers = { 'Content-Type': 'application/json', ...init.headers };
@@ -81,7 +82,7 @@ export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: stri
 	}
 }
 
-import { setCurrentProfileId, setLastAnalysisParams, setAnalysisStartTime, setProgressInterval, progressInterval, currentProfileId } from '@utils/state';
+import { setCurrentProfileId, setLastAnalysisParams, setAnalysisStartTime, setProgressInterval, progressInterval, currentProfileId } from '@/utils/state';
 
 export function processAnalysisData(data: any) {
 	const fleets = data.fleets || [];
@@ -226,7 +227,8 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 			data.feesByFleet = {};
 		}
 		// Passa direttamente la mappa fleetIsRented e lascia che la UI usi solo il campo isRented del backend
-		displayResults(data, processed.fleetNames, processed.fleetIsRented, processed.fleets);
+		displayFeeResults(data, processed.fleetNames, processed.fleetIsRented, processed.fleets);
+		displayResourceResults(data);
 		if (data && data.breakdown && data.breakdown.feesByFleet && typeof data.breakdown.feesByFleet === 'object') {
 			displayFleetOperationCharts(data.breakdown.feesByFleet, processed.fleetNames);
 			const sidebar = document.getElementById('sidebar');

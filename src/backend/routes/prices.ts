@@ -1,6 +1,7 @@
 
 // --- IMPORTS E COSTANTI UNICHE ---
 import fs from 'fs/promises';
+import * as fsSync from 'fs';
 import path from 'path';
 import express from 'express';
 import { backOff } from 'exponential-backoff';
@@ -29,7 +30,6 @@ async function loadPricesFromDisk() {
 
 // Inizializza cartella e file cache se mancanti
 async function ensureCacheFileExists() {
-  const fsSync = await import('fs');
   const dir = path.dirname(CACHE_FILE);
   if (!fsSync.existsSync(dir)) {
     fsSync.mkdirSync(dir, { recursive: true });
@@ -130,12 +130,88 @@ async function updatePricesCache() {
 
 // Lock file path per evitare concorrenza tra processi
 const LOCK_FILE = CACHE_FILE + '.lock';
+const LOCK_HEARTBEAT_MS = 30 * 1000;
+const LOCK_EXPIRE_MS = 90 * 1000;
+let lockHeartbeatTimer: NodeJS.Timeout | null = null;
+let lockRetryTimer: NodeJS.Timeout | null = null;
+let pricesUpdateTimer: NodeJS.Timeout | null = null;
+let shutdownHooksRegistered = false;
+let lockHeld = false;
+
+function buildLockPayload() {
+  const now = Date.now();
+  return JSON.stringify({
+    pid: process.pid,
+    updatedAt: now,
+    expiresAt: now + LOCK_EXPIRE_MS
+  });
+}
+
+function isLockStale(rawLock: string | null) {
+  if (!rawLock) return true;
+  try {
+    const parsed = JSON.parse(rawLock);
+    const expiresAt = Number(parsed?.expiresAt);
+    if (!Number.isFinite(expiresAt)) return true;
+    return Date.now() >= expiresAt;
+  } catch {
+    return true;
+  }
+}
+
+function startLockHeartbeat() {
+  if (lockHeartbeatTimer) return;
+  lockHeartbeatTimer = setInterval(() => {
+    if (!lockHeld) return;
+    try {
+      fsSync.writeFileSync(LOCK_FILE, buildLockPayload(), 'utf8');
+    } catch (e) {
+      console.warn('[TickersCache] Lock heartbeat failed:', e);
+    }
+  }, LOCK_HEARTBEAT_MS);
+}
+
+function startPriceUpdateLoop() {
+  if (pricesUpdateTimer) return;
+  pricesUpdateTimer = setInterval(async () => {
+    await updatePricesCache();
+  }, CACHE_TTL_MS);
+  updatePricesCache();
+}
+
+function registerShutdownHooks() {
+  if (shutdownHooksRegistered) return;
+  shutdownHooksRegistered = true;
+  process.on('exit', releaseLock);
+  process.on('SIGINT', async () => { await releaseLock(); process.exit(); });
+  process.on('SIGTERM', async () => { await releaseLock(); process.exit(); });
+}
 
 async function acquireLock() {
-  const fsSync = await import('fs');
   try {
-    // fs.openSync con flag 'wx' fallisce se il file esiste già
-    fsSync.openSync(LOCK_FILE, 'wx');
+    fsSync.writeFileSync(LOCK_FILE, buildLockPayload(), { encoding: 'utf8', flag: 'wx' });
+    lockHeld = true;
+    return true;
+  } catch (e: any) {
+    if (e?.code !== 'EEXIST') {
+      console.warn('[TickersCache] Lock acquisition failed:', e);
+      return false;
+    }
+  }
+
+  try {
+    const rawLock = fsSync.readFileSync(LOCK_FILE, 'utf8');
+    if (!isLockStale(rawLock)) {
+      return false;
+    }
+    fsSync.unlinkSync(LOCK_FILE);
+  } catch (e) {
+    console.warn('[TickersCache] Failed to inspect stale lock, retrying acquisition:', e);
+  }
+
+  try {
+    fsSync.writeFileSync(LOCK_FILE, buildLockPayload(), { encoding: 'utf8', flag: 'wx' });
+    lockHeld = true;
     return true;
   } catch {
     return false;
@@ -143,7 +219,11 @@ async function acquireLock() {
 }
 
 async function releaseLock() {
-  const fsSync = await import('fs');
+  lockHeld = false;
+  if (lockHeartbeatTimer) {
+    clearInterval(lockHeartbeatTimer);
+    lockHeartbeatTimer = null;
+  }
   try {
     fsSync.unlinkSync(LOCK_FILE);
   } catch {}
@@ -151,19 +231,23 @@ async function releaseLock() {
 
 // All'avvio: assicurati che cartella e file cache esistano
 ensureCacheFileExists().then(() => {
-  // Tutti i processi provano a prendere il lock, solo uno aggiorna periodicamente
-  acquireLock().then((hasLock) => {
-    if (hasLock) {
-      setInterval(async () => {
-        await updatePricesCache();
-      }, CACHE_TTL_MS);
-      updatePricesCache();
-      // Rilascia il lock solo alla chiusura del processo
-      process.on('exit', releaseLock);
-      process.on('SIGINT', () => { releaseLock(); process.exit(); });
-      process.on('SIGTERM', () => { releaseLock(); process.exit(); });
-    }
-  });
+  const tryBecomeUpdater = async () => {
+    if (lockHeld) return;
+    const hasLock = await acquireLock();
+    if (!hasLock) return;
+    startLockHeartbeat();
+    startPriceUpdateLoop();
+    registerShutdownHooks();
+  };
+
+  // Tutti i processi provano ad acquisire lock; uno aggiorna periodicamente
+  tryBecomeUpdater();
+
+  if (!lockRetryTimer) {
+    lockRetryTimer = setInterval(() => {
+      tryBecomeUpdater();
+    }, LOCK_HEARTBEAT_MS);
+  }
 });
 
 

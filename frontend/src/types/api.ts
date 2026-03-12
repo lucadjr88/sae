@@ -1,6 +1,6 @@
 // public/js/types/api.ts
 
-import { FeesByFleet } from './operation-list';
+import { FeesByFleet } from '@/types/operation-list';
 
 export interface FleetsRequest {
   profileId: string;

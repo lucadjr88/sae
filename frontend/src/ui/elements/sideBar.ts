@@ -1,16 +1,52 @@
 // Modulo per la Sidebar: esporta funzione per creare la struttura reale della sidebar
 // Copiata da index.html e main.ts
 
-import { wipeAndReload } from "@services/wipe_reload";
-import { createPrivacyPolicySidebarElement } from "./privacyPolicy";
-import { toggleSwitchHTML } from "./toggleSwitch";
-import { currentProfileId } from "@utils/state";
+import { wipeAndReload } from "@/services/wipe_reload";
+import { createPrivacyPolicySidebarElement } from "@/ui/elements/privacyPolicy";
+import { toggleSwitchHTML } from "@/ui/elements/toggleSwitch";
+import { currentProfileId } from "@/utils/state";
+
+  let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    
+
+  export const startHideTimer = () => {
+    if (hideTimeout) clearTimeout(hideTimeout);
+    hideTimeout = setTimeout(() => {
+      hideSidebar();
+    }, 5000);
+  };
+
+  export const showSidebar = () => {
+    const colonna1 = document.getElementById('colonna1');
+    colonna1?.classList.remove('sidebar-hidden');
+    document.body.classList.remove('sidebar-is-hidden');
+    startHideTimer();
+  };
+
+  export const hideSidebar = () => {
+    console.log('Hiding sidebar');
+    const colonna1 = document.getElementById('colonna1');
+    colonna1?.classList.add('sidebar-hidden');
+    document.body.classList.add('sidebar-is-hidden');//nasconde sidebar
+    document.getElementById('cacheTooltip')?.classList.remove('visible'); // nasconde tooltip cache se aperto
+    if (hideTimeout) clearTimeout(hideTimeout);
+  };
+
+
 
 export function createSidebarElement(): HTMLDivElement {
 // 1. Il contenitore principale della Sidebar
 const sidebar = document.createElement('div');
 sidebar.id = 'sidebar';
 sidebar.className = 'sidebar';
+sidebar.onclick = () => {
+    if (hideTimeout) clearTimeout(hideTimeout);
+    startHideTimer();
+};
+
+
+
 
 const walletAndIconContainer = document.createElement('div');
 walletAndIconContainer.className = 'wallet-icon-container';

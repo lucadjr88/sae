@@ -1,6 +1,6 @@
 
-import { analyzeFees } from '@services/api';
-import { createLoadingElement } from '@ui/elements/loading';
+import { analyzeFees } from '@/services/api';
+import { createLoadingElement } from '@/ui/elements/loading';
 
 export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: string | null) {
     //console.log('[updateCacheTooltip] called with cacheHit:', cacheHit, 'cacheTimestamp:', cacheTimestamp);
@@ -72,19 +72,30 @@ export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: stri
 }
 
 // chiamata da addEventListener del bottone "Wipe Cache" on sideBar.ts, che a sua volta chiama analyzeFees con forceReload=true, forzando il backend a bypassare la cache e aggiornare i dati, e poi aggiorna il tooltip della cache di conseguenza
-export function wipeAndReload(profileId?: string): void {
+export async function wipeAndReload(profileId?: string): Promise<void> {
     console.log('[wipeAndReload] called with profileId:', profileId);
-    const resultsContainer = document.getElementById('results') as HTMLDivElement | null;
-    if (!resultsContainer) {
-        console.error('[wipeAndReload] resultsContainer not found');
+    const resourceResults = document.getElementById('resourceResults');
+    const wasResourceView = !!resourceResults && document.getElementById('result-container')?.contains(resourceResults);
+
+    const resultContainer = document.getElementById('result-container') as HTMLDivElement | null;
+    if (!resultContainer) {
+        console.error('[wipeAndReload] #result-container not found');
         return;
     }
-    console.log('[wipeAndReload] Initiating wipe and reload process');
-    resultsContainer .innerHTML = ''; // Clear previous results
+    resultContainer.innerHTML = '';
     const loading = createLoadingElement('Processing transaction data, this may take up to 5 minutes depending on your tx/day...<br>Analyzing profile (this may take a while)...');
-    resultsContainer.appendChild(loading);
-    console.log('[manualProfileEntryListener] Calling analyzeFees with profileId:', profileId);
-    analyzeFees(profileId, true);
+    resultContainer.appendChild(loading);
+
+    await analyzeFees(profileId, true);
+
+    if (wasResourceView) {
+        const toggleSwitch = document.querySelector('.vertical-switch input[type="checkbox"]') as HTMLInputElement | null;
+        if (toggleSwitch) {
+            toggleSwitch.checked = false;
+            toggleSwitch.dispatchEvent(new Event('change'));
+        }
+    }
+
     const cacheTooltip = document.getElementById('cacheTooltip');
-    cacheTooltip.onmouseleave = () => { cacheTooltip.classList.remove('visible'); };
+    if (cacheTooltip) cacheTooltip.onmouseleave = () => { cacheTooltip.classList.remove('visible'); };
 }

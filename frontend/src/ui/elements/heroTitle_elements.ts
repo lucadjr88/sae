@@ -1,7 +1,7 @@
 // Modulo per Hero Title e Hero Subtitle
 // Esporta funzioni per creare gli elementi reali usati in index.html e main.ts
 
-import staratlas from '../../assets/staratlas.png';
+import staratlas from '@/assets/staratlas.png';
 
 export function createHeroTitle(): HTMLElement {
     const container = document.createElement('div');

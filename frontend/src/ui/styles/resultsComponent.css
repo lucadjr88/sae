@@ -99,96 +99,6 @@
   opacity: 0.8;
 }
 
-.value-usd {
-  color: #7dd3fc;
-  font-size: 13px;
-}
-
-.charts-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.chart-card {
-  background: #13151f;
-  border: 1px solid #1e222e;
-  padding: 8px;
-  max-width: 100%;
-}
-
-.chart-title {
-  font-size: 9px;
-  color: #7a8ba0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
-  font-weight: 500;
-}
-
-.chart-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 100%;
-}
-
-.pie-chart {
-  width: 120px;
-  height: 120px;
-  margin: 0 auto;
-  flex-shrink: 0;
-}
-
-.chart-legend {
-  flex: 1;
-  font-size: 10px;
-}
-
-.chart-legend table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0;
-  background: transparent;
-  border: none;
-}
-
-.chart-legend td {
-  padding: 3px 4px;
-  border: none;
-}
-
-.chart-legend tr {
-  border-left: 3px solid transparent;
-  padding-left: 4px;
-}
-
-.chart-legend td:nth-child(1) {
-  color: #b8c0cc;
-  white-space: nowrap;
-}
-
-.chart-legend td:nth-child(2),
-.chart-legend td:nth-child(3) {
-  text-align: right;
-  color: #7a8ba0;
-  white-space: nowrap;
-  font-size: 10px;
-}
-
-.chart-legend td:nth-child(3) {
-  min-width: 40px;
-}
-
-.chart-legend td:nth-child(4) {
-  text-align: right;
-  color: #34d399;
-  font-family: 'Roboto Mono', monospace;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
 .section-title {
   color: #e0e6ed;
   font-size: 13px;
@@ -201,133 +111,6 @@
   margin-top: 24px;
   text-align: center;
   width: 100%;
-}
-
-.section-title.other-ops {
-  margin-top: 8px;
-  margin-bottom: 4px;
-}
-
-.fleet-list,
-.operation-list {
-  width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-  font-size: 11px;
-  line-height: 1.3;
-  color: #7a8ba0;
-  font-family: 'Roboto Mono', monospace;
-}
-
-.fleet-item {
-  background: #13151f;
-  border: 1px solid #1e222e;
-  margin-bottom: 2px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.fleet-item:hover {
-  background: #16182280;
-}
-
-.fleet-header {
-  display: grid;
-  grid-template-columns: 1fr auto auto auto;
-  gap: 12px;
-  padding: 8px 12px;
-  align-items: center;
-  border-bottom: 1px solid transparent;
-  font-size: 11px;
-}
-
-.fleet-header .fleet-name {
-  font-weight: 500;
-  color: #e0e6ed;
-  font-family: 'Roboto Mono', monospace;
-}
-
-.fleet-header .rented-name {
-  color: #fbbf24 !important;
-  font-weight: 800;
-}
-
-.fleet-name-grow {
-  flex: 1;
-}
-
-.fleet-header .fleet-ops {
-  text-align: right;
-  color: #7a8ba0;
-  white-space: nowrap;
-  font-size: 10px;
-  min-width: 60px;
-}
-
-.fleet-header .fleet-pct {
-  text-align: right;
-  color: #7a8ba0;
-  white-space: nowrap;
-  min-width: 50px;
-}
-
-.fleet-header .fleet-sol {
-  text-align: right;
-  color: #34d399;
-  font-weight: 500;
-  font-family: 'Roboto Mono', monospace;
-  white-space: nowrap;
-  min-width: 100px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.fleet-sol-value {
-  color: #34d399;
-  font-weight: 500;
-  font-family: 'Roboto Mono', monospace;
-}
-
-.fleet-arrow-wrap {
-  width: 15px;
-  display: flex;
-  justify-content: center;
-}
-
-.fleet-arrow-wrap-end {
-  width: 20px;
-  justify-content: flex-end;
-}
-
-.fleet-arrow-wrap-offset {
-  margin-left: 5px;
-}
-
-.fleet-arrow {
-  font-size: 10px;
-  color: #7dd3fc;
-}
-
-.fleet-arrow-clickable {
-  cursor: pointer;
-}
-
-.fleet-details {
-  display: none;
-  border-top: 1px solid #1e222e;
-  padding: 6px 8px;
-  background: #0f1119;
-}
-
-.fleet-item.expanded .fleet-details {
-  display: block;
-}
-
-.fleet-item.expanded {
-  background: #16182280;
-  border-color: #2d3748;
 }
 
 .fleet-ops-table {
@@ -363,55 +146,6 @@
   font-family: 'Roboto Mono', monospace;
 }
 
-.fleet-ops-table td:nth-child(4) {
-  text-align: right;
-  color: #7a8ba0;
-}
-
-.fleet-ops-table td:nth-child(5) {
-  text-align: right;
-  color: #7a8ba0;
-}
-
-.rented-badge {
-  background: #fbbf24;
-  color: #23263a;
-  font-size: 9px;
-  font-weight: 700;
-  border-radius: 4px;
-  padding: 2px 6px;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-
-
-
-.copy-link {
-  cursor: pointer;
-  color: #60a5fa;
-  text-decoration: underline;
-}
-
-.copy-link-copied {
-  color: #10b981;
-}
-
-.op-label-emphasis {
-  font-weight: 600;
-}
-
-.op-details-top-gap {
-  padding-top: 6px;
-}
-
-.op-details-header-row {
-  background: #1e293b;
-}
-
-.text-right {
-  text-align: right;
-}
-
 .detail-burned {
   font-size: 11px;
   color: #fbbf24;
@@ -420,18 +154,6 @@
 .detail-claimed {
   font-size: 11px;
   color: #34d399;
-}
-
-.other-ops-empty {
-  color: #666;
-  padding: 10px;
-}
-
-.fleet-chart-row {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  max-width: 100%;
 }
 
 @media screen and (hover: none) and (pointer: coarse) and (max-width: 1200px) and (max-height: 2670px),
@@ -473,77 +195,10 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     font-size: 15px;
   }
 
-  .value-usd {
-    font-size: 11px;
-  }
-
-  .charts-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .chart-title {
-    font-size: 8px;
-  }
-
-  .chart-container {
-    gap: 6px;
-  }
-
-  .pie-chart {
-    width: 94px;
-    height: 94px;
-  }
-
-  .chart-legend,
-  .chart-legend td:nth-child(3),
-  .chart-legend td:nth-child(4) {
-    font-size: 9px;
-  }
-
   .section-title {
     font-size: 11px;
     margin-top: 16px;
     margin-bottom: 6px;
-  }
-
-  .fleet-list,
-  .operation-list {
-    font-size: 10px;
-    line-height: 1.2;
-  }
-
-  .fleet-header {
-    gap: 8px;
-    padding: 6px 8px;
-    font-size: 10px;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-  }
-
-  .fleet-header .fleet-ops {
-    min-width: 48px;
-  }
-
-  .fleet-header .fleet-pct {
-    display: none;
-  }
-
-  .fleet-header .fleet-sol {
-    min-width: 78px;
-    gap: 4px;
-    font-size: 10px;
-  }
-
-  .fleet-arrow-wrap {
-    width: 12px;
-  }
-
-  .fleet-arrow-wrap-end {
-    width: 14px;
-  }
-
-  .fleet-details {
-    padding: 6px;
   }
 
   .fleet-ops-table {
@@ -562,10 +217,5 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
   .detail-burned,
   .detail-claimed {
     font-size: 10px;
-  }
-
-  .fleet-chart-row {
-    gap: 10px;
-    flex-wrap: wrap;
   }
 }

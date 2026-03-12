@@ -57,7 +57,7 @@
 ├── utils/
 │   ├── state.ts                  ✅ Global state management (currentProfileId, progressInterval)
 │   ├── ui.ts                     ✅ displayPartialResults(), toggleFleet()
-│   ├── results-display.ts        ✅ displayResults() - implementazione principale rendering
+│   ├── results-display.ts        ✅ displayFeeResults() - implementazione principale rendering
 │   └── utils.ts                  ⚠️ Utility functions con dead code
 │
 ├── main.ts                        ✅ Entry point - setup global functions
@@ -100,7 +100,7 @@ import type { PriceData } from '@types/charts';  // ✅ Esiste
 // src/services/api.ts:1-3
 import { normalizeOpName } from '@services/utils';  // ✅ Esiste
 import { renderCraftingDetailsRows } from '@ui/renderDetails';  // ✅ Esiste
-import { updateCacheTooltip, displayResults } from '../resultpage';  // ✅ Esiste
+import { updateCacheTooltip, displayFeeResults } from '../resultpage';  // ✅ Esiste
 ```
 
 ### ⚠️ Path Alias Errati (Trovati)
@@ -150,7 +150,7 @@ main.ts
       ├─ Fetch /api/analyze-profile (POST)
       ├─ processAnalysisData()
       ├─ updateCacheTooltip()
-      ├─ displayResults() via results-display.ts
+      ├─ displayFeeResults() via results-display.ts
       │   ├─ createFleetList() via fleet-operations.ts
       │   ├─ createOperationList() via fleet-operations.ts
       │   ├─ createOtherOperationsList() via fleet-operations.ts
@@ -170,11 +170,11 @@ main.ts
 - `analyzeFees(profileIdParam)` - Main endpoint caller
   - Fetch POST `/api/analyze-profile` con `{profileId, wipeCache}`
   - Resp headers: `X-Cache-Hit`, `X-Cache-Timestamp`
-  - Chiama `displayResults()` con dati processati
+  - Chiama `displayFeeResults()` con dati processati
   - Error handling + UI feedback
 
 #### 2. **Display Layer** (results-display.ts)
-- `displayResults(data, fleetNames, rentedFleetNames, fleets)`
+- `displayFeeResults(data, fleetNames, rentedFleetNames, fleets)`
   - Prepara dati per rendering (normalization, sorting)
   - Genera HTML layout (stats grid, charts, table containers)
   - Chiama `createFleetList()`, `createOperationList()`, `createOtherOperationsList()`
@@ -264,7 +264,7 @@ declare global {
     wallet: any;
     analyzeFees: (profileIdParam?: string) => void;           ✅
     updateProgress: (message: string) => void;                ✅
-    displayResults: (data: any, fleetNames: any, ...) => void;✅
+    displayFeeResults: (data: any, fleetNames: any, ...) => void;✅
     displayPartialResults: (update: any, ...) => void;        ⚠️ Placeholder
     toggleFleet: (fleetId: string) => void;                   ✅
     drawPieChart: (canvasId: string, ...) => void;            ✅

@@ -1,6 +1,6 @@
 
 // Copy to clipboard helper with visual feedback
-import { DecodedInstruction, BurnedMaterial, ClaimedItem, MaterialEntry } from '../types/common';
+import { DecodedInstruction, BurnedMaterial, ClaimedItem, MaterialEntry } from '@/types/common';
 export function copyToClipboard(text: string, event: MouseEvent | KeyboardEvent): void {
 	navigator.clipboard.writeText(text).then(() => {
 		// Show tooltip feedback

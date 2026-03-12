@@ -1,8 +1,8 @@
 // Modulo per i pulsanti di start (wallet connect e enter no wallet)
 // Esporta funzione per creare la struttura reale dei pulsanti di start
 
-import seedvaultIcon from '../../assets/icons/seedvault2.png';
-import writingIcon from '../../assets/icons/writing_6726435.png';
+import seedvaultIcon from '@/assets/icons/seedvault2.png';
+import writingIcon from '@/assets/icons/writing_6726435.png';
 
 export function createStartButtonsElement(): HTMLDivElement {
     const div = document.createElement('div');

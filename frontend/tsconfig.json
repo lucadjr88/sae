@@ -8,6 +8,7 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@/*": ["src/*"],
       "@services/*": ["src/services/*"],
       "@ui/*": ["src/ui/*"],
       "@utils/*": ["src/utils/*"],

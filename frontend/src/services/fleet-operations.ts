@@ -1,6 +1,6 @@
 // public/js/fleet-operations.ts
-import { normalizeOpName } from '@utils/utils';
-import { renderCraftingDetailsRows } from '@ui/renderDetails';
+import { normalizeOpName } from '@/utils/utils';
+import { renderCraftingDetailsRows } from '@/ui/renderDetails';
 //import type { CraftingDetail } from '../types/details';
 import type {
   OperationStats,
@@ -8,7 +8,7 @@ import type {
   OperationSummary,
   FleetOperationInfo,
   OperationListData,
-} from '../types/operation-list.js';
+} from '@/types/operation-list.js';
 
 interface FleetNamesMap {
   [fleetAccount: string]: string;
