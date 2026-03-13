@@ -12,3 +12,4 @@ decoder/player-profile-decoder/target/
 frontend/dist/
 node_modules
 trash/
+interna_cache/

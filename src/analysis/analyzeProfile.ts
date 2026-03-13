@@ -5,6 +5,7 @@ import { orchestrateFleetsForProfile } from './fleetOrchestrator';
 import { setCache, getCache } from '../utils/cache';
 import buildFeesDetailed from '../utils/buildFeesDetailed';
 import { decodeResources } from '../utils/resources_analyses';
+import { deriveStarbaseCargoIdsForProfile } from '../utils/deriveStarbaseCargoIdsForProfile';
 import { getWalletAuthorityUtil } from '../utils/getWalletAuthority';
 import { getWalletTxsUtil } from '../utils/getWalletTxs';
 
@@ -66,6 +67,15 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 const cachedPlayload = await getCache('playload', 'latest', profileId);
                 if (cachedPlayload && cachedPlayload.data) {
                     let payloadData = cachedPlayload.data;
+
+                    try {
+                        const cachedStarbaseCargo = await getCache('cargo-ids', 'starbase', profileId);
+                        if (!cachedStarbaseCargo || !cachedStarbaseCargo.data) {
+                            await deriveStarbaseCargoIdsForProfile(profileId as string);
+                        }
+                    } catch (starbaseCacheHitErr) {
+                        console.warn('[analyze-profile] Failed deriving starbase cargo IDs on cache hit', starbaseCacheHitErr);
+                    }
 
                     if (!payloadData.resourceFlows || typeof payloadData.resourceFlows !== 'object') {
                         try {
@@ -130,6 +140,16 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         const req6: any = { query: { profileId } };
         const res6: any = { json: (data: any) => data, status: () => res6, send: () => { } };
         const breakdown = await associateSageOpsToFleetsHandler(req6, res6);
+
+        // FASE 6B: DERIVE STARBASE CARGO IDS
+        try {
+            console.log("###################### FASE 6B: DERIVE STARBASE CARGO IDS #########################");
+            const starbaseCargo = await deriveStarbaseCargoIdsForProfile(profileId as string);
+            console.log(`[analyze-profile] Starbase cargo IDs derived: ${starbaseCargo.starbaseCargoIds.length}`);
+        } catch (phase6bErr) {
+            console.warn('[analyze-profile] Phase 6B failed, continuing without starbase cargo cache', phase6bErr);
+        }
+
         console.log("###################### FINE FASE 6, INIZIO FASE 7: PLAYLOAD #########################");
 
         // FASE 7: PLAYLOAD (aggregazione finale, identica a GET /api/debug/playload)

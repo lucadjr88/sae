@@ -470,14 +470,7 @@ function canOperationClaimResources(operationName: string): boolean {
     return false;
   }
 
-  return (
-    key.includes('portofentry') ||
-    key.includes('claimcraftingoutputs') ||
-    key.includes('claim') ||
-    key.includes('mine') ||
-    key.includes('buy') ||
-    key.includes('scan')
-  );
+  return key.includes('claimcraftingoutputs') || key.includes('mine') || key.includes('buy') || key.includes('scan');
 }
 
 function canOperationBurnResources(operationName: string): boolean {
@@ -488,10 +481,6 @@ function canOperationBurnResources(operationName: string): boolean {
   }
 
   if (key.includes('burncraftingconsumables')) {
-    return true;
-  }
-
-  if (key.includes('portofentry')) {
     return true;
   }
 
@@ -544,61 +533,23 @@ function buildOwnedAccountOwners(fleetsMap: Map<string, FleetInfo>): Set<string>
   return owners;
 }
 
-async function loadAllowedWalletOwners(profileId: string): Promise<Set<string>> {
+async function loadStarbaseCargoOwners(profileId: string): Promise<Set<string>> {
   const owners = new Set<string>();
-  const metaCache = await getCache('', profileId, profileId);
-  const meta = metaCache?.data || metaCache;
-  const allowedWallets = Array.isArray(meta?.allowedWallets) ? meta.allowedWallets : [];
+  const cached = await getCache('cargo-ids', 'starbase', profileId);
+  const payload = cached?.data || cached;
+  const starbaseCargoIds = Array.isArray(payload?.starbaseCargoIds) ? payload.starbaseCargoIds : [];
 
-  for (const wallet of allowedWallets) {
-    const pubkey = typeof wallet === 'string' ? wallet : wallet?.pubkey;
-    if (typeof pubkey === 'string' && pubkey.trim()) {
-      owners.add(pubkey);
+  for (const cargoId of starbaseCargoIds) {
+    if (typeof cargoId !== 'string') {
+      continue;
+    }
+    const trimmed = cargoId.trim();
+    if (trimmed) {
+      owners.add(trimmed);
     }
   }
 
   return owners;
-}
-
-function collectOperationAccountKeys(op: any): Set<string> {
-  const keys = new Set<string>();
-  const txInfo = op?.txInfo || {};
-
-  const addKey = (value: any) => {
-    if (typeof value === 'string' && value.trim()) {
-      keys.add(value);
-      return;
-    }
-
-    if (value && typeof value === 'object' && typeof value.pubkey === 'string' && value.pubkey.trim()) {
-      keys.add(value.pubkey);
-    }
-  };
-
-  if (Array.isArray(txInfo.staticAccountKeys)) {
-    txInfo.staticAccountKeys.forEach(addKey);
-  }
-
-  if (Array.isArray(txInfo.accountKeys)) {
-    txInfo.accountKeys.forEach(addKey);
-  }
-
-  return keys;
-}
-
-function operationTouchesAllowedWallet(op: any, allowedWalletOwners: Set<string>): boolean {
-  if (allowedWalletOwners.size === 0) {
-    return false;
-  }
-
-  const accountKeys = collectOperationAccountKeys(op);
-  for (const owner of allowedWalletOwners) {
-    if (accountKeys.has(owner)) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 async function decodeResources(profileId: string): Promise<ResourceFlowSummary> {
@@ -606,7 +557,10 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
   const fleetsMap = await loadFleets(profileId);
   const operations = await loadOperationsFromCache(profileId);
   const baseOwnedAccountOwners = buildOwnedAccountOwners(fleetsMap);
-  const allowedWalletOwners = await loadAllowedWalletOwners(profileId);
+  const starbaseCargoOwners = await loadStarbaseCargoOwners(profileId);
+  for (const owner of starbaseCargoOwners) {
+    baseOwnedAccountOwners.add(owner);
+  }
 
   const byFleet = new Map<string, FleetResourceFlow>();
   const byMaterial = new Map<string, MaterialFlowAggregate>();
@@ -643,12 +597,6 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
     const hasCraftingClaimOutputs = operationHasDecodedName(op, 'ClaimCraftingOutputs');
     const hasScanForSurveyDataUnits = operationHasDecodedName(op, 'ScanForSurveyDataUnits');
     const hasBurnCraftingConsumables = operationHasDecodedName(op, 'BurnCraftingConsumables');
-    const hasDepositCargoToFleet = operationHasDecodedName(op, 'DepositCargoToFleet');
-    const hasWithdrawCargoFromFleet = operationHasDecodedName(op, 'WithdrawCargoFromFleet');
-    const isPortOfEntryFlow =
-      (hasDepositCargoToFleet || hasWithdrawCargoFromFleet) &&
-      operationTouchesAllowedWallet(op, allowedWalletOwners);
-    const isDockTransferFlow = hasDepositCargoToFleet && hasWithdrawCargoFromFleet && !isPortOfEntryFlow;
     const hasStarbaseUpgradeBurn =
       hasSubmitStarbaseUpgradeResource ||
       operationHasDecodedName(op, 'CreateStarbaseUpgradeResourceProcess') ||
@@ -660,8 +608,6 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
       ? 'ClaimCraftingOutputs'
       : hasSubmitStarbaseUpgradeResource
         ? 'SubmitStarbaseUpgradeResource'
-        : isPortOfEntryFlow
-          ? 'Port Of Entry'
         : extractedOperationName;
     const operationCanClaim = canOperationClaimResources(operationName) || hasCraftingClaimOutputs;
     const operationCanBurn =
@@ -674,29 +620,6 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
     const burnOwners = new Set<string>();
     const claimMints = new Set<string>();
     const opOwnedOwners = new Set<string>(baseOwnedAccountOwners);
-
-    if (isDockTransferFlow) {
-      for (const delta of deltas.deltas) {
-        if (!delta.owner || !delta.owner.trim()) {
-          continue;
-        }
-        opOwnedOwners.add(delta.owner);
-      }
-
-      for (const minted of deltas.minted) {
-        if (!minted.owner || !minted.owner.trim()) {
-          continue;
-        }
-        opOwnedOwners.add(minted.owner);
-      }
-
-      for (const burned of deltas.burned) {
-        if (!burned.owner || !burned.owner.trim()) {
-          continue;
-        }
-        opOwnedOwners.add(burned.owner);
-      }
-    }
 
     if (shouldDiscoverClaimOwners) {
       for (const delta of deltas.deltas) {
@@ -719,6 +642,10 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
     if (shouldDiscoverBurnOwners) {
       for (const delta of deltas.deltas) {
         if (delta.delta < 0 && delta.owner && delta.owner.trim()) {
+          if (isMixedCraftFlow && !baseOwnedAccountOwners.has(delta.owner)) {
+            continue;
+          }
+
           burnOwners.add(delta.owner);
           opOwnedOwners.add(delta.owner);
         }
@@ -726,6 +653,10 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
 
       for (const burned of deltas.burned) {
         if (burned.amount > 0 && burned.owner && burned.owner.trim()) {
+          if (isMixedCraftFlow && !baseOwnedAccountOwners.has(burned.owner)) {
+            continue;
+          }
+
           burnOwners.add(burned.owner);
           opOwnedOwners.add(burned.owner);
         }
