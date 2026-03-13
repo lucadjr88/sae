@@ -32,6 +32,106 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
+const TRADER_PROGRAM_ID = 'traderDnaR5w6Tcoi3NFm53i48FTDNbGjBSZwWXDRrg';
+const ATLAS_MINT = 'ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx';
+
+function parseUiAmount(balance: any): number {
+  const ui = balance?.uiTokenAmount;
+  if (!ui) return 0;
+
+  if (ui.uiAmountString !== undefined && ui.uiAmountString !== null) {
+    const parsed = Number(ui.uiAmountString);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  if (ui.uiAmount !== undefined && ui.uiAmount !== null) {
+    const parsed = Number(ui.uiAmount);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  const rawAmount = Number(ui.amount);
+  const decimals = Number(ui.decimals || 0);
+  if (!Number.isFinite(rawAmount)) return 0;
+  if (!Number.isFinite(decimals) || decimals <= 0) return rawAmount;
+  return rawAmount / Math.pow(10, decimals);
+}
+
+function inferTraderSemantic(tx: any): { name: string; source: string } | null {
+  const logs = Array.isArray(tx?.meta?.logMessages) ? tx.meta.logMessages : [];
+  const hasTraderProgramLog = logs.some((line: any) => typeof line === 'string' && line.includes(TRADER_PROGRAM_ID));
+  const hasExchangeLog = logs.some(
+    (line: any) => typeof line === 'string' && (/Instruction:\s*ProcessExchange/i.test(line) || /Order exchange successful/i.test(line))
+  );
+  const hasOfferInitLog = logs.some((line: any) => typeof line === 'string' && /Offer initialized/i.test(line));
+
+  if (!hasTraderProgramLog && !hasExchangeLog && !hasOfferInitLog) {
+    return null;
+  }
+
+  const signer = tx?.transaction?.message?.staticAccountKeys?.[0];
+  const preTokenBalances = Array.isArray(tx?.meta?.preTokenBalances) ? tx.meta.preTokenBalances : [];
+  const postTokenBalances = Array.isArray(tx?.meta?.postTokenBalances) ? tx.meta.postTokenBalances : [];
+  const preByIndex = new Map<number, any>(
+    preTokenBalances.map((b: any) => [Number(b.accountIndex), b] as [number, any])
+  );
+  const postByIndex = new Map<number, any>(
+    postTokenBalances.map((b: any) => [Number(b.accountIndex), b] as [number, any])
+  );
+  const allIndexes = new Set<number>([
+    ...Array.from(preByIndex.keys()),
+    ...Array.from(postByIndex.keys())
+  ]);
+
+  let signerAtlasDelta = 0;
+  let nonAtlasPositive = 0;
+  let nonAtlasNegative = 0;
+
+  for (const idx of allIndexes) {
+    const preBalance = preByIndex.get(idx);
+    const postBalance = postByIndex.get(idx);
+    const mint = postBalance?.mint || preBalance?.mint;
+    if (!mint) continue;
+
+    const owner = postBalance?.owner || preBalance?.owner || '';
+    const delta = parseUiAmount(postBalance) - parseUiAmount(preBalance);
+    if (delta === 0) continue;
+
+    if (owner === signer && mint === ATLAS_MINT) {
+      signerAtlasDelta += delta;
+    }
+
+    if (mint !== ATLAS_MINT) {
+      if (delta > 0) {
+        nonAtlasPositive += delta;
+      } else {
+        nonAtlasNegative += Math.abs(delta);
+      }
+    }
+  }
+
+  if (hasExchangeLog) {
+    if (signerAtlasDelta < 0 && nonAtlasPositive > 0) {
+      return { name: 'TraderMarketBuy', source: 'trader_process_exchange' };
+    }
+    if (signerAtlasDelta > 0 && nonAtlasNegative > 0) {
+      return { name: 'TraderMarketSell', source: 'trader_process_exchange' };
+    }
+    if (signerAtlasDelta < 0) {
+      return { name: 'TraderMarketBuy', source: 'trader_process_exchange' };
+    }
+    if (signerAtlasDelta > 0) {
+      return { name: 'TraderMarketSell', source: 'trader_process_exchange' };
+    }
+    return { name: 'TraderMarketExchange', source: 'trader_process_exchange' };
+  }
+
+  if (hasOfferInitLog) {
+    return { name: 'TraderOrderCreate', source: 'trader_offer_initialized' };
+  }
+
+  return null;
+}
+
 export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   const hasRaw = transactions.length > 0 && transactions[0].raw;
@@ -166,6 +266,21 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
       }
     }
     if (decodedForTx.length > 0) {
+      const traderSemantic = inferTraderSemantic(tx);
+      if (traderSemantic) {
+        const semanticEntry = {
+          success: true,
+          name: traderSemantic.name,
+          data: { source: traderSemantic.source }
+        };
+
+        if (decodedForTx[0]?.name === 'FleetStateHandler') {
+          decodedForTx.splice(1, 0, semanticEntry);
+        } else {
+          decodedForTx.unshift(semanticEntry);
+        }
+      }
+
       // Se almeno un'istruzione è stata decodificata con successo, aggreghiamo i risultati
       const successes = decodedForTx.filter(d => d && d.success === true);
       if (successes.length > 0) {

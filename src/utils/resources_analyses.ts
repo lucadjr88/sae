@@ -685,6 +685,10 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
 
     const operationKey = normalizeOperationKey(operationName);
     const isMoveSubwarpOperation = operationKey.includes('fleetstatehandlermovesubwarp');
+    const isTraderMarketOperation =
+      operationKey.includes('tradermarketbuy') ||
+      operationKey.includes('tradermarketsell') ||
+      operationKey.includes('tradermarketexchange');
     const mintOwnedFlows = new Map<string, { in: number; out: number }>();
     const mintGlobalFlows = new Map<string, { in: number; out: number }>();
 
@@ -773,7 +777,7 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
     }
 
     for (const [mint, flow] of mintOwnedFlows.entries()) {
-      const internalTransferAmount = isMixedCraftFlow ? 0 : Math.min(flow.in, flow.out);
+      const internalTransferAmount = isMixedCraftFlow || isTraderMarketOperation ? 0 : Math.min(flow.in, flow.out);
       const effectiveIn = Math.max(0, flow.in - internalTransferAmount);
       const effectiveOut = Math.max(0, flow.out - internalTransferAmount);
       const filteredIn = operationCanClaim ? effectiveIn : 0;
