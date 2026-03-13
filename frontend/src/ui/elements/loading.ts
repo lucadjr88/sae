@@ -1,8 +1,30 @@
 // Modulo per l'elemento di loading
 // Esporta funzione per creare la struttura reale dell'elemento di loading
 import { progressInterval, setAnalysisStartTime, setProgressInterval } from '@/utils/state';
+import loadingBackgroundGif from '@/assets/sequenza_background.gif';
+
+export function setLoadingBackgroundState(isLoading: boolean): void {
+    const backgroundElements = document.querySelectorAll<HTMLElement>('.background-image');
+    backgroundElements.forEach((backgroundElement) => {
+        if (isLoading) {
+            if (!backgroundElement.dataset.defaultBackgroundImage) {
+                backgroundElement.dataset.defaultBackgroundImage = backgroundElement.style.backgroundImage || '';
+            }
+            backgroundElement.style.backgroundImage = `url('${loadingBackgroundGif}')`;
+            backgroundElement.classList.add('background-image-loading');
+            return;
+        }
+
+        backgroundElement.classList.remove('background-image-loading');
+        if (backgroundElement.dataset.defaultBackgroundImage !== undefined) {
+            backgroundElement.style.backgroundImage = backgroundElement.dataset.defaultBackgroundImage;
+            delete backgroundElement.dataset.defaultBackgroundImage;
+        }
+    });
+}
 
 export function createLoadingElement(message: string): HTMLDivElement {
+    setLoadingBackgroundState(true);
     const div = document.createElement('div');
     div.className = 'loading';
     div.id = 'loading';

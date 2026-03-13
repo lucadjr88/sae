@@ -9,8 +9,8 @@
 }
 
 #privacyPolicySidebar {
-  margin-top: auto;
-  margin-bottom: 55px;
+  position: absolute;
+  bottom: 55px;
   text-align: center;
 }
 
@@ -35,8 +35,8 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     bottom: 42px;
   }
 
-  #privacyPolicySidebar {
-    margin-bottom: 42px;
+  .privacyPolicySidebar {
+    margin-bottom: 10px;
   }
 
   #privacyPolicyStart a,

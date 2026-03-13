@@ -2,7 +2,7 @@
 
 // Implementazione reale spostata da ap
 import { normalizeOpName } from '@/services/utils';
-import { updateProgress } from '@/ui/elements/loading';
+import { setLoadingBackgroundState, updateProgress } from '@/ui/elements/loading';
 import { displayFeeResults } from '@/ui/elements/fees_playload';
 import { displayResourceResults } from '@/ui/elements/resource_playload';
 import type { FleetsRequest, FleetsResponse, WalletSageFeesStreamRequest, FleetBreakdownRequest, FleetBreakdownResponse, ApiError } from '@/types/api';
@@ -162,6 +162,7 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		profileId = input?.value?.trim() || '';
 	}
 	if (!profileId) {
+		setLoadingBackgroundState(false);
 		alert('Inserisci un Player Profile ID!');
 		console.warn('[analyzeFees] profileId missing, aborting');
 		return;
@@ -249,6 +250,7 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		}
 	} finally {
 		if (progressInterval) { clearInterval(progressInterval); setProgressInterval(null); }
+		setLoadingBackgroundState(false);
 		if (btn) {
 			btn.disabled = false;
 			btn.textContent = 'Analyze 24h';

@@ -23,6 +23,27 @@
     rgba(255,255,255,0.05) 100%);
 }
 
+.background-image.background-image-loading {
+  background-position: center center !important;
+  background-size: 100% 100% !important;
+  background-repeat: no-repeat !important;
+/* Versione Ultra Light */
+/* Versione Bilanciata (Medium Fade) */
+mask-image: linear-gradient(to bottom, 
+    rgba(0,0,0,1) 0%, 
+    rgba(0,0,0,1) 150px,    /* Area totalmente nitida iniziale */
+    rgba(0,0,0,0.5) 400px,  /* Sfumatura intermedia al 50% */
+    rgba(0,0,0,0.2) 100%    /* Finale al 20%: si vede che c'è qualcosa ma è molto spento */
+) !important;
+
+-webkit-mask-image: linear-gradient(to bottom, 
+    rgba(0,0,0,1) 0%, 
+    rgba(0,0,0,1) 150px, 
+    rgba(0,0,0,0.5) 400px, 
+    rgba(0,0,0,0.2) 100%
+) !important;
+}
+
 .app-version {
   position: fixed;
   top: 16px;

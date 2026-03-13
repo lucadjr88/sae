@@ -105,6 +105,7 @@ export function normalizeOpName(opName: string): string {
 	if (lower.includes('createstarbaseupgrade') || lower.includes('submitstarbaseupgrade')) return 'SB Upgrade';
 
 	if (lower.includes('closetokenaccount') || lower.includes('opentokenaccount')) return 'TokenAccount';
+	if (lower.includes('port of entry') || lower.includes('portofentry')) return 'Port Of Entry';
     if (lower.includes('loading_bay') || lower.includes('loadingbay') || lower.includes('withdrawcargo') || lower.includes('depositcargo')) return 'Dock/Undock/Load/Unload';
     if (lower.includes('mineasteroid') || lower.includes('startminingasteroid') || lower.includes('stopminingasteroid')) return 'Mining';
     if (lower.includes('subwarp') || lower.includes('startsubwarp') || lower.includes('stopsubwarp')) return 'Subwarp';

@@ -5,6 +5,8 @@ import { wipeAndReload } from "@/services/wipe_reload";
 import { createPrivacyPolicySidebarElement } from "@/ui/elements/privacyPolicy";
 import { toggleSwitchHTML } from "@/ui/elements/toggleSwitch";
 import { currentProfileId } from "@/utils/state";
+import homeIcona from "@/assets/icons/home.png";
+import playstoreIcona from "@/assets/icons/playstore.png";
 
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
   let suppressScrollHideUntil = 0;
@@ -62,7 +64,22 @@ sidebar.onclick = () => {
 };
 
 
+const homeIcon = document.createElement('div');
+homeIcon.id = 'homeIcon';
+homeIcon.className = 'home-icon';
+homeIcon.title = 'Home';
+// Aggiungi un evento click per tornare alla home
+homeIcon.addEventListener('click', () => {
+    // Logica per tornare alla home, ad esempio:
+    window.location.href = '/'; // O qualsiasi altra logica per navigare alla home
+});
+sidebar.appendChild(homeIcon);
 
+const homeIconImg = document.createElement('img');
+homeIconImg.src = homeIcona; // Assicurati di avere questa icona nella cartella assets
+homeIconImg.className = 'home-icon-img';
+homeIconImg.alt = 'Home';
+homeIcon.appendChild(homeIconImg);
 
 const walletAndIconContainer = document.createElement('div');
 walletAndIconContainer.className = 'wallet-icon-container';
@@ -143,6 +160,30 @@ toggleSwitchContainer.id = 'toggleSwitchContainer';
 toggleSwitchContainer.className = 'toggle-switch-container';
 toggleSwitchContainer.innerHTML = toggleSwitchHTML;
 sidebar.appendChild(toggleSwitchContainer);
+
+
+const playstoreIcon = document.createElement('div');
+playstoreIcon.id = 'playstoreIcon';
+playstoreIcon.className = 'playstore-icon';
+playstoreIcon.title = 'Get the App';
+// Aggiungi un evento click per andare alla pagina di download dell'app
+playstoreIcon.addEventListener('click', () => {
+    // Logica per navigare alla pagina di download, ad esempio:
+    window.open('https://play.google.com/store/apps/details?id=com.sae.app'); // Sostituisci con l'URL reale della pagina di download
+});
+sidebar.appendChild(playstoreIcon);
+
+const playstoreIconImg = document.createElement('img');
+playstoreIconImg.src = playstoreIcona; // Assicurati di avere questa icona nella cartella assets
+playstoreIconImg.className = 'playstore-icon-img';
+playstoreIconImg.alt = 'Get the App';
+playstoreIcon.appendChild(playstoreIconImg);
+
+const playstoreIconText = document.createElement('span');
+playstoreIconText.textContent = 'Get the App';
+playstoreIconText.className = 'playstore-icon-text';
+playstoreIcon.appendChild(playstoreIconText);
+
 
 // 6. Privacy Policy
 const privacyPolicySidebar = createPrivacyPolicySidebarElement();

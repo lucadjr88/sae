@@ -94,6 +94,7 @@ type TokenDeltaResult = {
 type FleetInfo = {
   key: string;
   callsign: string;
+  isRented: boolean;
   cargoKey?: string;
   cargoHold?: string;
   ammoKey?: string;
@@ -269,52 +270,78 @@ function getMaterialInfo(mint: string): Partial<MaterialInfo> {
 }
 
 async function loadFleets(profileId: string): Promise<Map<string, FleetInfo>> {
-  const fleetsDir = path.join(process.cwd(), 'cache', profileId, 'fleets');
-  const fleetFiles = await fs.readdir(fleetsDir).catch(() => []);
-  console.log(`[loadFleets] profileId=${profileId} found ${fleetFiles.length} fleet files`);
-
   const fleetsMap = new Map<string, FleetInfo>();
 
-  for (const file of fleetFiles) {
-    const filePath = path.join(fleetsDir, file);
-    const raw = await fs.readFile(filePath, 'utf8').catch(() => null);
-    if (!raw) continue;
+  const collectFleetInfo = (fleetEntry: any, fallbackKey: string, isRented: boolean): FleetInfo | null => {
+    const fleetContainer = fleetEntry?.data || fleetEntry;
+    const fleet = fleetContainer?.data || fleetContainer?.fleetData || fleetContainer;
+    const key =
+      fleetEntry?.key ||
+      fleetContainer?.key ||
+      fleet?.pubkey ||
+      fleetContainer?.fleet ||
+      fallbackKey;
 
-    try {
-      const fleetFile = JSON.parse(raw);
-      const fleetContainer = fleetFile.data || fleetFile;
-      const fleet = fleetContainer.data || fleetContainer;
-
-      const key =
-        fleetFile.key ||
-        fleetContainer.key ||
-        fleet.pubkey ||
-        file.replace(/\.json$/, '');
-
-      const callsign =
-        fleet.callsign ||
-        fleet.fleet_label ||
-        fleet.label ||
-        `Fleet-${key.substring(0, 8)}`;
-
-      const cargoHold = fleet.cargoHold || fleet.cargo_hold;
-      const ammoBank = fleet.ammoBank || fleet.ammo_bank;
-      const fuelTank = fleet.fuelTank || fleet.fuel_tank;
-
-      fleetsMap.set(key, {
-        key,
-        callsign,
-        cargoKey: cargoHold,
-        cargoHold,
-        ammoKey: ammoBank,
-        ammoBank,
-        fuelKey: fuelTank,
-        fuelTank
-      });
-    } catch (e) {
-      console.log(`[loadFleets] skipped malformed file ${file}`);
+    if (!key) {
+      return null;
     }
-  }
+
+    const callsign =
+      fleetContainer?.callsign ||
+      fleet?.callsign ||
+      fleet?.fleet_label ||
+      fleet?.label ||
+      `Fleet-${String(key).substring(0, 8)}`;
+
+    const cargoHold = fleet?.cargoHold || fleet?.cargo_hold;
+    const ammoBank = fleet?.ammoBank || fleet?.ammo_bank;
+    const fuelTank = fleet?.fuelTank || fleet?.fuel_tank;
+
+    return {
+      key,
+      callsign,
+      isRented,
+      cargoKey: cargoHold,
+      cargoHold,
+      ammoKey: ammoBank,
+      ammoBank,
+      fuelKey: fuelTank,
+      fuelTank
+    };
+  };
+
+  const loadFleetNamespace = async (namespace: string, isRented: boolean): Promise<void> => {
+    const dir = path.join(process.cwd(), 'cache', profileId, namespace);
+    const fleetFiles = await fs.readdir(dir).catch(() => []);
+    let loadedFromNamespace = 0;
+    console.log(`[loadFleets] profileId=${profileId} namespace=${namespace} files=${fleetFiles.length}`);
+
+    for (const file of fleetFiles) {
+      const filePath = path.join(dir, file);
+      const raw = await fs.readFile(filePath, 'utf8').catch(() => null);
+      if (!raw) continue;
+
+      try {
+        const parsed = JSON.parse(raw);
+        const payload = parsed?.data || parsed;
+        const fleetEntries = Array.isArray(payload) ? payload : [payload];
+
+        for (const fleetEntry of fleetEntries) {
+          const fleetInfo = collectFleetInfo(fleetEntry, file.replace(/\.json$/, ''), isRented);
+          if (!fleetInfo) continue;
+          fleetsMap.set(fleetInfo.key, fleetInfo);
+          loadedFromNamespace += 1;
+        }
+      } catch {
+        console.log(`[loadFleets] skipped malformed file ${file}`);
+      }
+    }
+
+    console.log(`[loadFleets] profileId=${profileId} namespace=${namespace} loaded=${loadedFromNamespace}`);
+  };
+
+  await loadFleetNamespace('fleets', false);
+  await loadFleetNamespace('rented-fleets', true);
 
   console.log(`[loadFleets] loaded ${fleetsMap.size} fleets`);
   return fleetsMap;
@@ -379,6 +406,44 @@ async function loadOperationsFromCache(profileId: string): Promise<any[]> {
 }
 
 function extractOperationName(op: any): string {
+  const normalizeName = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const decodedNames = Array.isArray(op?.decoded)
+    ? op.decoded
+        .filter((entry: any) => entry && entry.name)
+        .map((entry: any) => String(entry.name))
+    : [];
+
+  const exactPreferences = [
+    'ClaimCraftingOutputs',
+    'BurnCraftingConsumables',
+    'SubmitStarbaseUpgradeResource',
+    'CreateStarbaseUpgradeResourceProcess',
+    'DepositCraftingIngredient',
+    'StartCraftingProcess',
+    'CloseUpgradeProcess',
+    'ScanForSurveyDataUnits',
+    'DepositCargoToFleet',
+    'WithdrawCargoFromFleet',
+    'FleetStateHandler_MineAsteroid',
+    'StartMiningAsteroid'
+  ];
+
+  for (const preferredName of exactPreferences) {
+    const preferredKey = normalizeName(preferredName);
+    const matchedName = decodedNames.find((decodedName) => normalizeName(decodedName) === preferredKey);
+    if (matchedName) {
+      return matchedName;
+    }
+  }
+
+  const fuzzyPreferences = ['buy', 'scan', 'survey', 'claim', 'craft', 'mine'];
+  for (const preferredPattern of fuzzyPreferences) {
+    const matchedName = decodedNames.find((decodedName) => normalizeName(decodedName).includes(preferredPattern));
+    if (matchedName) {
+      return matchedName;
+    }
+  }
+
   if (op.instructionName === 'SAGE_OP' && Array.isArray(op.decoded) && op.decoded.length > 0) {
     const decoded = op.decoded.find((d: any) => d && d.success === true && d.name);
     if (decoded?.name) {
@@ -405,7 +470,14 @@ function canOperationClaimResources(operationName: string): boolean {
     return false;
   }
 
-  return key.includes('claimcraftingoutputs') || key.includes('mine') || key.includes('buy') || key.includes('scan');
+  return (
+    key.includes('portofentry') ||
+    key.includes('claimcraftingoutputs') ||
+    key.includes('claim') ||
+    key.includes('mine') ||
+    key.includes('buy') ||
+    key.includes('scan')
+  );
 }
 
 function canOperationBurnResources(operationName: string): boolean {
@@ -416,6 +488,10 @@ function canOperationBurnResources(operationName: string): boolean {
   }
 
   if (key.includes('burncraftingconsumables')) {
+    return true;
+  }
+
+  if (key.includes('portofentry')) {
     return true;
   }
 
@@ -468,23 +544,61 @@ function buildOwnedAccountOwners(fleetsMap: Map<string, FleetInfo>): Set<string>
   return owners;
 }
 
-async function loadStarbaseCargoOwners(profileId: string): Promise<Set<string>> {
+async function loadAllowedWalletOwners(profileId: string): Promise<Set<string>> {
   const owners = new Set<string>();
-  const cached = await getCache('cargo-ids', 'starbase', profileId);
-  const payload = cached?.data || cached;
-  const starbaseCargoIds = Array.isArray(payload?.starbaseCargoIds) ? payload.starbaseCargoIds : [];
+  const metaCache = await getCache('', profileId, profileId);
+  const meta = metaCache?.data || metaCache;
+  const allowedWallets = Array.isArray(meta?.allowedWallets) ? meta.allowedWallets : [];
 
-  for (const cargoId of starbaseCargoIds) {
-    if (typeof cargoId !== 'string') {
-      continue;
-    }
-    const trimmed = cargoId.trim();
-    if (trimmed) {
-      owners.add(trimmed);
+  for (const wallet of allowedWallets) {
+    const pubkey = typeof wallet === 'string' ? wallet : wallet?.pubkey;
+    if (typeof pubkey === 'string' && pubkey.trim()) {
+      owners.add(pubkey);
     }
   }
 
   return owners;
+}
+
+function collectOperationAccountKeys(op: any): Set<string> {
+  const keys = new Set<string>();
+  const txInfo = op?.txInfo || {};
+
+  const addKey = (value: any) => {
+    if (typeof value === 'string' && value.trim()) {
+      keys.add(value);
+      return;
+    }
+
+    if (value && typeof value === 'object' && typeof value.pubkey === 'string' && value.pubkey.trim()) {
+      keys.add(value.pubkey);
+    }
+  };
+
+  if (Array.isArray(txInfo.staticAccountKeys)) {
+    txInfo.staticAccountKeys.forEach(addKey);
+  }
+
+  if (Array.isArray(txInfo.accountKeys)) {
+    txInfo.accountKeys.forEach(addKey);
+  }
+
+  return keys;
+}
+
+function operationTouchesAllowedWallet(op: any, allowedWalletOwners: Set<string>): boolean {
+  if (allowedWalletOwners.size === 0) {
+    return false;
+  }
+
+  const accountKeys = collectOperationAccountKeys(op);
+  for (const owner of allowedWalletOwners) {
+    if (accountKeys.has(owner)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function decodeResources(profileId: string): Promise<ResourceFlowSummary> {
@@ -492,10 +606,7 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
   const fleetsMap = await loadFleets(profileId);
   const operations = await loadOperationsFromCache(profileId);
   const baseOwnedAccountOwners = buildOwnedAccountOwners(fleetsMap);
-  const starbaseCargoOwners = await loadStarbaseCargoOwners(profileId);
-  for (const owner of starbaseCargoOwners) {
-    baseOwnedAccountOwners.add(owner);
-  }
+  const allowedWalletOwners = await loadAllowedWalletOwners(profileId);
 
   const byFleet = new Map<string, FleetResourceFlow>();
   const byMaterial = new Map<string, MaterialFlowAggregate>();
@@ -511,7 +622,7 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
     byFleet.set(key, {
       key,
       callsign: fleet.callsign,
-      isRented: false,
+      isRented: fleet.isRented,
       totalMaterialsIn: 0,
       totalMaterialsOut: 0,
       totalMaterialsNet: 0,
@@ -532,6 +643,12 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
     const hasCraftingClaimOutputs = operationHasDecodedName(op, 'ClaimCraftingOutputs');
     const hasScanForSurveyDataUnits = operationHasDecodedName(op, 'ScanForSurveyDataUnits');
     const hasBurnCraftingConsumables = operationHasDecodedName(op, 'BurnCraftingConsumables');
+    const hasDepositCargoToFleet = operationHasDecodedName(op, 'DepositCargoToFleet');
+    const hasWithdrawCargoFromFleet = operationHasDecodedName(op, 'WithdrawCargoFromFleet');
+    const isPortOfEntryFlow =
+      (hasDepositCargoToFleet || hasWithdrawCargoFromFleet) &&
+      operationTouchesAllowedWallet(op, allowedWalletOwners);
+    const isDockTransferFlow = hasDepositCargoToFleet && hasWithdrawCargoFromFleet && !isPortOfEntryFlow;
     const hasStarbaseUpgradeBurn =
       hasSubmitStarbaseUpgradeResource ||
       operationHasDecodedName(op, 'CreateStarbaseUpgradeResourceProcess') ||
@@ -543,6 +660,8 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
       ? 'ClaimCraftingOutputs'
       : hasSubmitStarbaseUpgradeResource
         ? 'SubmitStarbaseUpgradeResource'
+        : isPortOfEntryFlow
+          ? 'Port Of Entry'
         : extractedOperationName;
     const operationCanClaim = canOperationClaimResources(operationName) || hasCraftingClaimOutputs;
     const operationCanBurn =
@@ -555,6 +674,29 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
     const burnOwners = new Set<string>();
     const claimMints = new Set<string>();
     const opOwnedOwners = new Set<string>(baseOwnedAccountOwners);
+
+    if (isDockTransferFlow) {
+      for (const delta of deltas.deltas) {
+        if (!delta.owner || !delta.owner.trim()) {
+          continue;
+        }
+        opOwnedOwners.add(delta.owner);
+      }
+
+      for (const minted of deltas.minted) {
+        if (!minted.owner || !minted.owner.trim()) {
+          continue;
+        }
+        opOwnedOwners.add(minted.owner);
+      }
+
+      for (const burned of deltas.burned) {
+        if (!burned.owner || !burned.owner.trim()) {
+          continue;
+        }
+        opOwnedOwners.add(burned.owner);
+      }
+    }
 
     if (shouldDiscoverClaimOwners) {
       for (const delta of deltas.deltas) {
@@ -844,3 +986,4 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
 }
 
 export { decodeResources, ResourceFlowSummary };
+
