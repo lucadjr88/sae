@@ -13,3 +13,5 @@ frontend/dist/
 node_modules
 trash/
 interna_cache/
+/target/
+decoder_funzionante.zip
