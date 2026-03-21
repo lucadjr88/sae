@@ -9,6 +9,7 @@ import frontendRouter from './backend/routes/frontend';
 import authRouter from './backend/routes/auth.js';
 import resourceFlowsRouter from './backend/routes/resource-flows';
 import assetsRouter from './backend/routes/assets.js';
+import rentalRouter from './backend/routes/rental';
 import { startNonInvasiveMetricsLogger } from './utils/rpc/metrics';
 
 const PORT = 3000;
@@ -27,6 +28,7 @@ app.use('/api/debug', getFleetsRouter);
 
 // Serve static assets via API routes (for Android app)
 app.use('/api', assetsRouter);
+app.use('/api', rentalRouter);
 
 // Serve frontend static files at /
 app.use('/', frontendRouter);

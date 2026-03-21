@@ -16,8 +16,20 @@ export async function findPlayerProfilesForWallet(wallet: PublicKey, profileId?:
   let pick: any = null;
 
   try {
-    pick = await RpcPoolManager.pickRpcConnection(profileId || wallet.toBase58(), { waitForMs: 3000 });
-    const { connection, release } = pick;
+    //pick = await RpcPoolManager.pickRpcConnection(profileId || wallet.toBase58(), { waitForMs: 3000 });
+    // sostituiamo la chiamata a RpcPoolManager con una connessione diretta per evitare problemi di timeout, teniamo conto di release comunque
+    const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
+    pick =  { connection, release: async ({ success }: { success: boolean }) => {
+      // In a real implementation, you would return the connection to the pool here
+      // For this direct connection example, we can simply close it if needed
+      if (connection) {
+        // No actual pool to release to, so we just log the release action
+        console.log(`[derivePlayerProfilePDA] Released connection (success: ${success})`);
+      }
+    }};
+    
+    
+    //const { connection, release } = pick;
 
     // Get all accounts owned by the Player Profile program
     const programPubkey = new PublicKey(PLAYER_PROFILE_PROGRAM_ID);
@@ -48,7 +60,7 @@ export async function findPlayerProfilesForWallet(wallet: PublicKey, profileId?:
       });
     }
 
-    release({ success: true });
+    //release({ success: true });
 
     if (variants.length === 0) {
       variants.push({

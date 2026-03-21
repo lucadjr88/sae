@@ -20,9 +20,9 @@ async function test() {
     console.log('Slot:', slot);
     release({ success: true, latencyMs: 100 });
   } catch (e) {
-    console.error('RPC error:', e);
+    console.log('RPC error:', e);
     release({ success: false });
   }
 }
 
-test().catch(console.error);
+test().catch(console.log);

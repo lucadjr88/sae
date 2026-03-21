@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc && node scripts/add-js-extensions.cjs && cd frontend && npm run build && cd ..",
+    "build:decoder": "sh scripts/build-and-copy-srsly-decoder.sh",
     "build:backend": "tsc && node scripts/add-js-extensions.cjs",
     "build:frontend": "cd frontend && npm run build && cd ..",
     "build:watch": "tsc --watch",
@@ -30,6 +31,7 @@
     "@solana/web3.js": "^1.98.4",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.0",
+    "borsh": "^2.0.0",
     "bs58": "^6.0.0",
     "dotenv": "^17.3.1",
     "exponential-backoff": "^3.1.3",

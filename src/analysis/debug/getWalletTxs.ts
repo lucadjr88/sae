@@ -32,7 +32,7 @@ export async function getWalletTxsHandler(req: Request, res: Response) {
           if (missing.length === 0) {
             console.log(`[double-check] wallet=${wallet} tutte le signature hanno una tx salvata: OK`);
           } else {
-            console.error(`[double-check] wallet=${wallet} signature mancanti:`, missing);
+            console.log(`[double-check] wallet=${wallet} signature mancanti:`, missing);
             // Retry automatico: rilancio getWalletTxsUtil solo per le signature mancanti
             const { fetchWalletTransactions } = await import("../../utils/solanaRpc");
             const { fetchAndCacheWalletTxs } = await import("../../utils/fetchAndCacheWalletTxs");
@@ -42,14 +42,14 @@ export async function getWalletTxsHandler(req: Request, res: Response) {
             if (retriedFailed.length === 0) {
               console.log(`[double-check] wallet=${wallet} tutte le signature mancanti recuperate con successo!`);
             } else {
-              console.error(`[double-check] wallet=${wallet} signature IRRIMEDIABILMENTE mancanti anche dopo retry:`, retriedFailed);
+              console.log(`[double-check] wallet=${wallet} signature IRRIMEDIABILMENTE mancanti anche dopo retry:`, retriedFailed);
             }
           }
         } catch (err) {
           if (pick && pick.release) {
             try { pick.release({ success: false }); } catch {}
           }
-          console.error(`[double-check] Errore durante doubleCheck per wallet=${wallet}:`, err);
+          console.log(`[double-check] Errore durante doubleCheck per wallet=${wallet}:`, err);
         }
       }
   const profileId = req.query.profileId as string;
@@ -84,7 +84,7 @@ export async function getWalletTxsHandler(req: Request, res: Response) {
         total = result.total || 0;
         failed = result.failed || [];
       } catch (e) {
-        console.error(`[get-wallet-txs] Errore getWalletTxsUtil per wallet=${w.pubkey}:`, e);
+        console.log(`[get-wallet-txs] Errore getWalletTxsUtil per wallet=${w.pubkey}:`, e);
       }
       console.log(`[get-wallet-txs] wallet=${w.pubkey} tx riuscite=${txs.length}/${total} (fallite=${failed.length})`);
       if (txs.length > 0) {
@@ -99,7 +99,7 @@ export async function getWalletTxsHandler(req: Request, res: Response) {
         const { doubleCheckWallet } = await import('../../utils/doubleCheckWallet');
         await doubleCheckWallet(w.pubkey, cutoffH, profileId);
       } catch (e) {
-        console.error('[get-wallet-txs] doubleCheckWallet failed', e);
+        console.log('[get-wallet-txs] doubleCheckWallet failed', e);
       }
     }
     return res.json({ profileId, cutoffH, results });

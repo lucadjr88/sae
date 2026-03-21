@@ -66,7 +66,7 @@ router.post('/login', async (req: Request, res: Response) => {
     });
   } catch (e: any) {
     const duration = Date.now() - startTime;
-    console.error(`[auth/login] ❌ ERROR | ${e?.message || e} | pubkey=${pubkey?.substring(0, 10)}... | duration=${duration}ms`);
+    console.log(`[auth/login] ❌ ERROR | ${e?.message || e} | pubkey=${pubkey?.substring(0, 10)}... | duration=${duration}ms`);
     return res.status(500).json({
       error: 'Authentication failed',
       details: process.env.NODE_ENV === 'development' ? e?.message : undefined

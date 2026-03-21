@@ -205,11 +205,11 @@ export async function fetchProfileFleets(profileId: string): Promise<any[]> {
         try {
           await fs.writeFile(file, JSON.stringify(f, null, 2), 'utf8');
         } catch (wfErr) {
-          console.error(`[fetchProfileFleets] Failed writing ${file}: ${wfErr}`);
+          console.log(`[fetchProfileFleets] Failed writing ${file}: ${wfErr}`);
         }
       }));
     } catch (wErr) {
-      console.error(`[fetchProfileFleets] Failed creating/writing cache for profile=${profileId}: ${wErr}`);
+      console.log(`[fetchProfileFleets] Failed creating/writing cache for profile=${profileId}: ${wErr}`);
     }
     release({ success: true, latencyMs: 0 });
     return fleets;

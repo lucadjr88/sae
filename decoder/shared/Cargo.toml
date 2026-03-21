@@ -1,0 +1,16 @@
+[package]
+name = "shared"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+bitflags = "2.6"
+carbon-core = "0.12.0"
+solana-pubkey = { version = "3.0.0", features = ["borsh", "serde", "bytemuck"] }
+solana-account = "3.4.0"
+solana-instruction = { version = "3.2.0", default-features = false }
+serde = { version = "1.0.228", features = ["derive"] }
+borsh = "1.6.1"

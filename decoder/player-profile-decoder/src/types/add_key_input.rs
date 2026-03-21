@@ -1,6 +1,6 @@
 use carbon_core::{CarbonDeserialize, borsh};
 
-use super::ProfilePermissions;
+use shared::ProfilePermissions;
 
 #[derive(
     CarbonDeserialize, Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone, Hash,

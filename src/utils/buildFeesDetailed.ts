@@ -15,6 +15,40 @@ async function readJson(filePath: string) {
   }
 }
 
+async function loadRentedFleetKeys(profileId: string): Promise<Set<string>> {
+  const rentedDir = getCacheDir(profileId, 'rented-fleets');
+  const files = await fs.readdir(rentedDir).catch(() => []);
+  const keys = new Set<string>();
+
+  for (const file of files) {
+    const raw = await readJson(path.join(rentedDir, file));
+    if (!raw) continue;
+    const payload = raw.data ?? raw;
+    const entries = Array.isArray(payload) ? payload : [payload];
+
+    for (const entry of entries) {
+      const fleet = entry?.fleetData || entry?.data || entry;
+      const candidates = [
+        entry?.key,
+        entry?.fleet,
+        entry?.pubkey,
+        fleet?.key,
+        fleet?.fleet,
+        fleet?.pubkey,
+        file.replace(/\.json$/, '')
+      ];
+
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate) {
+          keys.add(candidate);
+        }
+      }
+    }
+  }
+
+  return keys;
+}
+
 function extractFee(op: any): number {
   if (!op) return 0;
   if (typeof op.txInfo?.fee === 'number') return op.txInfo.fee;
@@ -92,14 +126,11 @@ export async function buildFeesDetailed(profileId: string) {
   const breakdownDir = getCacheDir(profileId, 'fleet-breakdowns');
   const playerOpsDir = getCacheDir(profileId, 'player-ops');
   const unknownDir = getCacheDir(profileId, 'unknown');
-  const fleetsDir = getCacheDir(profileId, 'fleets');
 
   const feesByFleet: Record<string, any> = {};
   const feesByOperation: Record<string, { count: number; totalFee: number; details?: any[] }> = {};
 
-  // load fleets to detect isRented by checking rented-fleets folder presence
-  const fleetFiles = await fs.readdir(fleetsDir).catch(() => []);
-  const fleetSet = new Set(fleetFiles.map(f => f.replace(/\.json$/, '')));
+  const rentedFleetKeys = await loadRentedFleetKeys(profileId);
 
   // process fleet-breakdowns
   const breakdownFiles = await fs.readdir(breakdownDir).catch(() => []);
@@ -115,13 +146,7 @@ export async function buildFeesDetailed(profileId: string) {
     const ops = payload.ops || [];
     const fleetPk = fleet?.pubkey || bf.replace(/\.json$/, '');
 
-    const fleetEntry: any = { totalFee: 0, totalOperations: 0, operations: {}, isRented: false };
-    if (fleetSet.has(fleetPk)) {
-      // check rented status by existence in rented-fleets
-      const rentedPath = path.join(process.cwd(), 'cache', profileId, 'rented-fleets', `${fleetPk}.json`);
-      const rentedExists = (await fs.stat(rentedPath).then(() => true).catch(() => false));
-      fleetEntry.isRented = rentedExists;
-    }
+    const fleetEntry: any = { totalFee: 0, totalOperations: 0, operations: {}, isRented: rentedFleetKeys.has(fleetPk) };
 
     for (const op of ops) {
       totalSigs += 1;

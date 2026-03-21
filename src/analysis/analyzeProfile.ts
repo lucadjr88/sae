@@ -28,10 +28,10 @@ async function clearNamespaces(profileId: string) {
 import { getWalletAuthorityHandler } from './debug/getWalletAuthority';
 import { getWalletTxsHandler } from './debug/getWalletTxs';
 import { decodeSageOpsFullHandler } from './debug/decodeSageOpsFull';
-import { getFleetsHandler } from './debug/getFleets';
-import { getRentedFleetsHandler } from './debug/getRentedFleets';
 import { associateSageOpsToFleetsHandler } from './debug/associateSageOpsToFleets';
 import playloadHandler from './debug/playload';
+import { fetchProfileFleets } from '../utils/fetchProfileFleets';
+import { fetchProfileRentedFleets } from '../utils/fetchProfileRentedFleets';
 import { resetPoolCache } from '../utils/rpc/rpc-pool-manager';
 import { resetHealthMap } from '../utils/rpc/health-manager';
 import { resetConcurrencyMap } from '../utils/rpc/concurrency-manager';
@@ -57,7 +57,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
 
                 console.log(`[analyze-profile] Wiped entire cache for profile: ${profileId}`);
             } catch (wipeErr) {
-                console.error('[analyze-profile] Failed to wipe cache:', wipeErr);
+                console.log('[analyze-profile] Failed to wipe cache:', wipeErr);
             }
         }
 
@@ -67,15 +67,6 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 const cachedPlayload = await getCache('playload', 'latest', profileId);
                 if (cachedPlayload && cachedPlayload.data) {
                     let payloadData = cachedPlayload.data;
-
-                    try {
-                        const cachedStarbaseCargo = await getCache('cargo-ids', 'starbase', profileId);
-                        if (!cachedStarbaseCargo || !cachedStarbaseCargo.data) {
-                            await deriveStarbaseCargoIdsForProfile(profileId as string);
-                        }
-                    } catch (starbaseCacheHitErr) {
-                        console.warn('[analyze-profile] Failed deriving starbase cargo IDs on cache hit', starbaseCacheHitErr);
-                    }
 
                     if (!payloadData.resourceFlows || typeof payloadData.resourceFlows !== 'object') {
                         try {
@@ -125,15 +116,11 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         console.log("###################### FINE FASE 3, INIZIO FASE 4: GET FLEETS #########################");
 
         // FASE 4: GET FLEETS
-        const req4: any = { query: { profileId } };
-        const res4: any = { json: (data: any) => data, status: () => res4, send: () => { } };
-        const fleets = await getFleetsHandler(req4, res4);
+        const fleets = await fetchProfileFleets(profileId).catch((e: unknown) => { console.log(`[analyze-profile] error fetching fleets: ${e}`); return []; });
         console.log("###################### FINE FASE 4, INIZIO FASE 5: GET RENTED FLEETS #########################");
 
         // FASE 5: GET RENTED FLEETS
-        const req5: any = { query: { profileId } };
-        const res5: any = { json: (data: any) => data, status: () => res5, send: () => { } };
-        const rentedFleets = await getRentedFleetsHandler(req5, res5);
+        const rentedFleets = await fetchProfileRentedFleets(profileId).catch((e: unknown) => { console.log(`[analyze-profile] error fetching rented fleets: ${e}`); return []; });
         console.log("###################### FINE FASE 5, INIZIO FASE 6: ASSOCIATE SAGE OPS TO FLEETS #########################");
 
         // FASE 6: ASSOCIATE SAGE OPS TO FLEETS
@@ -175,7 +162,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
             try {
                 await setCache('playload', 'latest', merged, profileId as string);
             } catch (saveErr) {
-                console.error('[analyze-profile] failed to save playload cache', saveErr);
+                console.log('[analyze-profile] failed to save playload cache', saveErr);
             }
 
             // FASE 8: RESOURCE FLOWS ANALYSIS
@@ -190,11 +177,11 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 console.warn('[analyze-profile] Phase 8 skipped, returning base payload', phase8Err);
             }
 
-            // Clean up all cache except playload/latest.json (unless cachePersist is true)
+            // Clean up all cache except playload/latest.json and rpc-pool.json (unless cachePersist is true)
             if (!cachePersist) {
                 try {
                     const cacheDir = path.join(process.cwd(), 'cache', profileId as string);
-                    const playloadFile = path.join(cacheDir, 'playload', 'latest.json');
+                    const rootFilesToKeep = new Set(['rpc-pool.json']);
 
                     // Get all subdirectories in cache
                     const entries = await fs.readdir(cacheDir, { withFileTypes: true });
@@ -213,14 +200,14 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                                 // Remove all other directories
                                 await fs.rm(fullPath, { recursive: true, force: true });
                             }
-                        } else if (entry.name !== playloadFile) {
+                        } else if (!rootFilesToKeep.has(entry.name)) {
                             // Remove any files in the root cache directory
                             await fs.rm(fullPath, { force: true });
                         }
                     }
-                    console.log('[analyze-profile] Cache cleaned, kept only playload/latest.json');
+                    console.log('[analyze-profile] Cache cleaned, kept playload/latest.json and rpc-pool.json');
                 } catch (cleanErr) {
-                    console.error('[analyze-profile] failed to clean cache', cleanErr);
+                    console.log('[analyze-profile] failed to clean cache', cleanErr);
                 }
             }
 
@@ -229,20 +216,20 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
             res.set('X-Cache-Timestamp', String(Date.now()));
             return res.json(finalPayload);
         } catch (e) {
-            console.error('[analyze-profile] buildFeesDetailed failed', e);
+            console.log('[analyze-profile] buildFeesDetailed failed', e);
 
             // Save fallback playload
             try {
                 await setCache('playload', 'latest', playload, profileId as string);
             } catch (saveErr) {
-                console.error('[analyze-profile] failed to save fallback playload cache', saveErr);
+                console.log('[analyze-profile] failed to save fallback playload cache', saveErr);
             }
 
-            // Clean up all cache except playload/latest.json (unless cachePersist is true)
+            // Clean up all cache except playload/latest.json and rpc-pool.json (unless cachePersist is true)
             if (!cachePersist) {
                 try {
                     const cacheDir = path.join(process.cwd(), 'cache', profileId as string);
-                    const playloadFile = path.join(cacheDir, 'playload', 'latest.json');
+                    const rootFilesToKeep = new Set(['rpc-pool.json']);
 
                     const entries = await fs.readdir(cacheDir, { withFileTypes: true });
                     for (const entry of entries) {
@@ -258,13 +245,13 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                             } else {
                                 await fs.rm(fullPath, { recursive: true, force: true });
                             }
-                        } else if (entry.name !== playloadFile) {
+                        } else if (!rootFilesToKeep.has(entry.name)) {
                             await fs.rm(fullPath, { force: true });
                         }
                     }
-                    console.log('[analyze-profile] Cache cleaned, kept only playload/latest.json');
+                    console.log('[analyze-profile] Cache cleaned, kept playload/latest.json and rpc-pool.json');
                 } catch (cleanErr) {
-                    console.error('[analyze-profile] failed to clean cache', cleanErr);
+                    console.log('[analyze-profile] failed to clean cache', cleanErr);
                 }
             }
 
@@ -277,7 +264,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         }
     } catch (e: any) {
         const duration = Date.now() - startTime;
-        console.error(`[/api/analyze-profile] ❌ ERROR | profileId=${profileId} | error=${e?.message || e} | duration=${duration}ms`);
+        console.log(`[/api/analyze-profile] ❌ ERROR | profileId=${profileId} | error=${e?.message || e} | duration=${duration}ms`);
         return res.status(500).json({ error: e?.message || 'analyze-profile failed' });
     }
 });

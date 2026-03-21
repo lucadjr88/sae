@@ -16,6 +16,7 @@ export interface FleetData {
     cargoHold?: string;
   };
   isRented?: boolean;
+
 }
 
 export interface FleetsResponse {

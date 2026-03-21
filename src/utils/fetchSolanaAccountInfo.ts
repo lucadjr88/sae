@@ -22,7 +22,7 @@ export async function fetchSolanaAccountInfo(profileId: string): Promise<Buffer 
     if (pick && pick.release) {
       try { pick.release({ success: false }); } catch {}
     }
-    console.error(`[fetchSolanaAccountInfo] Errore:`, e);
+    console.log(`[fetchSolanaAccountInfo] Errore:`, e);
     return null;
   }
 }

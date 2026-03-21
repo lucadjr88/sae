@@ -1,12 +1,19 @@
 // @ts-nocheck
 
 // Implementazione reale spostata da ap
-import { normalizeOpName } from '@/services/utils';
+import { normalizeOpName } from '@/utils/utils';
 import { setLoadingBackgroundState, updateProgress } from '@/ui/elements/loading';
 import { displayFeeResults } from '@/ui/elements/fees_playload';
 import { displayResourceResults } from '@/ui/elements/resource_playload';
+import { fetchAndDisplayRentals } from '@/ui/elements/rental_playload';
+import { setRentalLoader } from '@/ui/elements/toggleSwitch';
 import type { FleetsRequest, FleetsResponse, WalletSageFeesStreamRequest, FleetBreakdownRequest, FleetBreakdownResponse, ApiError } from '@/types/api';
 import type { FeesByFleet } from '@/types/operation-list';
+import { initializeToggleSwitch } from '@/ui/elements/toggleSwitch';
+import { rentalState_playload } from '@/ui/elements/rentalState_playload';
+import { startHideTimer } from '@/ui/elements/sideBar';
+
+export let data: any = null; // Variabile globale per condividere i dati con rentalState_playload
 
 async function fetchJson<Req, Res>(url: string, init: RequestInit & { body?: Req }): Promise<Res> {
 	const headers = { 'Content-Type': 'application/json', ...init.headers };
@@ -16,7 +23,9 @@ async function fetchJson<Req, Res>(url: string, init: RequestInit & { body?: Req
 		if (!response.ok) {
 			throw { type: 'http' as const, status: response.status, message: response.statusText };
 		}
-		const data = await response.json();
+		 data = await response.json();
+		// Aggiorniamo la variabile globale con i dati ricevuti
+
 		return data as Res;
 	} catch (error) {
 		if (typeof error === 'object' && error !== null && 'type' in error) {
@@ -85,10 +94,16 @@ export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: stri
 import { setCurrentProfileId, setLastAnalysisParams, setAnalysisStartTime, setProgressInterval, progressInterval, currentProfileId } from '@/utils/state';
 
 export function processAnalysisData(data: any) {
-	const fleets = data.fleets || [];
+	const fleets = (data.fleets || []).map((f: any) => ({
+		...f,
+		isListed: typeof f.isListed === 'boolean' ? f.isListed : false,
+		isLoaned: typeof f.isLoaned === 'boolean' ? f.isLoaned : false,
+		isRented: typeof f.isRented === 'boolean' ? f.isRented : false
+	}));
 	const walletPubkey = data.walletAuthority || data.feePayer || null;
 	const fleetNames: { [account: string]: string } = {};
 	const fleetIsRented: { [account: string]: boolean } = {};
+	const fleetStatus: { [account: string]: 'owned' | 'listed' | 'borrowed' | 'rented' } = {};
 	// Costruisci set di tutte le chiavi/callsign delle rentedFleets
 	const rentedFleetKeys = new Set();
 	if (Array.isArray(data.rentedFleets)) {
@@ -117,28 +132,64 @@ export function processAnalysisData(data: any) {
 			if (f.data.fleetShips) {
 				fleetNames[f.data.fleetShips] = f.callsign;
 				fleetIsRented[f.data.fleetShips] = f.isRented;
+				fleetStatus[f.data.fleetShips] = f.isRented ? 'borrowed' : 'owned';
 			}
 			fleetNames[f.key] = f.callsign;
 			fleetIsRented[f.key] = f.isRented;
+			fleetStatus[f.key] = f.isRented ? 'borrowed' : 'owned';
 			if (f.data.fuelTank) {
 				fleetNames[f.data.fuelTank] = f.callsign;
 				fleetIsRented[f.data.fuelTank] = f.isRented;
+				fleetStatus[f.data.fuelTank] = f.isRented ? 'borrowed' : 'owned';
 			}
 			if (f.data.ammoBank) {
 				fleetNames[f.data.ammoBank] = f.callsign;
 				fleetIsRented[f.data.ammoBank] = f.isRented;
+				fleetStatus[f.data.ammoBank] = f.isRented ? 'borrowed' : 'owned';
 			}
 			if (f.data.cargoHold) {
 				fleetNames[f.data.cargoHold] = f.callsign;
 				fleetIsRented[f.data.cargoHold] = f.isRented;
+				fleetStatus[f.data.cargoHold] = f.isRented ? 'borrowed' : 'owned';
 			}
 		}
 	});
+
+	// FIX MINIMA: aggiungi nomi anche da rentedFleets se non già presenti
+	if (Array.isArray(data.rentedFleets)) {
+		data.rentedFleets.forEach(f => {
+			if (f && typeof f === 'object') {
+				const key = (f.pubkey || f.fleet || '').trim();
+				const label = (f.fleet_label || f.callsign || '').trim();
+				const owner = f.owner_profile || '';
+				const rentedCrew = f.rented_crew || 0;
+				if (key && label && !fleetNames[key]) {
+					fleetNames[key] = label;
+					fleetIsRented[key] = true;
+				}
+				// Se la flotta è tua (owner_profile === profileId), distingui tra "borrowed" (attiva) e "listed" (disponibile)
+				if (key && owner && owner === data.profileId) {
+					// Se la flotta ha un campo active true, è "borrowed" (attualmente affittata), altrimenti "listed"
+					if (typeof f.active === 'boolean' && f.active) {
+						fleetStatus[key] = 'borrowed';
+					} else {
+						fleetStatus[key] = 'listed';
+					}
+				} else if (key && owner && owner !== data.profileId) {
+					fleetStatus[key] = 'borrowed';
+				} else if (key && !fleetStatus[key]) {
+					fleetStatus[key] = 'rented';
+				}
+			}
+		});
+	}
+
 	return {
 		fleets,
 		walletPubkey,
 		fleetNames,
-		fleetIsRented
+		fleetIsRented,
+		fleetStatus
 	};
 }
 
@@ -181,7 +232,7 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		updateProgress();
 		console.log('[analyzeFees] updateProgress() completed successfully');
 	} catch (error) {
-		console.error('[analyzeFees] Error in updateProgress():', error);
+		console.log('[analyzeFees] Error in updateProgress():', error);
 	}
 
 	try {
@@ -206,6 +257,8 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 			throw new Error('analyze-profile request failed: ' + (error.message || error));
 		}
 		console.log('[analyzeFees] About to process data');
+		// Patch minima: aggiungi profileId al payload per la logica di fleetStatus
+		if (profileId) data.profileId = profileId;
 		const processed = processAnalysisData(data);
 		console.log('Data processed for display:', processed);
 		//window.updateProgress(`Analyzed ${processed.fleets.length} fleets`);
@@ -219,7 +272,7 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		const processedTxs = data.transactionCount24h || 0;
 		const cacheMsg = data.fromCache ? ' (from cache)' : '';
 		//window.updateProgress(`Completed: ${processedTxs}/${totalSigs} transactions${cacheMsg}`);
-		
+
 		try {
 			const profileIconEnd = document.getElementById('profileIcon');
 			if (profileIconEnd) { profileIconEnd.textContent = '👤'; profileIconEnd.title = ''; }
@@ -230,12 +283,15 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		// Passa direttamente la mappa fleetIsRented e lascia che la UI usi solo il campo isRented del backend
 		displayFeeResults(data, processed.fleetNames, processed.fleetIsRented, processed.fleets);
 		displayResourceResults(data);
+		//setRentalLoader(fetchAndDisplayRentals);
+		rentalState_playload(data);
+
 		if (data && data.breakdown && data.breakdown.feesByFleet && typeof data.breakdown.feesByFleet === 'object') {
 			displayFleetOperationCharts(data.breakdown.feesByFleet, processed.fleetNames);
 			const sidebar = document.getElementById('sidebar');
 			if (sidebar) sidebar.style.display = '';
 		} else {
-			console.error('Data error:', data);
+			console.log('Data error:', data);
 			const resultsDiv = document.getElementById('results') as HTMLDivElement | null;
 			if (resultsDiv) {
 				resultsDiv.innerHTML = `<div class="error">Error: ${data}</div>`;
@@ -243,7 +299,7 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		}
 		updateCacheTooltip(cacheHit, cacheTimestamp);
 	} catch (error) {
-		console.error('Analysis error:', error);
+		console.log('Analysis error:', error);
 		const resultsDiv = document.getElementById('results') as HTMLDivElement | null;
 		if (resultsDiv) {
 			resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
@@ -255,6 +311,12 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 			btn.disabled = false;
 			btn.textContent = 'Analyze 24h';
 		}
+
+		// Initialize toggle switch (only once)
+		initializeToggleSwitch();
+
+		startHideTimer();
+		//console.log('[displayFeeResults] Results displayed successfully');
 	}
 }
 

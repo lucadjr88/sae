@@ -32,7 +32,7 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
   } catch (e: any) {
     const errorMsg = e?.message || 'Invalid token';
     const status = errorMsg === 'Token expired' ? 401 : 403;
-    console.error(`[authenticateToken] ❌ Token verification failed | ${errorMsg} | ${method} ${path}`);
+    console.log(`[authenticateToken] ❌ Token verification failed | ${errorMsg} | ${method} ${path}`);
     return res.status(status).json({ error: errorMsg });
   }
 }

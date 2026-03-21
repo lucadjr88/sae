@@ -240,14 +240,14 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
       }
       if (!tx) {
         failed.push(sig.signature);
-        console.error(`[fetchWalletTransactions] FALLIMENTO signature=${sig.signature} dopo ${maxRetries} tentativi. Ultimo errore:`, lastErr);
+        console.log(`[fetchWalletTransactions] FALLIMENTO signature=${sig.signature} dopo ${maxRetries} tentativi. Ultimo errore:`, lastErr);
       }
     });
     
     await fetchWithLimit(tasks, MAX_CONCURRENT);
     return { txs, total, failed };
   } catch (e: any) {
-    console.error('[fetchWalletTransactions] Errore:', e?.message || e);
+    console.log('[fetchWalletTransactions] Errore:', e?.message || e);
     return { txs: [], total: 0, failed: [] };
   }
 }

@@ -101,7 +101,7 @@ router.get('/assets/manifest', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.json(manifest);
   } catch (err: any) {
-    console.error('[assets/manifest] Error:', err);
+    console.log('[assets/manifest] Error:', err);
     res.status(500).json({ error: 'Failed to generate manifest', details: err.message });
   }
 });

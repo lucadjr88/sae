@@ -1,0 +1,92 @@
+.rentalState {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+
+.rentalState-header {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 50%;
+}
+
+.rentalState-table-container {
+  display: flex;
+  flex-direction: row;
+}
+
+.rentalState-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  background-color: var(--table-bg);
+box-shadow: 0 4px 6px #000000cf;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #b05bff4f;
+}
+
+.rentalState-table thead {
+  background-color: var(--table-header-bg);
+  border-bottom: 2px solid var(--table-border);
+  background-color: #892be27a;
+}
+
+.rentalState-table th {
+  padding: 12px 15px;
+  text-align: left;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  /* Evita di selezionare il testo al doppio click */
+  position: relative;
+}
+
+.rentalState-table th:hover {
+  background-color: #f0f0f0;
+  color: var(--accent-color);
+}
+
+/* Icona indicativa (opzionale) */
+.rentalState-table th::after {
+  font-size: 0.7rem;
+  opacity: 0.3;
+}
+
+.rentalState-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--table-border);
+  vertical-align: middle;
+}
+
+/* Effetto Zebra & Hover */
+.rentalState-table tbody tr:nth-child(even) {
+  background-color: #fafafa3d;
+}
+
+.rentalState-table tbody tr:hover {
+  background-color: var(--row-hover);
+  transition: background-color 0.2s ease;
+}
+
+.loaned {
+  margin-block: auto;
+  block-size: auto;
+  border: 6px solid #6ccebcb8;
+  margin: 10px;
+}
+
+.borrowed {
+  margin-block: auto;
+  block-size: auto;
+  border: 6px solid #f9a602b8;
+  margin: 10px;
+}

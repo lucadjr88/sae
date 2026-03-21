@@ -1,5 +1,5 @@
 import { setCachedResourceView } from '@/ui/elements/toggleSwitch';
-import { normalizeOpName } from '@/services/utils';
+import { normalizeOpName } from '@/utils/utils';
 import resourceMintImageCsvRaw from '@/assets/staratlas_resource_mint_image.csv?raw';
 
 type ResourceMaterial = {

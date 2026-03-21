@@ -9,7 +9,7 @@ router.get('/get-rented-fleets', async (req, res) => {
   console.log(`[get-rented-fleets] INIZIO handler per profileId=${profileId}`);
   try {
     if (!profileId) {
-      console.error(`[get-rented-fleets] Errore: profileId mancante`);
+      console.log(`[get-rented-fleets] Errore: profileId mancante`);
       return res.status(400).json({ error: 'Missing profileId' });
     }
     const rentedFleets = await fetchProfileRentedFleets(profileId);
@@ -19,7 +19,7 @@ router.get('/get-rented-fleets', async (req, res) => {
     res.json({ profileId, rentedFleets });
     console.log(`[get-rented-fleets] FINE handler profileId=${profileId}`);
   } catch (e: any) {
-    console.error(`[get-rented-fleets] Errore: ${e.message || String(e)}`);
+    console.log(`[get-rented-fleets] Errore: ${e.message || String(e)}`);
     res.status(500).json({ error: e.message || String(e) });
   }
 });

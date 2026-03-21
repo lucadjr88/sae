@@ -20,7 +20,7 @@ export function updateCacheTooltip(cacheHit: string | null, cacheTimestamp: stri
     });*/
 
     if (!profileIcon || !cacheTooltip || !cacheTooltipIcon || !cacheTooltipTitle || !cacheTooltipStatus || !cacheTooltipAge) {
-        console.error('[updateCacheTooltip] missing elements, aborting');
+        console.log('[updateCacheTooltip] missing elements, aborting');
         return;
     }
 
@@ -79,7 +79,7 @@ export async function wipeAndReload(profileId?: string): Promise<void> {
 
     const resultContainer = document.getElementById('result-container') as HTMLDivElement | null;
     if (!resultContainer) {
-        console.error('[wipeAndReload] #result-container not found');
+        console.log('[wipeAndReload] #result-container not found');
         return;
     }
     resultContainer.innerHTML = '';

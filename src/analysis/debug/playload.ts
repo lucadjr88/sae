@@ -85,7 +85,7 @@ export async function playloadHandler(req: Request, res: Response) {
     // Return the clean payload - will be saved by analyzeProfile after merging fees
     return res.json(cleanPayload);
   } catch (e: any) {
-    console.error('[playload] error', e);
+    console.log('[playload] error', e);
     return res.status(500).json({ error: e?.message || 'playload failed' });
   }
 }

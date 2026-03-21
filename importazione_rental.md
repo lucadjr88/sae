@@ -1,0 +1,4 @@
+Integrazione nel mio backend in modo modulare. la ricerca non deve avvenire insieme ad analyze ma deve essere avviata solo alla prima visualizzazione della pagina rental tramite attuale vertical selector.
+il frontend farà la chiamata al backend per ottenere i dati necessari e (analogamente a come avviene per fee e resource) creerà il contenitore rental dentro result-container e popolerà i dati con una semplice e minimale tabella senza alcun effetto o funzionalità. Il focus è tutto sul corretto reperimento dei dati e fedeltà al codice sorgente ignorando completamente la ui.
+
+Le modifiche devono essere modulari e minimali e non intaccare la logica attuale. 

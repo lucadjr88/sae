@@ -1,77 +1,127 @@
 .toggle-switch-container {
-    top: 50%;
-    transform: translateY(-50%); /* Centra il contenitore rispetto alla sua altezza */
-    position: fixed;
-    /*visibility: hidden; /* Nascondiamo il contenitore finché non è pronto */
+  top: 10%;
+  position: relative;
+  z-index: 1000;
+  width: min-content;
+}
+
+/* Contenitore principale del selettore a 3 stati */
+.vertical-selector {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  width: 50px;
+  height: 180px; /* Aumentato da 120px a 180px per la terza icona */
+  border-radius: 12px;
+  padding: 5px 0;
+  box-sizing: border-box;
+}
+
+/* Nascondiamo i radio button nativi */
+.toggle-switch-input{
+  display: none;
+}
+
+/* Il "pallino" mobile (Slider Scuro) */
+/* Lo attacchiamo a un elemento vuoto o al contenitore stesso tramite after/before */
+.vertical-selector::before {
+  position: absolute;
+  content: "";
+  height: 60px;      /* Altezza leggermente ridotta per centrare meglio l'icona */
+  width: 60px;       
+  top: 2px;          /* Posizione iniziale (opzione 1) */
+  transition: 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); /* Effetto rimbalzo soft */
+  border-radius: 8px;
+  z-index: 1;
+  box-shadow: 0 2px 5px #0003;
+}
+
+/* LOGICA DI MOVIMENTO dello slider scuro */
+/* Se il secondo radio è selezionato, scendi di circa 60px */
+#opt-resource:checked ~ .vertical-selector::before {
+  transform: translateY(90px);
+}
+
+/* Se il terzo radio è selezionato, scendi di circa 120px */
+#opt-rental:checked ~ .vertical-selector::before {
+  transform: translateY(150px);
+}
+
+/* Stile delle icone (Label) */
+.selector-item {
+  width: 50px;
+  height: 60px; /* Ogni slot occupa 60px (180/3) */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  z-index: 2; /* Sopra lo slider scuro */
+  transition: transform 0.2s;
+  padding: 10px 0; /* Spazio verticale per centrare meglio le icone */
+}
+
+.selector-item img {
+  width: 55px; /* Dimensione icona bilanciata */
+  height: 55px;
+  object-fit: contain;
+  pointer-events: none;
+  /* Opzionale: rendiamo le icone non selezionate un po' più opache */
+  opacity: 0.7;
+  transition: opacity 0.3s;
+}
+
+/* Icona attiva: piena opacità */
+input:checked + .selector-item img {
+  opacity: 1;
+  transform: scale(1.1); /* Leggero zoom sull'icona attiva */
+}
+
+/* Media Query per Mobile (6.36" circa < 768px di larghezza viewport) */
+@media screen and (max-width: 768px) {
+  
+  .toggle-switch-container {
+    top: 15%; /* Leggermente più basso per essere raggiunto dal pollice */
+    /*left: 10px; /* Margine dal bordo dello schermo */
   }
 
-  .vertical-switch {
-    position: relative;
-    display: inline-block;
-    width: 50px;
-    height: 120px;
+  .vertical-selector {
+    width: 65px;  /* Più largo per facilitare il touch */
+    height: 240px; /* Aumentato per dare respiro alle 3 icone */
+    border-radius: 15px;
+    padding: 8px 0;
   }
 
-  /* Nascondiamo l'input checkbox standard */
-  .vertical-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  /* Lo sfondo dello switch (Slider) */
-  .slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
+  /* Il "pallino" mobile (Slider Scuro) */
+  .vertical-selector::before {
+    height: 70px; /* Più grande per l'estetica mobile */
+    width: 65px;
+    top: 5px;     /* Offset iniziale */
     left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #8e97c852;;
-    transition: .4s;
     border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px 0; /* Ridotto leggermente per far toccare le icone ai bordi */
-    box-sizing: border-box;
   }
 
-  /* Il "pallino" mobile (Pointer) */
-  .slider:before {
-    position: absolute;
-    content: "";
-    height: 64px; /* La tua altezza desiderata */
-    width: 51px;  /* Quasi quanto lo slider (50px) */
-    left: 0px;    /* Centrato orizzontalmente rispetto ai 50px dello slider */
-    top: -0.5px;   /* Posizione iniziale sopra la prima icona */
-    background-color: #272c44e0;
-    transition: 0.4s ease-in-out;
-    border-radius: 8px; /* Arrotondato come lo sfondo */
-    z-index: 2;
-    box-shadow: 0 2px 5px #0003;
+  /* LOGICA DI MOVIMENTO (Ricalcolata su altezza 240px) */
+  /* Ogni slot ora è circa 76px (230/3) */
+  
+  #opt-resource:checked ~ .vertical-selector::before {
+    transform: translateY(77px);
   }
 
-  /* Calcolo: Altezza Tot (120) - Altezza Pallino (64) - Margine totale (5) = 51px */
-  input:checked + .slider:before {
-    transform: translateY(60px);
+  #opt-rental:checked ~ .vertical-selector::before {
+    transform: translateY(154px);
   }
 
-  /* Stile delle icone */
-  .toggleSwitch-icon {
-    width: 50px;
-    height: 50px;
-    z-index: 1; /* Sotto il pallino */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    /*transition: opacity 0.3s; /* Transizione fluida per l'evidenza */
+  /* Stile delle icone (Label) */
+  .selector-item {
+    width: 65px;
+    height: 76px; /* Slot aumentato */
+    padding: 15px 0;
   }
 
-  .toggleSwitch-icon img {
-    max-width: 100%; /* Lascia un po' di respiro rispetto ai bordi del pallino */
-    max-height: 100%;
-    display: block;
-    pointer-events: none;
+  .selector-item img {
+    width: 45px; /* Icone più grandi e leggibili su AMOLED */
+    height: 45px;
   }
+}

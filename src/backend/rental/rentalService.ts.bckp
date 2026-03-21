@@ -1,0 +1,621 @@
+  // Decodifica fedele a Rust/Borsh della struct Fleet per estrarre FleetState e settori
+  // Aggiunge log di debug per ogni stato
+  function decodeFleetStateFields(data: Buffer) {
+    let off = 0;
+    // discriminator [u8;8]
+    off += 8;
+    // version u8
+    off += 1;
+    // game_id [u8;32]
+    off += 32;
+    // owner_profile [u8;32]
+    off += 32;
+    // fleet_ships [u8;32]
+    off += 32;
+    // sub_profile: OptionalNonSystemPubkey (1 + 32)
+    off += 1 + 32;
+    // sub_profile_invalidator [u8;32]
+    off += 32;
+    // faction u8
+    off += 1;
+    // fleet_label [u8;32]
+    off += 32;
+    // ship_counts: ShipCounts (u32,u32,u16*8) = 4+4+2*8=20
+    off += 20;
+    // warp_cooldown_expires_at i64
+    off += 8;
+    // scan_cooldown_expires_at i64
+    off += 8;
+    // stats: ShipStats (u32*7 + u16*2 + u8*2 + u32*5) = 4*7+2*2+2+4*5=54
+    off += 54;
+    // cargo_hold [u8;32]
+    off += 32;
+    // fuel_tank [u8;32]
+    off += 32;
+    // ammo_bank [u8;32]
+    off += 32;
+    // update_id u64
+    off += 8;
+    // bump u8
+    off += 1;
+    // Ora siamo all'inizio di FleetState
+    const fleetStateOffset = off;
+    if (data.length <= fleetStateOffset) return { sector: null, from_sector: null, to_sector: null, current_sector: null };
+    const stateTag = data.readUInt8(fleetStateOffset);
+    let o = fleetStateOffset + 1;
+    let sector = null, from_sector = null, to_sector = null, current_sector = null;
+    switch (stateTag) {
+      case 0: // StarbaseLoadingBay
+        console.log('[fleet-state] StarbaseLoadingBay');
+        break;
+      case 1: // Idle
+        sector = [data.readBigInt64LE(o).toString(), data.readBigInt64LE(o + 8).toString()];
+        console.log('[fleet-state] Idle sector:', sector);
+        break;
+      case 2: // MineAsteroid
+        console.log('[fleet-state] MineAsteroid');
+        break;
+      case 3: // MoveWarp
+        from_sector = [data.readBigInt64LE(o).toString(), data.readBigInt64LE(o + 8).toString()];
+        to_sector = [data.readBigInt64LE(o + 16).toString(), data.readBigInt64LE(o + 24).toString()];
+        console.log('[fleet-state] MoveWarp from_sector:', from_sector, 'to_sector:', to_sector);
+        break;
+      case 4: // MoveSubwarp
+        from_sector = [data.readBigInt64LE(o).toString(), data.readBigInt64LE(o + 8).toString()];
+        to_sector = [data.readBigInt64LE(o + 16).toString(), data.readBigInt64LE(o + 24).toString()];
+        current_sector = [data.readBigInt64LE(o + 32).toString(), data.readBigInt64LE(o + 40).toString()];
+        console.log('[fleet-state] MoveSubwarp from_sector:', from_sector, 'to_sector:', to_sector, 'current_sector:', current_sector);
+        break;
+      case 5: // Respawn
+        sector = [data.readBigInt64LE(o).toString(), data.readBigInt64LE(o + 8).toString()];
+        console.log('[fleet-state] Respawn sector:', sector);
+        break;
+      default:
+        console.warn('[fleet-state] Stato FleetState sconosciuto:', stateTag);
+        break;
+    }
+    return { sector, from_sector, to_sector, current_sector };
+  }
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import bs58 from 'bs58';
+import { PublicKey, type AccountInfo, type Connection } from '@solana/web3.js';
+
+import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager';
+import type { ContractQueryOptions, FleetStarbase, RentalContract } from './types';
+import {
+  CONTRACT_DISCRIMINATOR,
+  decodeContractState,
+  decodeFleetMeta,
+  decodeFleetShipsEntries,
+  decodeRentalState,
+  decodeShipName,
+} from './decode';
+
+interface CacheEntry<T> { at: number; items: T[] }
+interface FleetCacheEntry { fleet_name?: string; fleet_composition?: string; fleet_ships?: string; starbase?: FleetStarbase }
+
+type MaybeAccount = AccountInfo<Buffer> | null;
+
+const MAX_LIMIT = 2000;
+const SRSLY_PROGRAM_ID = 'SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT';
+const CACHE_TTL_MS = 30_000;
+
+function chunk<T>(input: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < input.length; i += size) out.push(input.slice(i, i + size));
+  return out;
+}
+
+function clampLimit(limit: number | undefined): number | undefined {
+  if (limit === undefined || !Number.isFinite(limit) || limit <= 0) return undefined;
+  return Math.min(Math.floor(limit), MAX_LIMIT);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRpcErrorType(error: unknown): '429' | '503' | 'error' {
+  const status = typeof (error as { status?: unknown })?.status === 'number'
+    ? Number((error as { status?: number }).status)
+    : undefined;
+  const message = error instanceof Error ? error.message : String(error ?? '');
+
+  if (status === 429 || /429|Too Many Requests/i.test(message)) return '429';
+  if (status === 503 || /503|Service Unavailable/i.test(message)) return '503';
+  return 'error';
+}
+
+export class RentalService {
+  private contractsCache: CacheEntry<RentalContract> | null = null;
+  private readonly fleetMetaCache = new Map<string, FleetCacheEntry>();
+  private readonly shipNameCache = new Map<string, string>();
+
+  constructor(
+    private readonly programId: PublicKey,
+    private readonly cacheTtlMs: number,
+  ) {}
+
+  async getContracts(options: ContractQueryOptions = {}): Promise<RentalContract[]> {
+    const profileId = this.resolveProfileId(options.profileId);
+    const contracts = await this.readContracts(profileId);
+    return this.applyFilters(contracts, options);
+  }
+
+  // Salva contracts in cache/<profileId>/rented_contracts/contracts.json
+  async saveContractsToCache(profileId: string, contracts: RentalContract[]): Promise<void> {
+    try {
+      const dir = path.join(process.cwd(), 'cache', profileId, 'rented_contracts');
+      await fs.mkdir(dir, { recursive: true });
+      const file = path.join(dir, 'contracts.json');
+      await fs.writeFile(file, JSON.stringify(contracts, null, 2), 'utf8');
+    } catch (err) {
+      console.error(`[rentalService] Failed to save contracts cache for profile=${profileId}:`, err);
+    }
+  }
+
+  private resolveProfileId(profileId: string | undefined): string {
+    const cleaned = profileId?.trim();
+    return cleaned && cleaned.length > 0 ? cleaned : 'default';
+  }
+
+  private isFresh<T>(cache: CacheEntry<T> | null): cache is CacheEntry<T> {
+    return !!cache && Date.now() - cache.at <= this.cacheTtlMs;
+  }
+
+  private async executeRpc<T>(
+    profileId: string,
+    operation: (connection: Connection) => Promise<T>,
+  ): Promise<T> {
+    const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
+    const maxAttempts = Math.max(3, Math.round(pool.length * 1.5));
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | null = null;
+      const startedAt = Date.now();
+
+      try {
+        pick = await RpcPoolManager.pickRpcConnection(profileId, {
+          waitForMs: 3000,
+          allowStale: attempt > 2,
+        });
+
+        const result = await operation(pick.connection as Connection);
+        pick.release({ success: true, latencyMs: Date.now() - startedAt });
+        return result;
+      } catch (error) {
+        lastError = error;
+
+        if (pick?.release) {
+          const errorType = getRpcErrorType(error);
+          try {
+            pick.release({ success: false, errorType });
+          } catch {}
+
+          if (errorType === '429' || errorType === '503') {
+            const backoffMs = Math.min(5000 * Math.pow(2, Math.floor(attempt / 2)), 30000);
+            await sleep(backoffMs + Math.floor(Math.random() * 1000));
+            continue;
+          }
+        }
+
+        await sleep(100 + Math.floor(Math.random() * 200));
+      }
+    }
+
+    if (lastError instanceof Error) throw lastError;
+    throw new Error('Rental RPC request failed');
+  }
+
+  private async readContracts(profileId: string): Promise<RentalContract[]> {
+    if (this.isFresh(this.contractsCache)) return this.contractsCache.items.map((item) => ({ ...item }));
+    const items = await this.fetchContractsOnChain(profileId);
+    this.contractsCache = { at: Date.now(), items };
+    // Salva in cache locale
+    this.saveContractsToCache(profileId, items).catch((err) => {
+      console.error('[rentalService] Failed to save contracts cache:', err);
+    });
+    return items.map((item) => ({ ...item }));
+  }
+  // Recupera i rental contracts da blockchain (prima chiamata RPC)
+  private async fetchContractsOnChain(profileId: string): Promise<RentalContract[]> {
+    const accounts = await this.executeRpc(profileId, (connection) =>
+      connection.getProgramAccounts(this.programId, {
+        filters: [{ memcmp: { offset: 0, bytes: bs58.encode(CONTRACT_DISCRIMINATOR) } }],
+        commitment: 'confirmed',
+      }),
+    );
+
+    const contracts: RentalContract[] = [];
+    // Prepara lista di fleet addresses da decodificare dopo
+    const fleetAddresses: string[] = [];
+    for (const { pubkey, account } of accounts) {
+      const decoded = decodeContractState(account.data);
+      if (!decoded || decoded.to_close) continue;
+      contracts.push({
+        address: pubkey.toBase58(),
+        owner: decoded.owner,
+        owner_profile: decoded.owner_profile,
+        fleet: decoded.fleet,
+        game_id: decoded.game_id,
+        rate: decoded.rate,
+        duration_min: decoded.duration_min,
+        duration_max: decoded.duration_max,
+        payment_frequency: decoded.payment_frequency,
+        to_close: decoded.to_close,
+        current_rental_state: decoded.current_rental_state,
+        owner_token_account: decoded.owner_token_account,
+      });
+      fleetAddresses.push(decoded.fleet);
+    }
+
+    await this.populateFleetMetadata(contracts, profileId);
+    await this.populateRentalTimes(contracts, profileId);
+
+    // Decodifica dettagli fleet (crew, cargo, fuel, ammo, stats)
+    // Recupera accounts delle fleet
+    const fleetAccounts = await this.fetchAccountsByAddresses(fleetAddresses, profileId);
+      for (let i = 0; i < contracts.length; i++) {
+        const contract = contracts[i];
+        const fleetAccount = fleetAccounts.get(contract.fleet);
+        if (!fleetAccount) continue;
+        const data = fleetAccount.data;
+        try {
+          // Offsets basati sulla struct Rust ufficiale Fleet
+          const readU16 = (buf: Buffer, off: number) => buf.readUInt16LE(off);
+          const readU32 = (buf: Buffer, off: number) => buf.readUInt32LE(off);
+          const readPubkey = (buf: Buffer, off: number) => new PublicKey(buf.subarray(off, off + 32)).toBase58();
+          let off = 8; // skip discriminator
+          const version = data.readUInt8(off); off += 1;
+          const game_id = readPubkey(data, off); off += 32;
+          const owner_profile = readPubkey(data, off); off += 32;
+          const fleet_ships = readPubkey(data, off); off += 32;
+          const sub_profile = readPubkey(data, off); off += 32;
+          const sub_profile_invalidator = readPubkey(data, off); off += 32;
+          const faction = data.readUInt8(off); off += 1;
+          const fleet_label = data.subarray(off, off + 32).toString('utf8').replace(/\0+$/g, ''); off += 32;
+          // ShipCounts
+          const total = readU32(data, off); off += 4;
+          const updated = readU32(data, off); off += 4;
+          const xx_small = readU16(data, off); off += 2;
+          const x_small = readU16(data, off); off += 2;
+          const small = readU16(data, off); off += 2;
+          const medium = readU16(data, off); off += 2;
+          const large = readU16(data, off); off += 2;
+          const capital = readU16(data, off); off += 2;
+          const commander = readU16(data, off); off += 2;
+          const titan = readU16(data, off); off += 2;
+          const ship_counts = { total, updated, xx_small, x_small, small, medium, large, capital, commander, titan };
+          const warp_cooldown_expires_at = data.readBigInt64LE(off); off += 8;
+          const scan_cooldown_expires_at = data.readBigInt64LE(off); off += 8;
+          // movement_stats
+          const subwarp_speed = readU32(data, off); off += 4;
+          const warp_speed = readU32(data, off); off += 4;
+          const max_warp_distance = readU16(data, off); off += 2;
+          const warp_cool_down = readU16(data, off); off += 2;
+          const subwarp_fuel_consumption_rate = readU32(data, off); off += 4;
+          const warp_fuel_consumption_rate = readU32(data, off); off += 4;
+          const planet_exit_fuel_amount = readU32(data, off); off += 4;
+          const movement_stats = { subwarp_speed, warp_speed, max_warp_distance, warp_cool_down, subwarp_fuel_consumption_rate, warp_fuel_consumption_rate, planet_exit_fuel_amount };
+          // cargo_stats
+          const cargo_capacity = readU32(data, off); off += 4;
+          const fuel_capacity = readU32(data, off); off += 4;
+          const ammo_capacity = readU32(data, off); off += 4;
+          const ammo_consumption_rate = readU32(data, off); off += 4;
+          const food_consumption_rate = readU32(data, off); off += 4;
+          const mining_rate = readU32(data, off); off += 4;
+          const upgrade_rate = readU32(data, off); off += 4;
+          const cargo_transfer_rate = readU32(data, off); off += 4;
+          const tractor_beam_gather_rate = readU32(data, off); off += 4;
+          const cargo_stats = { cargo_capacity, fuel_capacity, ammo_capacity, ammo_consumption_rate, food_consumption_rate, mining_rate, upgrade_rate, cargo_transfer_rate, tractor_beam_gather_rate };
+          // misc_stats
+          const required_crew = readU16(data, off); off += 2;
+          const passenger_capacity = readU16(data, off); off += 2;
+          const crew_count = readU16(data, off); off += 2;
+          const rented_crew = readU16(data, off); off += 2;
+          const respawn_time = readU16(data, off); off += 2;
+          const scan_cool_down = readU16(data, off); off += 2;
+          const sdu_per_scan = readU32(data, off); off += 4;
+          const scan_cost = readU32(data, off); off += 4;
+          const placeholder = readU32(data, off); off += 4;
+          const placeholder2 = readU32(data, off); off += 4;
+          const placeholder3 = readU32(data, off); off += 4;
+          const misc_stats = { required_crew, passenger_capacity, crew_count, rented_crew, respawn_time, scan_cool_down, sdu_per_scan, scan_cost, placeholder, placeholder2, placeholder3 };
+          // chiavi cargo/fuel/ammo
+          const cargo_hold = readPubkey(data, off); off += 32;
+          const fuel_tank = readPubkey(data, off); off += 32;
+          const ammo_bank = readPubkey(data, off); off += 32;
+
+          // --- Fleet position extraction (int32LE, offsets 443: x=0, y=-16) ---
+          const posOffset = 443;
+          let fleet_position_x = null, fleet_position_y = null;
+          if (data.length >= posOffset + 8) {
+            fleet_position_x = data.readInt32LE(posOffset);
+            fleet_position_y = data.readInt32LE(posOffset + 4);
+          }
+
+          contract.crew_count = crew_count;
+          contract.rented_crew = rented_crew;
+          contract.cargo_hold = cargo_hold;
+          contract.fuel_tank = fuel_tank;
+          contract.ammo_bank = ammo_bank;
+          contract.stats = { movement_stats, cargo_stats, misc_stats };
+          if (fleet_position_x !== null && fleet_position_y !== null) {
+            contract.fleet_position_x = fleet_position_x;
+            contract.fleet_position_y = fleet_position_y;
+          }
+
+          // --- Decodifica campi settore da FleetState fedele a Rust ---
+          const { sector, from_sector, to_sector, current_sector } = decodeFleetStateFields(data);
+          contract.sector = sector;
+          contract.from_sector = from_sector;
+          contract.to_sector = to_sector;
+          contract.current_sector = current_sector;
+        } catch (e) {
+          // ignora errori di parsing
+        }
+    }
+
+    // --- Fetch fuel_level for each contract's fuel_tank ---
+    // Collect all unique fuel_tank pubkeys
+    const fuelTankAddresses = Array.from(new Set(
+      contracts.map((c) => c.fuel_tank).filter((x) => typeof x === 'string' && x.length === 44)
+    ));
+if (fuelTankAddresses.length > 0) {
+  // Batch fetch SPL balances con rpcManager
+  const { connection, release } = await RpcPoolManager.pickRpcConnection(profileId);
+  const balanceResults = await Promise.all(
+    fuelTankAddresses.map(async (fuelTank) => {
+      try {
+        const pk = new PublicKey(fuelTank);
+        // Decodifica diretta stile CargoPod: salta header 102 byte, leggi 8 byte LE
+        // Recupera il livello carburante di ogni fuel tank (chiamata RPC per fuel tank)
+        const accInfo = await connection.getAccountInfo(pk);
+        if (accInfo && accInfo.data && accInfo.data.length >= 118) {
+          // Offset corretto per FUEL: 110
+          const amount = accInfo.data.readBigUInt64LE(110);
+          console.log(`[fuel-balance] fuelTank: ${fuelTank} | decoded amount (offset 110): ${amount.toString()}`);
+          return { fuelTank, balance: Number(amount) };
+        } else {
+          console.error(`[fuel-balance] ERROR no data or too short for fuelTank: ${fuelTank}`);
+          return { fuelTank, balance: null };
+        }
+      } catch (err) {
+        console.error(`[fuel-balance] ERROR fuelTank: ${fuelTank} |`, err);
+        return { fuelTank, balance: null };
+      }
+    })
+  );
+  release({ success: true });
+
+  // Mappa balance su contracts
+  const balanceMap = new Map(balanceResults.map(r => [r.fuelTank, r.balance]));
+  for (const contract of contracts) {
+    const fuelTank = contract.fuel_tank;
+    if (fuelTank && balanceMap.has(fuelTank)) {
+      contract.fuel_level = balanceMap.get(fuelTank);
+    }
+  }
+}
+    return contracts;
+  }
+// Recupera account multipli tramite getMultipleAccountsInfo (batch RPC)
+
+  private async fetchAccountsByAddresses(
+    addresses: string[],
+    profileId: string,
+  ): Promise<Map<string, MaybeAccount>> {
+    const out = new Map<string, MaybeAccount>();
+
+    for (const currentChunk of chunk(addresses, 100)) {
+      const pubkeys: PublicKey[] = [];
+      const validAddresses: string[] = [];
+
+      for (const address of currentChunk) {
+        try {
+          pubkeys.push(new PublicKey(address));
+          validAddresses.push(address);
+        } catch {
+          out.set(address, null);
+        }
+      }
+
+      if (pubkeys.length === 0) continue;
+// Chiamata batch RPC per recuperare più account contemporaneamente
+
+      const results = await this.executeRpc(profileId, (connection) =>
+        connection.getMultipleAccountsInfo(pubkeys, 'confirmed'),
+      );
+
+      results.forEach((account, index) => {
+        const address = validAddresses[index];
+        if (!address) return;
+        out.set(address, account);
+      });
+    }
+
+    return out;
+  }
+// Recupera metadati delle flotte associate ai contratti (chiamata RPC per fleet)
+  private async populateFleetMetadata(
+    contracts: RentalContract[],
+    profileId: string,
+  ): Promise<void> {
+    const missing = Array.from(
+      new Set(contracts.map((contract) => contract.fleet).filter((fleet) => !this.fleetMetaCache.has(fleet))),
+    );
+
+    if (missing.length > 0) {
+      const fleetAccounts = await this.fetchAccountsByAddresses(missing, profileId);
+
+      for (const address of missing) {
+        const account = fleetAccounts.get(address);
+        if (!account) {
+          this.fleetMetaCache.set(address, {});
+          continue;
+        }
+
+        const meta = decodeFleetMeta(account.data);
+        if (!meta) {
+          this.fleetMetaCache.set(address, {});
+          continue;
+        }
+
+        this.fleetMetaCache.set(address, {
+          fleet_name: meta.fleet_name,
+          fleet_ships: meta.fleet_ships,
+          starbase: meta.starbase,
+        });
+      }
+
+      await this.populateFleetCompositions(missing, profileId);
+    }
+
+    contracts.forEach((contract) => {
+      const meta = this.fleetMetaCache.get(contract.fleet);
+      if (!meta) return;
+      if (meta.fleet_name) contract.fleet_name = meta.fleet_name;
+      if (meta.fleet_composition) contract.fleet_composition = meta.fleet_composition;
+      if (meta.starbase) contract.starbase = meta.starbase;
+    });
+  }
+
+  private async populateFleetCompositions(
+    fleetAddresses: string[],
+    profileId: string,
+  ): Promise<void> {
+    const shipsAddresses = Array.from(
+      new Set(
+        fleetAddresses
+          .map((fleetAddress) => this.fleetMetaCache.get(fleetAddress)?.fleet_ships)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    if (shipsAddresses.length === 0) return;
+
+    const shipsAccounts = await this.fetchAccountsByAddresses(shipsAddresses, profileId);
+    const entriesByShips = new Map<string, ReturnType<typeof decodeFleetShipsEntries>>();
+
+    for (const address of shipsAddresses) {
+      const account = shipsAccounts.get(address);
+      if (!account) continue;
+      const entries = decodeFleetShipsEntries(account.data).filter((entry) => entry.amount > 0);
+      entriesByShips.set(address, entries);
+    }
+
+    const missingMints = Array.from(
+      new Set(
+        Array.from(entriesByShips.values())
+          .flat()
+          .map((entry) => entry.ship_mint)
+          .filter((mint) => !this.shipNameCache.has(mint)),
+      ),
+    );
+    await this.populateShipNameCache(missingMints, profileId);
+
+    for (const fleetAddress of fleetAddresses) {
+      const meta = this.fleetMetaCache.get(fleetAddress);
+      if (!meta?.fleet_ships) continue;
+      const entries = entriesByShips.get(meta.fleet_ships);
+      if (!entries || entries.length === 0) {
+        meta.fleet_composition = 'No ships';
+        continue;
+      }
+
+      const parts = entries.map((entry) => {
+        const name = this.shipNameCache.get(entry.ship_mint) ?? entry.ship_mint.slice(0, 8);
+        return entry.amount > 1 ? `${entry.amount}x ${name}` : name;
+      });
+      meta.fleet_composition = parts.join(', ');
+    }
+  }
+
+  private async populateShipNameCache(mints: string[], profileId: string): Promise<void> {
+    if (mints.length === 0) return;
+
+    const accounts = await this.fetchAccountsByAddresses(mints, profileId);
+    for (const mint of mints) {
+      const account = accounts.get(mint);
+      if (!account) {
+        this.shipNameCache.set(mint, mint.slice(0, 8));
+        continue;
+      }
+
+      const name = decodeShipName(account.data);
+      this.shipNameCache.set(mint, name ?? mint.slice(0, 8));
+    }
+  }
+// Recupera informazioni di stato attivo del noleggio (chiamata RPC per rental state)
+  private async populateRentalTimes(
+    contracts: RentalContract[],
+    profileId: string,
+  ): Promise<void> {
+    const indexesByState = new Map<string, number[]>();
+    contracts.forEach((contract, index) => {
+      if (!contract.current_rental_state) return;
+      const existing = indexesByState.get(contract.current_rental_state);
+      if (existing) existing.push(index);
+      else indexesByState.set(contract.current_rental_state, [index]);
+    });
+
+    const addresses = Array.from(indexesByState.keys());
+    if (addresses.length === 0) return;
+// Chiamata batch RPC per recuperare più account contemporaneamente
+    for (const currentChunk of chunk(addresses, 100)) {
+      const pubkeys = currentChunk.map((address) => new PublicKey(address));
+      const accounts = await this.executeRpc(profileId, (connection) =>
+        connection.getMultipleAccountsInfo(pubkeys, 'confirmed'),
+      );
+
+      accounts.forEach((account, index) => {
+        if (!account) return;
+        const address = currentChunk[index];
+        if (!address) return;
+        const decoded = decodeRentalState(account.data);
+        if (!decoded) return;
+        const targets = indexesByState.get(address);
+        if (!targets) return;
+
+        targets.forEach((contractIndex) => {
+          const target = contracts[contractIndex];
+          if (!target) return;
+          target.rental_start_time = decoded.start_time;
+          target.rental_end_time = decoded.end_time;
+        });
+      });
+    }
+  }
+
+  private applyFilters(input: RentalContract[], options: ContractQueryOptions): RentalContract[] {
+    let out = [...input];
+
+    if (options.state === 'available') out = out.filter((contract) => contract.current_rental_state === null);
+    if (options.state === 'active') out = out.filter((contract) => contract.current_rental_state !== null);
+    if (options.starbase) out = out.filter((contract) => contract.starbase === options.starbase);
+
+    if (options.q) {
+      const query = options.q.trim().toLowerCase();
+      out = out.filter((contract) =>
+        [contract.address, contract.owner, contract.owner_profile, contract.fleet, contract.owner_token_account, contract.starbase ?? '']
+          .join(' ')
+          .toLowerCase()
+          .includes(query),
+      );
+    }
+
+    if (options.minRate !== undefined) out = out.filter((contract) => contract.rate >= options.minRate!);
+    if (options.maxRate !== undefined) out = out.filter((contract) => contract.rate <= options.maxRate!);
+
+    const limit = clampLimit(options.limit);
+    if (limit !== undefined) out = out.slice(0, limit);
+
+    return out;
+  }
+}
+
+export const rentalService = new RentalService(
+  new PublicKey(process.env.SRSLY_PROGRAM_ID ?? SRSLY_PROGRAM_ID),
+  CACHE_TTL_MS,
+);

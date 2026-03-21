@@ -18,7 +18,7 @@ export function drawPieChart(
 
   // Add null checks
   if (!canvas || !legend) {
-    console.error('[drawPieChart] CRITICAL: Canvas or legend element not found | canvasId=%s | legendId=%s | canvas=%O | legend=%O', canvasId, legendId, canvas, legend);
+    console.log('[drawPieChart] CRITICAL: Canvas or legend element not found | canvasId=%s | legendId=%s | canvas=%O | legend=%O', canvasId, legendId, canvas, legend);
     return;
   }
 
@@ -63,7 +63,7 @@ export function drawPieChart(
                 const pct: string = total ? ((Number(value) / total) * 100).toFixed(1) + '%' : '0.0%';
                 return pct;
               } catch (e) {
-                console.error('Tooltip calculation error:', e);
+                console.log('Tooltip calculation error:', e);
                 return '';
               }
             }

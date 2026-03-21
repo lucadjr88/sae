@@ -12,6 +12,8 @@ import "@/ui/styles/resource_playload.css";
 import "@/ui/styles/sideBar.css";
 import "@/ui/styles/startButtons.css";
 import "@/ui/styles/toggleSwitch.css";
+import "@/ui/styles/rental_playload.css";
+import "@/ui/styles/rentalState_playload.css";
 import { createHomePage, getWalletConnection, manualProfileEntryListener, getWalletIcon } from "@/hompage";
 
 import { Wallet } from '@/services/wallet';
@@ -60,7 +62,7 @@ window.addEventListener('error', (event) => {
       sessionStorage.setItem('phantom_reload_count', (reloadCount + 1).toString());
       window.location.reload();
     } else {
-      console.error("Il ricaricamento automatico non ha risolto l'errore di Phantom.");
+      console.log("Il ricaricamento automatico non ha risolto l'errore di Phantom.");
       // Opzionale: pulisci il contatore dopo un po'
       setTimeout(() => sessionStorage.removeItem('phantom_reload_count'), 5000);
     }
@@ -97,7 +99,7 @@ if (connectBtn) {
     //console.log('[DEBUG] Connect Wallet button pressed');
     if (!window.wallet) {
       alert('window.wallet non è definito!');
-      console.error('[DEBUG] window.wallet non è definito!');
+      console.log('[DEBUG] window.wallet non è definito!');
       return;
     }
     // Multi-wallet: mostra sempre il modal custom
@@ -106,7 +108,7 @@ if (connectBtn) {
       console.log('[DEBUG] Connect chiamato, stato wallet:', window.wallet);
     }).catch((err: any) => {
       alert('Errore durante la connessione al wallet: ' + (err?.message || err));
-      console.error('[DEBUG] Errore connect wallet:', err);
+      console.log('[DEBUG] Errore connect wallet:', err);
     });
   });
 }

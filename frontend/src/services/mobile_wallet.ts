@@ -126,7 +126,7 @@ export function getMobileIcon(): string | undefined {
                         pubkey = bs58.encode(bytes);
                         console.log('[MOBILE WALLET] publicKey (result.accounts[0].address, base64→base58):', pubkey);
                     } catch (err) {
-                        console.error('[MOBILE WALLET] Errore conversione base64→base58:', err);
+                        console.log('[MOBILE WALLET] Errore conversione base64→base58:', err);
                     }
                 }
                 else {
@@ -143,14 +143,14 @@ export function getMobileIcon(): string | undefined {
                     this.isConnected = false;
                     this.publicKey = null;
                     this.error = 'No publicKey returned by wallet.';
-                    console.error('[MOBILE WALLET] Connessione fallita, nessuna publicKey.');
+                    console.log('[MOBILE WALLET] Connessione fallita, nessuna publicKey.');
                 }
             } catch (e: any) {
                 this.isConnected = false;
                 this.publicKey = null;
                 this.error = e.message || 'Connection failed';
                 alert('Error during connection: ' + (e.message || e));
-                console.error('[MOBILE WALLET] Errore durante la connessione:', e);
+                console.log('[MOBILE WALLET] Errore durante la connessione:', e);
             } finally {
                 this.isConnecting = false;
                 window.dispatchEvent(new Event('walletStateChanged'));

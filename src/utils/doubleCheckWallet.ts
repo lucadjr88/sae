@@ -18,7 +18,7 @@ export async function doubleCheckWallet(wallet: string, cutoffH: number, profile
     if (missing.length === 0) {
       console.log(`[double-check] wallet=${wallet} tutte le signature hanno una tx salvata: OK`);
     } else {
-      console.error(`[double-check] wallet=${wallet} signature mancanti:`, missing);
+      console.log(`[double-check] wallet=${wallet} signature mancanti:`, missing);
       const { fetchWalletTransactions } = await import('./solanaRpc');
       const { fetchAndCacheWalletTxs } = await import('./fetchAndCacheWalletTxs');
       const { txs: retriedTxs, failed: retriedFailed } = await fetchWalletTransactions(wallet, sinceMs, profileId, missing);
@@ -26,14 +26,14 @@ export async function doubleCheckWallet(wallet: string, cutoffH: number, profile
       if (retriedFailed.length === 0) {
         console.log(`[double-check] wallet=${wallet} tutte le signature mancanti recuperate con successo!`);
       } else {
-        console.error(`[double-check] wallet=${wallet} signature IRRIMEDIABILMENTE mancanti anche dopo retry:`, retriedFailed);
+        console.log(`[double-check] wallet=${wallet} signature IRRIMEDIABILMENTE mancanti anche dopo retry:`, retriedFailed);
       }
     }
   } catch (err) {
     if (pick && pick.release) {
       try { pick.release({ success: false }); } catch {}
     }
-    console.error(`[double-check] Errore durante doubleCheck per wallet=${wallet}:`, err);
+    console.log(`[double-check] Errore durante doubleCheck per wallet=${wallet}:`, err);
   }
 }
 

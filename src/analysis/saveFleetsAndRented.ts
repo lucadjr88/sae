@@ -21,14 +21,42 @@ function normalizeFleetForFrontend(fleet: any, isRented = false) {
 }
 
 export async function saveFleetsAndRented(profileId: string, fleets: any[], rentedFleets: any[]) {
-  // Normalize fleets array into the shape expected by the frontend
-  const rentedSet = new Set<string>((rentedFleets || []).map(r => r.fleet || r.pubkey || (r.fleetData && r.fleetData.pubkey)).filter(Boolean));
-  const normalizedFleets = (fleets || []).map(f => normalizeFleetForFrontend(f, rentedSet.has(f.pubkey)));
+  // Costruisci mappe di supporto per status
+  const rentedMap = new Map(
+    (rentedFleets || []).map(r => [r.fleet || r.pubkey, r])
+  );
+  // Flotte possedute che sono listed (messe in rent ma non affittate)
+  const listedSet = new Set(
+    (rentedFleets || [])
+      .filter(r => r.isListed && r.owner_profile === profileId)
+      .map(r => r.fleet || r.pubkey)
+  );
+  // Flotte possedute che sono loaned (affittate a terzi)
+  const loanedSet = new Set(
+    (rentedFleets || [])
+      .filter(r => r.isRented && r.owner_profile === profileId && r.borrower && r.borrower !== profileId)
+      .map(r => r.fleet || r.pubkey)
+  );
 
-  // For rented-fleets we keep original object but include normalized fleetData when present
+  const normalizedFleets = (fleets || []).map(f => {
+    const key = f.pubkey;
+    let status = 'owned';
+    if (loanedSet.has(key)) status = 'loaned';
+    else if (listedSet.has(key)) status = 'listed';
+    return {
+      ...normalizeFleetForFrontend(f, loanedSet.has(key)),
+      status
+    };
+  });
+
+  // For rented-fleets aggiungi status borrowed/listed/loaned
   const normalizedRented = (rentedFleets || []).map(r => {
     const copy: any = { ...r };
     if (r.fleetData) copy.fleetData = normalizeFleetForFrontend(r.fleetData, true).data;
+    // Determina status
+    if (r.isListed && r.owner_profile === profileId) copy.status = 'listed';
+    else if (r.isRented && r.owner_profile === profileId && r.borrower && r.borrower !== profileId) copy.status = 'loaned';
+    else if (r.borrower === profileId) copy.status = 'borrowed';
     return copy;
   });
 

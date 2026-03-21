@@ -1,7 +1,7 @@
 // Modulo per il Footbar (Price Ticker)
 // Esporta funzione per creare la struttura reale del ticker prezzi
 
-const TICKER_CONFIG = [
+export const TICKER_CONFIG = [
   {
     id: 'bitcoin',
     img: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
@@ -49,7 +49,7 @@ async function fetchPrices() {
     if (!response.ok) throw new Error('Prices fetch failed');
     return await response.json();
   } catch (e) {
-    console.error('[FootBar] Failed to fetch prices:', e);
+    console.log('[FootBar] Failed to fetch prices:', e);
     return null;
   }
 }

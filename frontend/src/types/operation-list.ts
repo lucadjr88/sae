@@ -9,10 +9,13 @@ export interface OperationStats {
 }
 
 export interface FleetFeeData {
+  playerProfile: string;
   totalFee: number;
   feePercentage?: number;
   totalOperations: number;
-  isRented?: boolean;                
+  isRented?: boolean;
+  isLoaned?: boolean;
+  isListed?: boolean;
   operations: { [operationName: string]: OperationStats };
 }
 
@@ -48,4 +51,5 @@ export interface OperationListData {
   feesByFleet: FeesByFleet;
   feesByOperation: FeesByOperation;
   sageFees24h: number;
+  fleetStatus: { [fleetAccount: string]: string };
 }

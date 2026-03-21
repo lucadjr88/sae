@@ -17,7 +17,7 @@ router.post('/resource-flows', async (req: Request, res: Response) => {
     console.log(`[resource-flows] Successfully decoded resources for profileId ${profileId}`);
     return res.json({ success: true, data: result });
   } catch (e: any) {
-    console.error('[resource-flows] Error:', e.message);
+    console.log('[resource-flows] Error:', e.message);
     return res.status(500).json({ error: e.message });
   }
 });
@@ -38,7 +38,7 @@ router.get('/resource-flows/:profileId', async (req: Request, res: Response) => 
     const result = await decodeResources(profileId);
     return res.json({ success: true, data: result });
   } catch (e: any) {
-    console.error('[resource-flows GET] Error:', e.message);
+    console.log('[resource-flows GET] Error:', e.message);
     return res.status(500).json({ error: e.message });
   }
 });

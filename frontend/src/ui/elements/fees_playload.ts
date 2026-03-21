@@ -1,17 +1,17 @@
 import { currentProfileId, connectedWalletPublicKey, connectedWalletIcon } from '@/utils/state';
-import { normalizeOpName } from '@/services/utils';
+import { normalizeOpName } from '@/utils/utils';
 import { drawPieChart } from '@/services/charts';
 import { createFleetList, createOperationList, createOtherOperationsList } from '@/services/fleet-operations';
 import { toggleFleet } from '@/utils/ui';
-import { showSidebar, hideSidebar, startHideTimer, canHideSidebarFromScroll } from '@/ui/elements/sideBar';
-import { setCachedFeeView, initializeToggleSwitch } from '@/ui/elements/toggleSwitch';
+import { showSidebar, hideSidebar, canHideSidebarFromScroll } from '@/ui/elements/sideBar';
+import { setCachedFeeView} from '@/ui/elements/toggleSwitch';
 import { createResultPage } from '@/resultpage';
 
 type OpStats = { totalFee: number; count: number };
-type FleetFeeEntry = { totalFee: number; feePercentage?: number; totalOperations?: number; isRented?: boolean; operations?: Record<string, OpStats> };
+type FleetFeeEntry = { totalFee: number; feePercentage?: number; totalOperations?: number; isRented?: boolean; isListed?: boolean; isLoaned?: boolean; operations?: Record<string, OpStats> };
 type TxLite = { blockTime?: number; timestamp?: number };
 type DisplayData = { feesByFleet: Record<string, FleetFeeEntry>; feesByOperation?: Record<string, OpStats>; sageFees24h: number; transactionCount24h: number; unknownOperations: number; transactions?: TxLite[]; allTransactions?: TxLite[]; firstTxTime?: number };
-type FleetMeta = { key: string; callsign?: string; isRented?: boolean; data?: { fleetShips?: string } };
+type FleetMeta = { key: string; callsign?: string; isRented?: boolean; isListed?: boolean; isLoaned?: boolean; data?: { fleetShips?: string } };
 
 // Placeholder for displayFeeResults - will be implemented when UI module is complete
 export function displayFeeResults(data: DisplayData, fleetNames: Record<string, string>, _fleetIsRented: Record<string, boolean>, fleets: FleetMeta[] = []): void {
@@ -107,7 +107,7 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   feeResults.id = 'feeResults';
 
   if (!feeResults) {
-    console.error('[displayFeeResults] CRITICAL: #feeResults element not found - rendering aborted');
+    console.log('[displayFeeResults] CRITICAL: #feeResults element not found - rendering aborted');
     return;
   }
 
@@ -139,9 +139,22 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
       feePercentage: 0,
       totalOperations: 0,
       isRented: f.isRented,
+      isListed: f.isListed,      // AGGIUNGI QUESTO
+      isLoaned: f.isLoaned,      // AGGIUNGI QUESTO
       operations: {}
     };
     usedDisplayNames.add((fleetNames[keyToAdd] || keyToAdd || '').toString().toLowerCase());
+  });
+
+  // Normalizza isListed/isLoaned/isRented anche per le flotte già presenti in completeFeesByFleet
+  fleets.forEach(f => {
+    if (!f || !f.key) return;
+    const entry = completeFeesByFleet[f.key];
+    if (entry) {
+      if (typeof f.isListed === 'boolean') entry.isListed = f.isListed;
+      if (typeof f.isLoaned === 'boolean') entry.isLoaned = f.isLoaned;
+      if (typeof f.isRented === 'boolean') entry.isRented = f.isRented;
+    }
   });
 
   const sortedFleets = Object.entries(completeFeesByFleet)
@@ -371,9 +384,4 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   // Cache the fee view for toggle switch
   setCachedFeeView(feeResults);
 
-  // Initialize toggle switch (only once)
-  initializeToggleSwitch();
-
-  startHideTimer();
-  //console.log('[displayFeeResults] Results displayed successfully');
 }

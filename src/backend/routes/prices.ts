@@ -15,7 +15,7 @@ async function savePricesToDisk(prices) {
   try {
     await fs.writeFile(CACHE_FILE, JSON.stringify(prices), 'utf8');
   } catch (e) {
-    console.error('[TickersCache] Write error:', e);
+    console.log('[TickersCache] Write error:', e);
   }
 }
 
@@ -99,7 +99,7 @@ async function updatePricesCache() {
       data = await fetchCoinGeckoPrices();
     } catch (e) {
       // fallback: prova a caricare da disco se fetch fallisce
-      console.error('[pricesCache] CoinGecko fetch failed, fallback to disk:', e);
+      console.log('[pricesCache] CoinGecko fetch failed, fallback to disk:', e);
       data = await loadPricesFromDisk() || {};
     }
     const tokenAddress = process.env.GECKOTERMINAL_WPAC_TOKEN || '0x10004a9A742ec135c686C9aCed00FA3C93D66866';
@@ -120,7 +120,7 @@ async function updatePricesCache() {
     pricesCacheTimestamp = Date.now();
     await savePricesToDisk(data);
   } catch (e) {
-    console.error(`[pricesCache] Update failed:`, e);
+    console.log(`[pricesCache] Update failed:`, e);
   } finally {
     cacheUpdating = false;
   }

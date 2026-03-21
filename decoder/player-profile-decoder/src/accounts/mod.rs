@@ -1,4 +1,5 @@
 use carbon_core::account::AccountDecoder;
+use solana_pubkey::Pubkey;
 use carbon_core::deserialize::CarbonDeserialize;
 
 use super::PlayerProfileDecoder;

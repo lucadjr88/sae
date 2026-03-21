@@ -155,7 +155,7 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
     console.log(`[decodeInstructions] SAGE ops decodificate: 0, unknown: ${result.length}`);
     return result;
   }
-  const binPath = path.join(process.cwd(), 'bin', 'carbon_decoder');
+  const binPath = '/home/luca/sae/dist/backend/decoder/decode_fleets';
   const binExists = fs.existsSync(binPath);
   let decodedResults: any[] = [];
   // raccolta delle istruzioni SAGE (oggetti {programId,data,txIndex})

@@ -59,7 +59,7 @@ export async function loadOrCreateRpcPool(profileId: string): Promise<any[]> {
 // Prune e aggiorna cache + file su disco
 export async function pruneRpcPool(profileId?: string, force?: boolean): Promise<any[]> {
   // Allow undefined profileId in tests; use 'default' to avoid path.join errors
-  const pid = profileId || 'default';
+  const pid = profileId;// || 'default';
   const dir = path.join(process.cwd(), 'cache', pid);
   const file = path.join(dir, RPC_POOL_FILENAME);
   console.log(`[rpc-pool-manager] Eseguo prune per ${profileId}...`);

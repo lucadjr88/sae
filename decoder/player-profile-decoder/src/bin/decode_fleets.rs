@@ -1,9 +1,9 @@
-
 use carbon_player_profile_decoder::PlayerProfileDecoder;
 use carbon_player_profile_decoder::accounts::PlayerProfileAccount;
 use carbon_core::account::AccountDecoder;
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::pubkey::Pubkey;
+use solana_pubkey::Pubkey;
+use solana_sdk::pubkey as sdk_pubkey;
 use serde_json::json;
 use std::env;
 use std::str::FromStr;
@@ -28,9 +28,11 @@ fn main() {
             std::process::exit(1);
         }
     };
+    // Conversione per compatibilità con solana_client
+    let sdk_profile_pubkey = sdk_pubkey::Pubkey::new_from_array(profile_pubkey.to_bytes());
 
     // Fetch account data
-    let account = match client.get_account(&profile_pubkey) {
+    let account = match client.get_account(&sdk_profile_pubkey) {
         Ok(acc) => acc,
         Err(e) => {
             eprintln!("Error fetching account for {}: {}", profile_id, e);
@@ -40,6 +42,14 @@ fn main() {
 
     // Decodifica con PlayerProfileDecoder
     let decoder = PlayerProfileDecoder;
+    // Convert solana_sdk::account::Account to solana_account::Account
+    let account = solana_account::Account {
+        lamports: account.lamports,
+        data: account.data.clone(),
+        owner: Pubkey::new_from_array(account.owner.to_bytes()),
+        executable: account.executable,
+        rent_epoch: account.rent_epoch,
+    };
     let decoded = decoder.decode_account(&account);
 
     let mut fleets = vec![];

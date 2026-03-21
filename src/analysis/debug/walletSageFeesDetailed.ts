@@ -8,7 +8,7 @@ export async function walletSageFeesDetailedHandler(req: Request, res: Response)
     const result = await buildFeesDetailed(profileId as string);
     return res.json(result);
   } catch (e: any) {
-    console.error('[walletSageFeesDetailed] Error', e);
+    console.log('[walletSageFeesDetailed] Error', e);
     return res.status(500).json({ error: e?.message || 'walletSageFeesDetailed failed' });
   }
 }

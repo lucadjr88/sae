@@ -1,0 +1,139 @@
+.rental-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  background-color: var(--table-bg);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  overflow: hidden;
+  /* Per i bordi arrotondati */
+  background-color: #8a2be217;
+}
+
+.rental-table thead {
+  background-color: var(--table-header-bg);
+  border-bottom: 2px solid var(--table-border);
+  background-color: #892be27a;
+}
+
+.rental-table th {
+  padding: 12px 15px;
+  text-align: left;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  /* Evita di selezionare il testo al doppio click */
+  position: relative;
+}
+
+.rental-table th:hover {
+  background-color: #f0f0f0;
+  color: var(--accent-color);
+}
+
+/* Icona indicativa (opzionale) */
+.rental-table th::after {
+  content: ' ↕';
+  font-size: 0.7rem;
+  opacity: 0.3;
+}
+
+.rental-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--table-border);
+  vertical-align: middle;
+  max-width: 20vh;
+}
+
+/* Effetto Zebra & Hover */
+.rental-table tbody tr:nth-child(even) {
+  background-color: #fafafa3d;
+}
+
+.rental-table tbody tr:hover {
+  background-color: var(--row-hover);
+  transition: background-color 0.2s ease;
+}
+
+/* Stile per la colonna Stato */
+.state-pill {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: white;
+}
+
+.state-active {
+  background-color: var(--state-active);
+}
+
+.state-available {
+  background-color: var(--state-available);
+  color: #333;
+}
+
+/* Aggiungi queste regole al tuo CSS */
+
+.rental-table td.composition-cell {
+  max-width: 50vh;
+  /* Imposta una larghezza massima a tua scelta */
+  white-space: nowrap;
+  /* Impedisce al testo di andare su più righe */
+  overflow: hidden;
+  /* Nasconde ciò che esce dai bordi */
+  text-overflow: ellipsis;
+  /* Aggiunge i tre puntini "..." */
+  cursor: help;
+  /* Cambia il cursore per suggerire che c'è un tooltip */
+}
+
+/* Opzionale: un piccolo effetto al passaggio del mouse per evidenziare la riga */
+.rental-table td.composition-cell:hover {
+  color: var(--accent-color);
+}
+
+.rental-filter-bar {
+  margin-block: 15px;
+  border-block: #b82bf9;
+  border: 10px solid;
+  border-block-color: #390d48;
+  display: flex;
+  padding: 10px;
+  align-items: center;
+  gap: 50px;
+  justify-content: space-evenly;
+}
+
+.state-filter {
+  text-align: center;
+  border: solid;
+  padding: 10px;
+  border-color: blueviolet;
+}
+
+.starbase-filter {
+  text-align: center;
+  border: solid;
+  padding: 10px;
+  border-color: blueviolet;
+}
+
+.fleet-filter {
+  text-align: center;
+  border: solid;
+  padding: 10px;
+  border-color: blueviolet;
+}
+
+.rate-filter {
+  text-align: center;
+  border: solid;
+  padding: 10px;
+  border-color: blueviolet;
+}

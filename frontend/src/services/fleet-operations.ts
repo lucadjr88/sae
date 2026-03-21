@@ -8,8 +8,7 @@ import type {
   OperationSummary,
   FleetOperationInfo,
   OperationListData,
-} from '@/types/operation-list.js';
-
+} from '@/types/operation-list';
 interface FleetNamesMap {
   [fleetAccount: string]: string;
 }
@@ -18,9 +17,10 @@ export function createFleetList(
   data: OperationListData,
   fleetNames: FleetNamesMap,
   rentedFleetNames: Set<string> = new Set()): void {
+  // Supporta la nuova mappa fleetStatus
   const fleetListDiv = document.getElementById('fleetList') as HTMLDivElement | null;
   if (!fleetListDiv) {
-    console.error('[createFleetList] CRITICAL: #fleetList element not found - fleet list rendering aborted', rentedFleetNames);
+    console.log('[createFleetList] CRITICAL: #fleetList element not found - fleet list rendering aborted', rentedFleetNames);
     return;
   }
 
@@ -62,20 +62,17 @@ export function createFleetList(
     });
   } catch (e) { console.warn('[createFleetList] DEBUG log error', e); }
 */
-  let html = '';
-  sortedFleets.forEach(([fleetAccount, fleetData]) => {
-    const fleetName = fleetNames[fleetAccount] || fleetAccount;
-    const fleetId = 'fleet-' + fleetAccount.substring(0, 8);
-    // Debug: log first 3 fleets to verify rental detection
-    //if (sortedFleets.indexOf([fleetAccount, fleetData]) < 3) {
-    //  console.log(`Fleet ${fleetName}: fleetData.isRented=${fleetData.isRented}, in rentedLc=${rentedLc.has((fleetName || '').toString().toLowerCase())}, isRented=${isRented}`);
-    //}
+let html = '';
+sortedFleets.forEach(([fleetAccount, fleetData]) => {
+  const fleetName = fleetNames[fleetAccount] || fleetAccount;
+  const fleetId = 'fleet-' + fleetAccount.substring(0, 8);
+  let nameClass = 'fleet-name';
+  let nameInner = fleetName;
+  let statusLabel = '';
+  console.log(`[createFleetList] Processing fleet ${fleetName} - isListed=${fleetData.isListed} isLoaned=${fleetData.isLoaned} isRented=${fleetData.isRented}`);
 
-    const nameClass = fleetData.isRented ? 'fleet-name rented-name' : 'fleet-name';
-    const nameInner = fleetData.isRented
-      ? `<span class="rented-name">${fleetName}</span>`
-      : `${fleetName}`;
-
+  if (fleetData.isListed || fleetData.isLoaned || fleetData.isRented) nameInner = `<span class="rented-name">${fleetName}</span>`;
+  
     // Definiamo se la flotta ha operazioni
     const hasOps = Object.keys(fleetData.operations).length > 0;
 
@@ -87,7 +84,7 @@ export function createFleetList(
 
     html += `  
     <div class="fleet-header">
-      <div class="${nameClass} fleet-name-grow">${nameInner}</div>
+      <div class="${nameClass} fleet-name-grow">${nameInner} ${statusLabel}</div>
       <div class="fleet-ops">${fleetData.totalOperations} ops</div>
       <div class="fleet-pct">${((fleetData.totalFee / (data.sageFees24h || 1)) * 100).toFixed(1)}%</div>
       
@@ -212,7 +209,7 @@ export function createOperationList(
 ): void {
   const operationListDiv = document.getElementById('operationList') as HTMLDivElement | null;
   if (!operationListDiv) {
-    console.error('[createOperationList] CRITICAL: #operationList element not found - operation list rendering aborted');
+    console.log('[createOperationList] CRITICAL: #operationList element not found - operation list rendering aborted');
     return;
   }
 
@@ -408,7 +405,7 @@ export function createOtherOperationsList(
 ): void {
   const otherOperationsDiv = document.getElementById('otherOperationsList') as HTMLDivElement | null;
   if (!otherOperationsDiv) {
-    console.error('[createOtherOperationsList] CRITICAL: #otherOperationsList element not found - other operations rendering aborted');
+    console.log('[createOtherOperationsList] CRITICAL: #otherOperationsList element not found - other operations rendering aborted');
     return;
   }
 

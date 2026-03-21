@@ -15,7 +15,7 @@ export function copyToClipboard(text: string, event: MouseEvent | KeyboardEvent)
 			}, 1500);
 		}
 	}).catch(err => {
-		console.error('Failed to copy:', err);
+		console.log('Failed to copy:', err);
 		alert('Failed to copy to clipboard');
 	});
 	event.stopPropagation();
@@ -23,9 +23,8 @@ export function copyToClipboard(text: string, event: MouseEvent | KeyboardEvent)
 }
 
 // Derive a product/recipe name for crafting without falling back to burned materials
-export function inferRecipeName(decoded: DecodedInstruction | null, burns: BurnedMaterial[], claims: ClaimedItem[]): string | null {//burns: BurnedMaterial[],
+export function inferRecipeName(decoded: DecodedInstruction | null, _burns: BurnedMaterial[], claims: ClaimedItem[]): string | null {
 	// Prefer claimed items (produced outputs)
-	console.log('inferRecipeName burns:', burns);
 	try {
 		const c = claims && claims.length > 0 ? claims[0] : null;
 		const mat = c?.material || c?.item;
