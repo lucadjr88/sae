@@ -118,28 +118,41 @@ export class RentalService {
 	private contractsCache: CacheEntry<RentalContract> | null = null;
 	private readonly fleetMetaCache = new Map<string, FleetCacheEntry>();
 	private readonly shipNameCache = new Map<string, string>();
-	private async readContracts(profileId: string, limit?: number): Promise<RentalContract[]> {
-		if (this.isFresh(this.contractsCache)) {
-			const items = this.contractsCache.items.map((item) => ({ ...item }));
-			return limit !== undefined ? items.slice(0, limit) : items;
+	private async readContracts(profileId: string, limit?: number): Promise<{ contracts: RentalContract[], createdAt?: string }> {
+		const fsPath = path.join(process.cwd(), 'cache', 'contracts.json');
+		let contracts: RentalContract[] = [];
+		let createdAt: string | undefined = undefined;
+		let fromCache = false;
+		try {
+			const raw = await fs.readFile(fsPath, 'utf8');
+			const parsed = JSON.parse(raw);
+			if (Array.isArray(parsed)) {
+				contracts = parsed;
+			} else if (parsed && Array.isArray(parsed.contracts)) {
+				contracts = parsed.contracts;
+				createdAt = parsed.createdAt;
+				fromCache = true;
+			}
+		} catch {
+			// fallback: nessun file o errore di parsing
 		}
-		const items = await this.fetchContractsOnChain(profileId, limit);
-		this.contractsCache = { at: Date.now(), items };
-		// Salva in cache locale
-		this.saveContractsToCache(profileId, items).catch((err) => {
-			console.error('[rentalService] Failed to save contracts cache:', err);
-		});
-		const result = items.map((item) => ({ ...item }));
-		return result;
+		if (!contracts.length) {
+			contracts = await this.fetchContractsOnChain(profileId, limit);
+			// Solo ora aggiorna il file e la data
+			await this.saveContractsToCache(profileId, contracts);
+			createdAt = new Date().toISOString();
+		}
+		const filtered = limit !== undefined ? contracts.slice(0, limit) : contracts;
+		return { contracts: filtered, createdAt };
 	}
 	constructor(
 		private readonly programId: PublicKey,
 		private readonly cacheTtlMs: number,
 	) {}
 
-	async getContracts(options: ContractQueryOptions = {}): Promise<RentalContract[]> {
+	async getContracts(options: ContractQueryOptions = {}): Promise<{ contracts: RentalContract[], createdAt?: string }> {
 		const profileId = this.resolveProfileId(options.profileId);
-		const contracts = await this.readContracts(profileId, options.limit);
+		const { contracts, createdAt } = await this.readContracts(profileId, options.limit);
 		// fetch opzionali
 
 		// Nuova fetch moduli secondari (fuel, cargo, ammo, crew, ecc.)
@@ -151,12 +164,12 @@ export class RentalService {
 				ammo_bank: c.ammo_bank,
 				crew: c.crew,
 			}));
-// ...existing code...
-// ...existing code...
+			// ...existing code...
 		}
 
-		await this.saveContractsToCache(profileId, contracts);
-		return this.applyFilters(contracts, options);
+		// NON aggiornare la cache qui: la aggiorni solo se la rigeneri
+		const filtered = this.applyFilters(contracts, options);
+		return { contracts: filtered, createdAt };
 	}
 	// Recupera account multipli tramite getMultipleAccountsInfo (batch RPC)
 	private async fetchAccountsByAddresses(
@@ -176,7 +189,7 @@ export class RentalService {
 				}
 			}
 			if (pubkeys.length === 0) continue;
-			console.log(`[rentalService] Fetching ${pubkeys.length} accounts for addresses:`, validAddresses);
+			//console.log(`[rentalService] Fetching ${pubkeys.length} accounts`);
 			try {
 				const results = await this.executeRpc(profileId, (connection) =>
 					connection.getMultipleAccountsInfo(pubkeys, 'confirmed'),
@@ -295,15 +308,20 @@ export class RentalService {
 		}
 	}
 
-	// Salva contracts in cache/<profileId>/rented_contracts/contracts.json
-	async saveContractsToCache(profileId: string, contracts: RentalContract[]): Promise<void> {
+	// Salva contracts in cache/contracts.json (unico per tutti i profili)
+	async saveContractsToCache(_profileId: string, contracts: RentalContract[]): Promise<void> {
 		try {
-			const dir = path.join(process.cwd(), 'cache', profileId, 'rented_contracts');
+			const dir = path.join(process.cwd(), 'cache');
 			await fs.mkdir(dir, { recursive: true });
 			const file = path.join(dir, 'contracts.json');
-			await fs.writeFile(file, JSON.stringify(contracts, null, 2), 'utf8');
+			const now = new Date();
+			const payload = {
+				createdAt: now.toISOString(),
+				contracts
+			};
+			await fs.writeFile(file, JSON.stringify(payload, null, 2), 'utf8');
 		} catch (err) {
-			console.error(`[rentalService] Failed to save contracts cache for profile=${profileId}:`, err);
+			console.error(`[rentalService] Failed to save contracts cache:`, err);
 		}
 	}
 

@@ -1,9 +1,11 @@
+
 import express from 'express';
 import { RentalService } from '../rental/rentalService';
 import { PublicKey } from '@solana/web3.js';
 const SRSLY_PROGRAM_ID = 'SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT';
 const rentalService = new RentalService(new PublicKey(SRSLY_PROGRAM_ID), 30000);
 import type { ContractQueryOptions, ContractStateFilter, FleetStarbase } from '../rental/types';
+import { getRentalFleetDetails } from '../../decoders/rental_details';
 
 const router = express.Router();
 
@@ -32,10 +34,13 @@ function queryStarbase(value: unknown): FleetStarbase | undefined {
   return undefined;
 }
 
+import fs from 'fs/promises';
+import path from 'path';
 
 router.get('/rentals/contracts', async (req, res) => {
   console.log('[rental] GET /rentals/contracts', {
     profileId: queryString(req.query.profileId),
+    wipecache: req.query.wipecache,
   });
   const options: ContractQueryOptions = {
     profileId: queryString(req.query.profileId),
@@ -48,9 +53,22 @@ router.get('/rentals/contracts', async (req, res) => {
     includeModules: req.query.includeModules === 'true' ? true : false,
   };
 
+  // Se richiesto, elimina la cache prima di proseguire
+  if (req.query.wipecache === 'true') {
+    try {
+      const cachePath = path.join(process.cwd(), 'cache', 'contracts.json');
+      await fs.unlink(cachePath);
+      console.log('[rental] contracts.json cache wiped');
+    } catch (err) {
+      if (err && (err as any).code !== 'ENOENT') {
+        console.warn('[rental] Failed to wipe contracts.json:', err);
+      }
+    }
+  }
+
   try {
-    const contracts = await rentalService.getContracts(options);
-    res.json({ contracts, total: contracts.length });
+    const { contracts, createdAt } = await rentalService.getContracts(options);
+    res.json({ contracts, total: contracts.length, createdAt });
   } catch (error) {
     console.log('[rental] Failed to fetch contracts', {
       profileId: options.profileId,
@@ -60,6 +78,23 @@ router.get('/rentals/contracts', async (req, res) => {
       error: 'Failed to fetch rental contracts',
       detail: error instanceof Error ? error.message : 'Unknown error',
     });
+  }
+});
+
+// GET /api/rentalDetails?fleetId=...&contractId=...
+router.get('/rentalDetails', async (req, res) => {
+  const fleetIdStr = queryString(req.query.fleetId);
+  const contractIdStr = queryString(req.query.contractId);
+  if (!fleetIdStr || !contractIdStr) {
+    return res.status(400).json({ error: 'Missing fleetId or contractId' });
+  }
+  try {
+    const fleetId = new PublicKey(fleetIdStr);
+    const contractId = new PublicKey(contractIdStr);
+    const details = await getRentalFleetDetails(fleetId, contractId);
+    res.json(details);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch rental details', detail: err instanceof Error ? err.message : String(err) });
   }
 });
 

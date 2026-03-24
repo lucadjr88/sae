@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc && node scripts/add-js-extensions.cjs && cd frontend && npm run build && cd ..",
+    "postbuild": "mkdir -p dist/backend/idl && cp src/backend/idl/sage_idl.json dist/backend/idl/sage_idl.json",
     "build:decoder": "sh scripts/build-and-copy-srsly-decoder.sh",
     "build:backend": "tsc && node scripts/add-js-extensions.cjs",
     "build:frontend": "cd frontend && npm run build && cd ..",
@@ -23,12 +24,14 @@
     "ts-jest": "^29.4.6"
   },
   "dependencies": {
+    "@project-serum/anchor": "^0.26.0",
     "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-phantom": "^0.9.28",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",
     "@solana/wallet-adapter-wallets": "^0.19.37",
     "@solana/web3.js": "^1.98.4",
+    "@staratlas/sage": "^1.9.0-alpha.12",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.0",
     "borsh": "^2.0.0",

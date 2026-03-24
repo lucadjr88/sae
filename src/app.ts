@@ -4,6 +4,7 @@ import express from 'express';
 import analyzeProfileRouter from './analysis/analyzeProfile';
 import debugRouter from './analysis/debug/index';
 import getFleetsRouter from './backend/routes/get-fleets';
+import getFleetInfoMinimalRouter from './backend/routes/get-fleet-info-minimal';
 import { pricesRouter } from './backend/routes/prices';
 import frontendRouter from './backend/routes/frontend';
 import authRouter from './backend/routes/auth.js';
@@ -24,7 +25,9 @@ app.use('/api', pricesRouter);
 app.use('/api', analyzeProfileRouter);
 app.use('/api', resourceFlowsRouter);
 app.use('/api/debug', debugRouter);
+
 app.use('/api/debug', getFleetsRouter);
+app.use('/api', getFleetInfoMinimalRouter);
 
 // Serve static assets via API routes (for Android app)
 app.use('/api', assetsRouter);

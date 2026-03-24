@@ -2,11 +2,12 @@ import { currentProfileId } from '@/utils/state';
 import { createLoadingElement, updateProgress, setLoadingBackgroundState } from './loading';
 import { rentalStateBackup } from './rentalState_playload';
 import refresh_icon from '@/assets/icons/refresh_button.png';
+import { createRentalContractWindow } from './rental_detail';
 
 // creiamo un dom da esportare come copia backup
-export let rentalContractsBackup: HTMLElement | null = null;
+//export let rentalContractsBackup: HTMLElement | null = null;
 
-interface RentalContract {
+export interface RentalContract {
   address: string;
   owner: string;
   owner_profile: string;
@@ -208,15 +209,20 @@ function buildTable(contracts: RentalContract[]) {
       const tr = document.createElement('tr');
       const state = c.current_rental_state ? 'Active' : 'Available';
       const stateClass = c.current_rental_state ? 'state-active' : 'state-available';
-      
+
       tr.innerHTML = `
-        <td title="${c.fleet}">${c.fleet_name ?? c.fleet.slice(0, 8) + '…'}</td>
+        <td id="fleet_${c.fleet}" title="${c.fleet}">${c.fleet_name ?? c.fleet.slice(0, 8) + '…'}</td>
         <td>${c.starbase?.toUpperCase() ?? '-'}</td>
         <td style="font-weight:bold">${formatRate(c.rate)}</td>
-        <td class="composition-cell">${c.fleet_composition ?? '-'}</td>
+        <td class="composition-cell" title="${c.fleet_composition ?? '-'}">${c.fleet_composition ?? '-'}</td>
         <td><span class="state-pill ${stateClass}">${state}</span></td>
       `;
       tbody.appendChild(tr);
+      // Aggiungiamo un event listener alla cella della fleet per aprire la finestra dei dettagli al click
+      const fleetCell = tr.querySelector(`#fleet_${c.fleet}`) as HTMLElement;
+      fleetCell.addEventListener('click', () => {
+        createRentalContractWindow(c.fleet_name ?? c.fleet, c);
+      });
     });
   };
 
@@ -293,101 +299,120 @@ function buildTable(contracts: RentalContract[]) {
   };
 }
 
-
-export async function fetchAndDisplayRentals(): Promise<void> {
+// accettiamo opzionalmente il parametro wipecache=true per forzare il refresh dei dati (utile durante lo sviluppo)
+export async function fetchAndDisplayRentals(wipecache: boolean = false): Promise<void> {
 
   const resultDiv = document.getElementById('result-container');
-  console.log(rentalContractsBackup);
-  if (rentalContractsBackup == null) {
-    if (!resultDiv) return;
-    resultDiv.replaceChildren(); // Pulisce il contenuto precedente
+  //console.log(rentalContractsBackup);
+  //if (rentalContractsBackup == null) {
+  if (!resultDiv) return;
+  resultDiv.replaceChildren(); // Pulisce il contenuto precedente
 
-    createLoadingElement('Loading rental contracts...').appendChild(document.createElement('br'));
-    resultDiv.appendChild(createLoadingElement('Loading rental contracts...'));
-    updateProgress();
+  createLoadingElement('Loading rental contracts...').appendChild(document.createElement('br'));
+  resultDiv.appendChild(createLoadingElement('Loading rental contracts...'));
+  updateProgress();
 
-    try {
-      const params = new URLSearchParams({
-        state: 'all',
-        //limit: '1000',
-      });
+  const container = document.createElement('div');
 
-      if (currentProfileId) {
-        params.set('profileId', currentProfileId);
-      }
+  try {
+    const params = new URLSearchParams({
+      state: 'all',
+      //limit: '1000',
+    });
 
-
-      console.log('[fetchAndDisplayRentals] Richiesta rental contracts', { params: params.toString() });
-
-      const res = await fetch(`/api/rentals/contracts?${params.toString()}`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const contractsData: { contracts: RentalContract[]; total: number } = await res.json();
-
-      const container = document.createElement('div');
-      container.id = 'rentalResults';
-
-      /*const header = document.createElement('div');
-      header.className = 'rental-header';
-      header.innerHTML = `<h2>Rental Contracts <span class="rental-count">(${contractsData.total})</span></h2>`;
-      container.appendChild(header);*/
-
-      // Aggiungiamo una riga con un titolo a sinistra "Your Rentals" ed un pulsante a destra "Rental Program"
-      const headerRow = document.createElement("div");
-      headerRow.classList.add("rentalState-header");
-      headerRow.innerHTML = `<h2>Rental Contracts <span class="rental-count">(${contractsData.total})</span></h2>`;
-      container.appendChild(headerRow);
-
-      const buttonContainer = document.createElement('div');
-      buttonContainer.style.display = 'flex';
-      buttonContainer.style.flexDirection = 'row';
-      buttonContainer.style.gap = '10px';
-      headerRow.appendChild(buttonContainer);
-
-      const reloadButton = document.createElement("button");
-      reloadButton.id = "reloadButton";
-      reloadButton.innerHTML = '<img src="' + refresh_icon + '" alt="Reload" style="width:16px;height:16px;">';
-      buttonContainer.appendChild(reloadButton);
-
-      reloadButton.addEventListener("click", async () => {
-        rentalContractsBackup = null; // Resettiamo il backup per forzare il reload dei dati
-        await fetchAndDisplayRentals(); // Ricarichiamo i dati
-      });
-
-      const rentalProgramButton = document.createElement("button");
-      rentalProgramButton.id = "rentalProgramButton";
-      rentalProgramButton.textContent = "Your Rentals";
-      buttonContainer.appendChild(rentalProgramButton);
-
-      rentalProgramButton.addEventListener("click", async () => {
-        if (rentalStateBackup) {
-          resultDiv.replaceChildren(rentalStateBackup);
-        }
-      });
-
-
-
-      if (contractsData.contracts.length === 0) {
-        const empty = document.createElement('p');
-        empty.textContent = 'No contracts found.';
-        container.appendChild(empty);
-      } else {
-        const filterBar = createFilterBar((faction, fleet, logic, state, minRate, maxRate, rateEnabled) => {
-          table.applyFilter(faction, fleet, logic, state, minRate, maxRate, rateEnabled);
-        });
-        container.appendChild(filterBar);
-
-        const table = buildTable(contractsData.contracts);
-        container.appendChild(table.tableElement);
-      }
-
-      setLoadingBackgroundState(false);
-      rentalContractsBackup = container as HTMLElement;
-    } catch (error) {
-      const errDiv = document.createElement('div');
-      errDiv.className = 'rental-error';
-      errDiv.textContent = `Error loading rental data: ${error instanceof Error ? error.message : String(error)}`;
-      resultDiv.replaceChildren(errDiv);
+    if (currentProfileId) {
+      params.set('profileId', currentProfileId);
     }
+    if (wipecache) {
+      params.set('wipecache', 'true');
+    }
+
+
+    console.log('[fetchAndDisplayRentals] Richiesta rental contracts', { params: params.toString() });
+
+    const res = await fetch(`/api/rentals/contracts?${params.toString()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const contractsData: { contracts: RentalContract[]; total: number; createdAt?: string | number; } = await res.json();
+
+
+    // Supporta sia stringa ISO che timestamp numerico
+    let dateObj: Date;
+    if (typeof contractsData.createdAt === 'number') {
+      dateObj = new Date(contractsData.createdAt * 1000);
+    } else {
+      dateObj = new Date(contractsData.createdAt);
+    }
+    // calcola age dalla data di creazione per mostrare ore, minuti
+    const now = new Date();
+    const ageMs = now.getTime() - dateObj.getTime();
+    const ageMinutes = Math.floor(ageMs / 60000);
+    const ageHours = Math.floor(ageMinutes / 60);
+    const ageDisplay = ageHours > 0 ? `${ageHours}h ${ageMinutes % 60}m ago` : `${ageMinutes}m ago`;
+
+
+
+    container.id = 'rentalResults';
+
+    // Header con titolo e data creazione
+    const headerRow = document.createElement("div");
+    headerRow.classList.add("rentalState-header");
+    headerRow.innerHTML = `<h2>Rental Contracts <span class="rental-count">(${contractsData.total})</span> - Age: ${ageDisplay}</h2>`;
+    container.appendChild(headerRow);
+
+
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.flexDirection = 'row';
+    buttonContainer.style.gap = '10px';
+    headerRow.appendChild(buttonContainer);
+
+    const reloadButton = document.createElement("button");
+    reloadButton.id = "reloadButton";
+    reloadButton.innerHTML = '<img src="' + refresh_icon + '" alt="Reload" style="width:16px;height:16px;">';
+    buttonContainer.appendChild(reloadButton);
+
+    reloadButton.addEventListener("click", async () => {
+      //rentalContractsBackup = null; // Resettiamo il backup per forzare il reload dei dati
+      resultDiv.replaceChildren(); // Pulisce il contenuto precedente
+      await fetchAndDisplayRentals(true); // Ricarichiamo i dati
+    });
+
+    const rentalProgramButton = document.createElement("button");
+    rentalProgramButton.id = "rentalProgramButton";
+    rentalProgramButton.textContent = "Your Rentals";
+    buttonContainer.appendChild(rentalProgramButton);
+
+    rentalProgramButton.addEventListener("click", async () => {
+      if (rentalStateBackup) {
+        resultDiv.replaceChildren(rentalStateBackup);
+      }
+    });
+
+
+
+    if (contractsData.contracts.length === 0) {
+      const empty = document.createElement('p');
+      empty.textContent = 'No contracts found.';
+      container.appendChild(empty);
+    } else {
+      const filterBar = createFilterBar((faction, fleet, logic, state, minRate, maxRate, rateEnabled) => {
+        table.applyFilter(faction, fleet, logic, state, minRate, maxRate, rateEnabled);
+      });
+      container.appendChild(filterBar);
+
+      const table = buildTable(contractsData.contracts);
+      container.appendChild(table.tableElement);
+    }
+
+    setLoadingBackgroundState(false);
+    //rentalContractsBackup = container as HTMLElement;
+  } catch (error) {
+    const errDiv = document.createElement('div');
+    errDiv.className = 'rental-error';
+    errDiv.textContent = `Error loading rental data: ${error instanceof Error ? error.message : String(error)}`;
+    resultDiv.replaceChildren(errDiv);
   }
-  resultDiv.replaceChildren(rentalContractsBackup);
+  resultDiv.replaceChildren(container);
 }
+

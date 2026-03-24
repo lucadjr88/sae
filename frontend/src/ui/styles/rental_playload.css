@@ -48,6 +48,7 @@
   border-bottom: 1px solid var(--table-border);
   vertical-align: middle;
   max-width: 20vh;
+  cursor: pointer;
 }
 
 /* Effetto Zebra & Hover */
@@ -137,3 +138,4 @@
   padding: 10px;
   border-color: blueviolet;
 }
+

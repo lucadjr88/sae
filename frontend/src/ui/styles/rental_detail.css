@@ -1,0 +1,327 @@
+.rentalContractOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 9998;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.rental-contract-window {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #8d7297;
+  border-radius: 8px;
+  padding: 1%;
+  margin-block: 15px;
+  border: 6px solid;
+  border-block-color: #390d48;
+}
+
+.window-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background-color: var(--window-header-bg);
+  color: var(--window-header-text);
+  font-weight: bold;
+  border-bottom: 1px solid var(--table-border);
+}
+
+.window-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #333;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#closeWindow {
+  background: #ff5f57;
+  /* Stile stile Mac */
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 25px;
+  height: 25px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+#closeWindow:hover {
+  transform: scale(1.1);
+}
+
+/* Corpo del contenuto */
+.window-content {
+  padding: 20px;
+  border-radius: 0 0 12px 12px;
+  flex-direction: row;
+  display: flex;
+  gap: 3%;
+}
+
+.detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  /* Fondamentale per testi lunghi: allinea in alto */
+  padding: 12px 15px;
+  background: #fdfdfd;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  gap: 20px;
+  /* Crea spazio minimo tra label e valore */
+}
+
+.detail-item:hover {
+  border-color: #007bff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.label {
+  font-weight: 700;
+  color: #666;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  /* Impedisce alla label di restringersi troppo */
+  min-width: 100px;
+  /* Forza una larghezza minima costante per le etichette */
+}
+
+.value {
+  color: #333;
+  font-weight: 500;
+  text-align: right;
+  line-height: 1.4;
+  /* Migliora la leggibilità se il testo va su più righe */
+}
+
+.value.price {
+  color: #28a745;
+  /* Verde per la tariffa */
+  font-weight: bold;
+}
+
+/* 2. Sistemazione pulsante X */
+#closeWindow {
+  background: #ff5f57;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
+  padding: 0;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+#closeWindow:hover {
+  background: #ff3b30;
+  transform: scale(1.1);
+}
+
+
+/* Container della colonna destra */
+.additional-details {
+  flex-direction: column;
+  gap: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-radius: 8px;
+}
+
+/* Stile per i box di caricamento */
+.loading-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  /* Altezza minima per non farlo collassare */
+  background: #fafafa;
+  border: 1px dashed #ccc;
+  /* Effetto "vuoto" in attesa */
+  border-radius: 8px;
+}
+
+.spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: #888;
+  font-size: 0.8rem;
+}
+
+/* Lo Spinner */
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top: 3px solid #007bff;
+  /* Colore del caricamento */
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.fleet-state-position {
+  border: solid 1px;
+  border-radius: 15px;
+  background-color: #dc143c2e;
+}
+
+.status-badge {
+  font-weight: bold;
+}
+
+.sector-info {
+  display: block ruby;
+  font-size: 9px;
+}
+
+.stat-box {
+  border: solid 1px;
+  border-radius: 15px;
+  background-color: #dc143c2e;
+  margin: 2%;
+}
+
+
+.rent-stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.rent-stat-value {
+font-size: inherit;
+  font-weight: 680;
+  display: block;
+}
+
+.cargo-list {
+  list-style: none;
+  padding: 4%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  border: solid 1px;
+  border-radius: 15px;
+  background-color: #dc143c2e;
+}
+
+.cargo-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8f8f8;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  border: 1px solid #f0f0f0;
+}
+
+.mint-id {
+  font-family: monospace;
+  color: #ffa726;
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.rental-material-icon {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.rental-material-cell {
+min-width: 0;
+  flex-direction: row;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rental-fleet-details {
+  padding: 3%;
+  text-align: -webkit-center;
+  width: -moz-available;
+
+}
+
+.rental-tx {
+  display: flex;
+  gap: 6%;
+  align-items: center;
+  margin-top: auto;
+  padding-bottom: 3%;
+}
+
+#rentButton {
+  padding: 6px 16px;
+  color: #7dd3fc;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+  border-radius: 15px;
+  background-color: #dc143c2e;
+}
+
+#rentDuration {
+flex: 1;
+  background: #0b0e1a;
+    background-color: rgb(11, 14, 26);
+  border: 1px solid #1e222e;
+  font-family: Roboto Mono,monospace;
+  pointer-events: auto;
+  min-width: 0;
+  padding: 6px 16px;
+  color: #7dd3fc;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+  border-radius: 15px;
+  background-color: #dc143c2e;
+}
+
+#rentPriceTotal {
+  font-size: large;
+  font-weight: 500;
+  color: aquamarine;
+}

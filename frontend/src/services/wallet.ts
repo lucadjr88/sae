@@ -45,13 +45,22 @@ export class Wallet {
             alert('No wallet found..');
             return;
         }
+        const adapter = this.adapters[choice];
+        if (!adapter || typeof adapter.connect !== 'function') {
+            this.isConnecting = false;
+            this.isConnected = false;
+            this.error = 'Adapter non trovato o non valido';
+            alert('Adapter non trovato o non valido');
+            window.dispatchEvent(new Event('walletStateChanged'));
+            return;
+        }
         try {
-            await this.adapters[choice].connect();
+            await adapter.connect();
             this.isConnected = true;
-            this.publicKey = this.adapters[choice].publicKey || null;
+            this.publicKey = adapter.publicKey || null;
             this.error = null;
             this.selected = choice;
-            this.adapter = this.adapters[choice];
+            this.adapter = adapter;
         } catch (e: any) {
             this.isConnected = false;
             this.publicKey = null;

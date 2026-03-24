@@ -151,7 +151,7 @@ function parseResourceCatalog(rawCsv: string): ResourceCatalog {
   return { byMint, bySymbol };
 }
 
-function resolveResourceCatalogEntry(mint: string, symbol?: string): ResourceCatalogEntry | null {
+export function resolveResourceCatalogEntry(mint: string, symbol?: string): ResourceCatalogEntry | null {
   const byMint = RESOURCE_CATALOG.byMint.get(mint);
   if (byMint) return byMint;
 
@@ -212,7 +212,7 @@ function shouldHideMaterialEntry(entry: MaterialEntry): boolean {
   return labelKey === 'atlas' || symbolKey === 'atlas';
 }
 
-function resolveMaterialImageCandidates(entry: MaterialEntry): string[] {
+export function resolveMaterialImageCandidates(entry: MaterialEntry): string[] {
   const imageUrl = entry.imageUrl?.trim() || '';
   if (!imageUrl) return [];
   return [imageUrl];
