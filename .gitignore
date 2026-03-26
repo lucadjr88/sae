@@ -2,7 +2,6 @@ node_modules/
 dist/
 cache/
 log/
-token/
 *.log
 .DS_Store
 .env
@@ -13,5 +12,3 @@ frontend/dist/
 node_modules
 trash/
 interna_cache/
-decoder/target/
-decoder_funzionante.zip

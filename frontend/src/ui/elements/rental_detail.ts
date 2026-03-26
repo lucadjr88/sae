@@ -1,5 +1,9 @@
 import { RentalContract } from './rental_playload';
 import { resolveMaterialImageCandidates, resolveResourceCatalogEntry } from './resource_playload';
+import { rentTx } from './rental_tx';
+import { currentProfileId } from '@/utils/state';
+import { getFactionPubkey } from '@/utils/faction';
+
 function formatRate(rate: number): string {
   return rate.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
@@ -167,33 +171,57 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
         additionalDetails.innerHTML = `<div class="detail-card error-card">Errore caricamento dettagli fleet.<br>${e}</div>`;
       } finally {
         // carica rental tx inserendo un input text numerico ed un pulsante "rent"
+        // solo se const state = c.current_rental_state ? 'Active' : 'Available'; è "Available"
+        const state = contractDetails.current_rental_state ? 'Active' : 'Available';
+
         const rentalTxDiv = document.querySelector('.rental-tx') as HTMLDivElement;
-        rentalTxDiv.innerHTML = `
-          <button id="rentButton" disabled="true">Rent</button>
-          <input type="number" id="rentDuration" placeholder="Duration (hours)" min="0" max="24" value="0">
-          <div id="rentPriceTotal"></div>
+        if (state === 'Available') {
+          rentalTxDiv.innerHTML = `
+            <button id="rentButton" disabled="true">Rent</button>
+            <input type="number" id="rentDuration" placeholder="Duration (hours)" min="0" max="24" value="0">
+            <div id="rentPriceTotal"></div>
         `;
 
-        const inputRentDuration = document.getElementById('rentDuration') as HTMLInputElement;
-        const rentButton = document.getElementById('rentButton') as HTMLButtonElement;
-        inputRentDuration.addEventListener('input', () => {
-          
-          if (inputRentDuration.value === '' || parseInt(inputRentDuration.value) <= 0) {
-            rentButton.disabled = true;
+          const inputRentDuration = document.getElementById('rentDuration') as HTMLInputElement;
+          const rentButton = document.getElementById('rentButton') as HTMLButtonElement;
+          inputRentDuration.addEventListener('input', () => {
+
+            if (inputRentDuration.value === '' || parseInt(inputRentDuration.value) <= 0) {
+              rentButton.disabled = true;
+              const rentPriceTotal = document.getElementById('rentPriceTotal') as HTMLDivElement;
+              rentPriceTotal.textContent = '';
+            } else {
+              rentButton.disabled = false;
+            }
+            let rentDuration = parseInt(inputRentDuration.value);
+            let totalPrice = rentDuration * contractDetails.rate;
             const rentPriceTotal = document.getElementById('rentPriceTotal') as HTMLDivElement;
-            rentPriceTotal.textContent = '';
-          } else {
-            rentButton.disabled = false;
-          }
-          let rentDuration = parseInt(inputRentDuration.value);
-        let totalPrice = rentDuration * contractDetails.rate;
-        const rentPriceTotal = document.getElementById('rentPriceTotal') as HTMLDivElement;
-        rentPriceTotal.textContent = `Total: ${formatRate(totalPrice)}`;
-        });  
-        
-        rentButton.addEventListener('click', () => {
-        });
-        
+            rentPriceTotal.textContent = `Total: ${formatRate(totalPrice)}`;
+          });
+
+          rentButton.addEventListener('click', () => {
+            // Prendi il profileId utente connesso
+            const contractAddress = contractDetails.address;
+            const borrowerProfile = currentProfileId;
+            // Fallback: fazione utente da window o 'mud'
+            const userFaction = (window as any).userFaction || 'mud';
+            const borrowerProfileFaction = getFactionPubkey(userFaction) || getFactionPubkey('mud');
+            // Usa i campi definiti in RentalContract
+            const starbase = contractDetails.starbase || '';
+            const amount = contractDetails.rate || 1;
+            const duration = parseInt(inputRentDuration.value);
+            rentTx({
+              contractAddress,
+              borrowerProfile,
+              borrowerProfileFaction,
+              starbase,
+              amount,
+              duration
+            });
+          });
+        } else {
+          rentalTxDiv.innerHTML = `<span class="status-badge active">Currently Rented</span>`;
+        }
       }
     });
   }

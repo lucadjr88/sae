@@ -6,7 +6,6 @@
   "scripts": {
     "build": "tsc && node scripts/add-js-extensions.cjs && cd frontend && npm run build && cd ..",
     "postbuild": "mkdir -p dist/backend/idl && cp src/backend/idl/sage_idl.json dist/backend/idl/sage_idl.json",
-    "build:decoder": "sh scripts/build-and-copy-srsly-decoder.sh",
     "build:backend": "tsc && node scripts/add-js-extensions.cjs",
     "build:frontend": "cd frontend && npm run build && cd ..",
     "build:watch": "tsc --watch",

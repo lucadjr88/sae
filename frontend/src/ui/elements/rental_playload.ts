@@ -222,6 +222,7 @@ function buildTable(contracts: RentalContract[]) {
       const fleetCell = tr.querySelector(`#fleet_${c.fleet}`) as HTMLElement;
       fleetCell.addEventListener('click', () => {
         createRentalContractWindow(c.fleet_name ?? c.fleet, c);
+        console.log('Rent Details:', c);
       });
     });
   };

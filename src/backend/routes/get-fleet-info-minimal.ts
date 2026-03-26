@@ -17,12 +17,12 @@ router.get('/getFleetInfoMinimal', async (req, res) => {
   if (!rpcUrl || !fleetId) {
     return res.status(400).json({ error: 'Missing rpcUrl or fleetId' });
   }
-  const proc = spawn('./decoder/get_fleet_info_minimal', [rpcUrl, fleetId]);
+  const get_fleet_info_minimal_bin = spawn('./utility/bin/get_fleet_info_minimal', [rpcUrl, fleetId]);
   let data = '';
   let err = '';
-  proc.stdout.on('data', chunk => (data += chunk));
-  proc.stderr.on('data', chunk => (err += chunk));
-  proc.on('close', async code => {
+  get_fleet_info_minimal_bin.stdout.on('data', chunk => (data += chunk));
+  get_fleet_info_minimal_bin.stderr.on('data', chunk => (err += chunk));
+  get_fleet_info_minimal_bin.on('close', async code => {
     if (code === 0) {
       try {
         // Estrai la prima parentesi graffa e l'ultima per isolare il JSON
@@ -32,19 +32,52 @@ router.get('/getFleetInfoMinimal', async (req, res) => {
         const jsonStr = data.slice(first, last + 1);
         const json = JSON.parse(jsonStr);
 
-        // Se posizione.starbase è presente, decodifica il nome
+        // Se posizione.starbase è presente, decodifica il nome e aggiungi la pubkey
+        let starbasePubkey = null;
         if (json.posizione && json.posizione.starbase && Array.isArray(json.posizione.starbase)) {
           try {
             const starbasePubkeyBytes = Buffer.from(json.posizione.starbase);
-            const starbasePubkey = bs58.encode(starbasePubkeyBytes);
+            starbasePubkey = bs58.encode(starbasePubkeyBytes);
             // Recupera solo il nome della starbase
             const name = await getStarbaseName(rpcUrl, starbasePubkey);
             json.posizione.starbase_name = name;
+            json.posizione.starbase_pubkey = starbasePubkey;
           } catch (e) {
             json.posizione.starbase_name = null;
             json.posizione.starbase_name_error = String(e);
+            json.posizione.starbase_pubkey = null;
           }
         }
+
+        // PATCH: aggiorna cache/contracts.json aggiungendo la pubkey della starbase alla flotta corrispondente
+        try {
+          const contractsPath = 'cache/contracts.json';
+          //console.log('[DEBUG] contractsPath:', contractsPath);
+          //console.log('[DEBUG] starbasePubkey:', starbasePubkey);
+          //console.log('[DEBUG] fleetId:', fleetId);
+          if (fs.existsSync(contractsPath) && starbasePubkey) {
+            const contractsObj = JSON.parse(fs.readFileSync(contractsPath, 'utf-8'));
+            if (contractsObj && Array.isArray(contractsObj.contracts)) {
+              const idx = contractsObj.contracts.findIndex((c: any) => c.fleet === fleetId);
+              //console.log('[DEBUG] idx trovato:', idx);
+              if (idx !== -1) {
+                //console.log('[DEBUG] Prima della scrittura:', JSON.stringify(contractsObj.contracts[idx], null, 2));
+                contractsObj.contracts[idx].starbase_pubkey = starbasePubkey;
+                fs.writeFileSync(contractsPath, JSON.stringify(contractsObj, null, 2));
+                //console.log('[DEBUG] Dopo la scrittura:', JSON.stringify(contractsObj.contracts[idx], null, 2));
+              } else {
+                console.log('[DEBUG] Nessun contratto trovato per fleetId:', fleetId);
+              }
+            } else {
+              console.log('[DEBUG] contractsObj.contracts non è un array');
+            }
+          } else {
+            console.log('[DEBUG] File non esiste o starbasePubkey mancante');
+          }
+        } catch (e) {
+          console.log('[DEBUG] Errore scrittura contracts.json:', e);
+        }
+
         res.json(json);
       } catch (e) {
         res.status(500).json({ error: 'Invalid JSON', details: String(e), raw: data });

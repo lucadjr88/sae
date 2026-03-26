@@ -155,8 +155,12 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
     console.log(`[decodeInstructions] SAGE ops decodificate: 0, unknown: ${result.length}`);
     return result;
   }
-  const binPath = '/home/luca/sae/dist/backend/decoder/decode_fleets';
+  //const binPath = '/home/luca/sae/dist/backend/decoder/decode_fleets';
+  const binPath = path.join(process.cwd(), 'utility', 'bin', 'carbon_decoder');
   const binExists = fs.existsSync(binPath);
+  if (!binExists) {
+    console.warn(`[decodeInstructions] WARNING: binario decode_fleets NON TROVATO a ${binPath}. Tutte le operazioni saranno marcate come Unknown.`);
+  }
   let decodedResults: any[] = [];
   // raccolta delle istruzioni SAGE (oggetti {programId,data,txIndex})
   let sageInstructions: Array<{ programId: string, data: string, txIndex: number }> = [];
