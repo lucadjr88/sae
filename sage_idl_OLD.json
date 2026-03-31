@@ -1,0 +1,35 @@
+{
+  "version": "0.1.0",
+  "name": "srsly",
+  "instructions": [
+    {
+      "name": "acceptRental",
+      "accounts": [
+        { "name": "mint", "isMut": false, "isSigner": false },
+        { "name": "borrower", "isMut": true, "isSigner": true },
+        { "name": "borrowerProfile", "isMut": false, "isSigner": false },
+        { "name": "borrowerProfileFaction", "isMut": false, "isSigner": false },
+        { "name": "borrowerTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "fleet", "isMut": false, "isSigner": false },
+        { "name": "gameId", "isMut": false, "isSigner": false },
+        { "name": "starbase", "isMut": false, "isSigner": false },
+        { "name": "starbasePlayer", "isMut": false, "isSigner": false },
+        { "name": "contract", "isMut": false, "isSigner": false },
+        { "name": "rentalState", "isMut": true, "isSigner": false },
+        { "name": "rentalAuthority", "isMut": false, "isSigner": false },
+        { "name": "rentalTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "rentalThread", "isMut": false, "isSigner": false },
+        { "name": "feeTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "sageProgram", "isMut": false, "isSigner": false },
+        { "name": "antegenProgram", "isMut": false, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false },
+        { "name": "associatedTokenProgram", "isMut": false, "isSigner": false },
+        { "name": "systemProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" },
+        { "name": "duration", "type": "u64" }
+      ]
+    }
+  ]
+}

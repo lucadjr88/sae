@@ -172,7 +172,7 @@ export class RentalService {
 		return { contracts: filtered, createdAt };
 	}
 	// Recupera account multipli tramite getMultipleAccountsInfo (batch RPC)
-	private async fetchAccountsByAddresses(
+	public async fetchAccountsByAddresses(
 		addresses: string[],
 		profileId: string,
 	): Promise<Map<string, MaybeAccount>> {

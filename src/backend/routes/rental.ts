@@ -1,5 +1,6 @@
 
 import express from 'express';
+import scriptAffittaNaviRouter from '../rental/script_affitta_navi';
 import { RentalService } from '../rental/rentalService';
 import { PublicKey } from '@solana/web3.js';
 const SRSLY_PROGRAM_ID = 'SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT';
@@ -8,6 +9,8 @@ import type { ContractQueryOptions, ContractStateFilter, FleetStarbase } from '.
 import { getRentalFleetDetails } from '../../decoders/rental_details';
 
 const router = express.Router();
+// Espone tutte le route definite in script_affitta_navi (inclusa /rent-fleet)
+router.use('/', scriptAffittaNaviRouter);
 
 function queryString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;

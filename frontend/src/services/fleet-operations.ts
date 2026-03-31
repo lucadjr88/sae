@@ -1,6 +1,6 @@
 // public/js/fleet-operations.ts
 import { normalizeOpName } from '@/utils/utils';
-import { renderCraftingDetailsRows } from '@/ui/renderDetails';
+import { renderCraftingDetailsRows } from '@/ui/elements/renderDetails';
 //import type { CraftingDetail } from '../types/details';
 import type {
   OperationStats,

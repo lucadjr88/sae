@@ -1,5 +1,5 @@
-import { PublicKey, Connection, clusterApiUrl } from '@solana/web3.js';
-import { RpcPoolManager } from './rpc/rpc-pool-manager';
+import { PublicKey, Connection } from '@solana/web3.js';
+
 
 const PLAYER_PROFILE_PROGRAM_ID = 'pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9';
 
@@ -11,32 +11,38 @@ type ProfilePDAVariant = {
 };
 
 // Find player profile by searching on-chain for accounts containing wallet as owner/authority
-export async function findPlayerProfilesForWallet(wallet: PublicKey, profileId?: string): Promise<ProfilePDAVariant[]> {
   const variants: ProfilePDAVariant[] = [];
-  let pick: any = null;
+  //return await findPlayerProfilesForWalletWithRpc(wallet, undefined, undefined);
+//}
 
+// Best practice: pass rpcUrl as parameter
+export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcUrl?: string, profileId?: string): Promise<ProfilePDAVariant[]> {
+  const variants: ProfilePDAVariant[] = [];
   try {
-    //pick = await RpcPoolManager.pickRpcConnection(profileId || wallet.toBase58(), { waitForMs: 3000 });
-    // sostituiamo la chiamata a RpcPoolManager con una connessione diretta per evitare problemi di timeout, teniamo conto di release comunque
-    const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
-    pick =  { connection, release: async ({ success }: { success: boolean }) => {
-      // In a real implementation, you would return the connection to the pool here
-      // For this direct connection example, we can simply close it if needed
-      if (connection) {
-        // No actual pool to release to, so we just log the release action
-        console.log(`[derivePlayerProfilePDA] Released connection (success: ${success})`);
-      }
-    }};
-    
-    
-    //const { connection, release } = pick;
-
-    // Get all accounts owned by the Player Profile program
+    console.log('[findPlayerProfilesForWalletWithRpc] Start for wallet:', wallet.toBase58());
+    let rpcToUse = rpcUrl;
+    if (!rpcToUse) {
+      const { getSingleHealthyRpc } = await import('./rpc/singleRpcManager');
+      rpcToUse = await getSingleHealthyRpc();
+    }
+    console.log('[findPlayerProfilesForWalletWithRpc] Selected RPC:', rpcToUse);
+    if (!rpcToUse) {
+      console.log('[findPlayerProfilesForWalletWithRpc] No healthy RPC endpoint found');
+      return [{
+        label: 'error',
+        description: 'No healthy RPC endpoint found',
+        profileId: '',
+        source: 'rpc selection failed'
+      }];
+    }
+    const connection = new Connection(rpcToUse, 'confirmed');
     const programPubkey = new PublicKey(PLAYER_PROFILE_PROGRAM_ID);
     const walletBuffer = wallet.toBuffer();
-
-    // Search for profiles containing the wallet in data
-    // Offset varies based on position in profile struct
+    console.log('[findPlayerProfilesForWalletWithRpc] Calling getProgramAccounts with filter:', {
+      programId: programPubkey.toBase58(),
+      offset: 30,
+      wallet: wallet.toBase58()
+    });
     const accountsWithWallet = await connection.getProgramAccounts(programPubkey, {
       filters: [
         {
@@ -48,9 +54,10 @@ export async function findPlayerProfilesForWallet(wallet: PublicKey, profileId?:
       ],
       commitment: 'confirmed'
     });
-
+    console.log('[findPlayerProfilesForWalletWithRpc] getProgramAccounts result count:', accountsWithWallet.length);
     if (accountsWithWallet.length > 0) {
       accountsWithWallet.forEach((acc, idx) => {
+        console.log(`[findPlayerProfilesForWalletWithRpc] Found profile ${idx + 1}:`, acc.pubkey.toBase58());
         variants.push({
           label: `profile_found_${idx + 1}`,
           description: `Profile account found containing wallet ${wallet.toBase58()} in data`,
@@ -59,10 +66,8 @@ export async function findPlayerProfilesForWallet(wallet: PublicKey, profileId?:
         });
       });
     }
-
-    //release({ success: true });
-
     if (variants.length === 0) {
+      console.log('[findPlayerProfilesForWalletWithRpc] No player profile found for this wallet on-chain');
       variants.push({
         label: 'not_found',
         description: 'No player profile found for this wallet on-chain',
@@ -70,9 +75,9 @@ export async function findPlayerProfilesForWallet(wallet: PublicKey, profileId?:
         source: 'on-chain search returned empty'
       });
     }
-
     return variants;
   } catch (e) {
+    console.log('[findPlayerProfilesForWalletWithRpc] Error:', (e as any)?.message || e);
     return [{
       label: 'error',
       description: `Error searching for profiles: ${(e as any)?.message || 'Unknown error'}`,

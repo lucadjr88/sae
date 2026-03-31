@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { PublicKey } from '@solana/web3.js';
-import { findPlayerProfilesForWallet } from '../../utils/derivePlayerProfilePDA';
+import { findPlayerProfilesForWalletWithRpc } from '../../utils/derivePlayerProfilePDA';
 
 export async function playerProfileIdHandler(req: Request, res: Response) {
   const wallet = req.query.wallet as string;
@@ -8,7 +8,8 @@ export async function playerProfileIdHandler(req: Request, res: Response) {
 
   try {
     const walletPubkey = new PublicKey(wallet);
-    const profiles = await findPlayerProfilesForWallet(walletPubkey, wallet);
+    // Pass undefined as rpcUrl to use healthy RPC selection
+    const profiles = await findPlayerProfilesForWalletWithRpc(walletPubkey, undefined);
     return res.json({
       wallet,
       message: 'Player Profile account(s) found on-chain for wallet',

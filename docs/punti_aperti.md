@@ -2,7 +2,7 @@
 
 - alla connessione del wallet ricevo errore "Error during connection: WalletNotReadyError" 
 
-
+- aggiungere singleConnection (funzione di pickup e test dei singoli rpc in rotazione) a rpcmanager ed usarlo al posto delle chiamate ai singoli rpc
 
 - durante pruneEndPoints 
 "

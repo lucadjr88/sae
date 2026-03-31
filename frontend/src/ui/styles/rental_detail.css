@@ -16,7 +16,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background-color: #8d7297;
+  background-color: #45476c;
   border-radius: 8px;
   padding: 1%;
   margin-block: 15px;
@@ -37,8 +37,8 @@
 
 .window-header h2 {
   margin: 0;
-  font-size: 1.2rem;
-  color: #333;
+ font-size: 1.5rem;
+  color: #b94b4b;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
@@ -143,14 +143,14 @@
 
 
 /* Container della colonna destra */
-.additional-details {
+/*.additional-details {
   flex-direction: column;
   gap: 12px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   border-radius: 8px;
-}
+}*/
 
 /* Stile per i box di caricamento */
 .loading-card {

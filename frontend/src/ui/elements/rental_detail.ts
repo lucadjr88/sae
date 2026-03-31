@@ -87,9 +87,8 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
     import('@/services/getFleetInfoMinimal').then(async ({ getFleetInfoMinimal }) => {
       try {
         // Parametri hardcoded come da esempio
-        const rpcUrl = 'https://mainnet.helius-rpc.com/?api-key=746b2d69-ddf7-4f2a-8a81-ff88b195679a';
         const fleetId = contractDetails.fleet;
-        const data = await getFleetInfoMinimal(rpcUrl, fleetId);
+        const data = await getFleetInfoMinimal(fleetId);
         // Mostra la risposta in modo semplice
         try {
           // 1. Calcolo percentuali con protezione contro divisioni per zero o dati mancanti
