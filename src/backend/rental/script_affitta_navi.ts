@@ -4,6 +4,7 @@ import BN from "bn.js";
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
 import { RentalService } from "./rentalService";
+import { getRpcConnection } from "../../utils/rpc/connection";
 
 // PATCH: Express endpoint minimale per orchestrare la rental tx
 import express from "express";
@@ -82,11 +83,11 @@ function normalizeTypeDef(typeDef: any): any {
           ...variant,
           fields: Array.isArray(variant.fields)
             ? variant.fields.map((field: any) => {
-                if (field && typeof field === "object" && "type" in field) {
-                  return { ...field, type: normalizeIdlType(field.type) };
-                }
-                return normalizeIdlType(field);
-              })
+              if (field && typeof field === "object" && "type" in field) {
+                return { ...field, type: normalizeIdlType(field.type) };
+              }
+              return normalizeIdlType(field);
+            })
             : variant.fields,
         })),
       },
@@ -115,13 +116,13 @@ function toLegacyAnchorIdl(rawIdl: any): anchor.Idl {
 
   const instructions = Array.isArray(rawIdl.instructions)
     ? rawIdl.instructions.map((ix: any) => ({
-        ...ix,
-        args: (ix.args ?? []).map((arg: any) => ({
-          ...arg,
-          type: normalizeIdlType(arg.type),
-        })),
-        accounts: normalizeInstructionAccounts(ix.accounts ?? []),
-      }))
+      ...ix,
+      args: (ix.args ?? []).map((arg: any) => ({
+        ...arg,
+        type: normalizeIdlType(arg.type),
+      })),
+      accounts: normalizeInstructionAccounts(ix.accounts ?? []),
+    }))
     : [];
 
   return {
@@ -142,6 +143,7 @@ const profileFactionCache = new Map<string, PublicKey>();
 async function getProfileFactionAccount(profilePk: PublicKey): Promise<PublicKey> {
   const cacheKey = profilePk.toBase58();
   if (profileFactionCache.has(cacheKey)) return profileFactionCache.get(cacheKey)!;
+  const connection = await getRpcConnection();
   const accounts = await connection.getProgramAccounts(PROFILE_FACTION_PROGRAM_ID, {
     filters: [{ memcmp: { offset: 9, bytes: profilePk.toBase58() } }],
   });
@@ -155,12 +157,7 @@ async function getProfileFactionAccount(profilePk: PublicKey): Promise<PublicKey
 // Carica contracts.json una sola volta (in produzione meglio usare cache o fetch dinamico)
 //const contractsCache = JSON.parse(fs.readFileSync("cache/contracts.json", "utf8"));
 let contractsCache: any = null;
-try {  const data = fs.readFileSync("cache/contracts.json", "utf8");
-  contractsCache = JSON.parse(data);
-  console.log("[INIT] Contracts cache caricata con successo, totale contratti:", Array.isArray(contractsCache) ? contractsCache.length : (contractsCache.contracts ? contractsCache.contracts.length : 0));
-} catch (err) {
-  console.error("[INIT] Errore durante il caricamento della cache dei contratti:", err);
-}
+
 
 const rentalService = new RentalService(new PublicKey("SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT"), 30000);
 
@@ -185,6 +182,13 @@ router.post("/rent-fleet", async (req, res) => {
 
     // Trova il contratto solo se la cache è disponibile, altrimenti prosegui come in main
     let contract = null;
+    try {
+      const data = fs.readFileSync("cache/contracts.json", "utf8");
+      contractsCache = JSON.parse(data);
+      console.log("[INIT] Contracts cache caricata con successo, totale contratti:", Array.isArray(contractsCache) ? contractsCache.length : (contractsCache.contracts ? contractsCache.contracts.length : 0));
+    } catch (err) {
+      console.error("[INIT] Errore durante il caricamento della cache dei contratti:", err);
+    }
     if (contractsCache) {
       const contractArr = Array.isArray(contractsCache) ? contractsCache : contractsCache.contracts;
       contract = contractArr.find((c) => c.address === contractAddress);
@@ -287,7 +291,7 @@ router.post("/rent-fleet", async (req, res) => {
 
       // amount dal frontend è la tariffa giornaliera in ATLAS; il programma SRSLY attende il totale (rate × duration) in atomics
       const amountAtomics = BigInt(Math.round(Number(amount) * Number(duration) * 100_000_000));
-      
+
       // Debug: log dei parametri critici
       console.log("[RENT-FLEET] TX params:", {
         amount: amount,
@@ -327,6 +331,7 @@ router.post("/rent-fleet", async (req, res) => {
 
       // Patch minimale: imposta feePayer e recentBlockhash per compatibilità wallet
       tx.feePayer = borrowerPk;
+      const connection = await getRpcConnection();
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
       // Log oggetto tx DOPO l'assegnazione
       console.log("[RENT-FLEET] TX oggetto dopo feePayer/recentBlockhash:", tx);
@@ -349,13 +354,10 @@ router.post('/send-tx', async (req, res) => {
     return res.status(400).json({ error: 'Missing or invalid transaction field' });
   }
   try {
-    const { getSingleHealthyRpc } = await import('../../utils/rpc/singleRpcManager.js');
-    const rpcUrl = await getSingleHealthyRpc();
-    if (!rpcUrl) return res.status(503).json({ error: 'No healthy RPC available' });
     const rawTx = Buffer.from(transaction, 'base64');
-    const connection = new Connection(rpcUrl, 'confirmed');
+    const connection = await getRpcConnection();
     const signature = await connection.sendRawTransaction(rawTx, { skipPreflight: false });
-    console.log(`[SEND-TX] TX inviata con successo. Signature: ${signature} | RPC: ${rpcUrl}`);
+    console.log(`[SEND-TX] TX inviata con successo. Signature: ${signature}`);
     res.json({ signature });
   } catch (err: any) {
     console.error('[SEND-TX] Error:', err);
@@ -367,7 +369,6 @@ export default router;
 
 // Parametri principali
 const SRSLY_PROGRAM_ID = new PublicKey("SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT");
-const connection = new Connection("https://api.mainnet-beta.solana.com");
 
 // PATCH: wallet va gestito in modo sicuro, qui placeholder
 const wallet = "";//Keypair.fromSecretKey(/* ... */);
@@ -436,6 +437,7 @@ export async function acceptRentalTx(params: any) {
     signTransaction: async (tx: any) => tx,
     signAllTransactions: async (txs: any) => txs,
   };
+  const connection = await getRpcConnection();
   const provider = new anchor.AnchorProvider(connection, dummyWallet as any, anchor.AnchorProvider.defaultOptions());
   const program = new anchor.Program(srslyLegacyIdl, SRSLY_PROGRAM_ID, provider);
   const tx = await program.methods.acceptRental(new BN(amount), new BN(duration)).accountsStrict({

@@ -2,9 +2,8 @@
 
 import express from 'express';
 import { spawn } from 'child_process';
-import { Connection } from '@solana/web3.js';
 import { Program } from '@project-serum/anchor';
-import { getSingleHealthyRpc } from '../../utils/rpc/singleRpcManager';
+import { getRpcConnection, getRpcConnectionWithUrl } from '../../utils/rpc/connection.js';
 import bs58 from 'bs58';
 import fs from 'fs';
 const sageIdlPath = new URL('../idl/sage_idl.json', import.meta.url);
@@ -26,8 +25,11 @@ router.get('/getFleetInfoMinimal', async (req, res) => {
     return res.status(400).json({ error: 'Missing fleetId' });
   }
 
-  const rpcUrl = await getSingleHealthyRpc();
-  if (!rpcUrl) {
+  let rpcUrl: string;
+  try {
+    ({ rpcUrl } = await getRpcConnectionWithUrl());
+  } catch (error) {
+    console.log('[DEBUG] No healthy RPC endpoint found:', error);
     return res.status(500).json({ error: 'No healthy RPC endpoint found' });
   }
 
@@ -116,13 +118,15 @@ router.get('/getFleetInfoMinimal', async (req, res) => {
 
 // Funzione minimale: restituisce solo il nome della starbase usando un RPC valido
 async function getStarbaseName(starbasePubkey: string): Promise<string|null> {
-  const rpcUrl = await getSingleHealthyRpc();
-  if (!rpcUrl) {
-    console.log('[DEBUG] getStarbaseName: no healthy RPC found');
+  let connection;
+  try {
+    connection = await getRpcConnection();
+  } catch (error) {
+    console.log('[DEBUG] getStarbaseName: no healthy RPC found', error);
     return null;
   }
+  const rpcUrl = connection.rpcEndpoint;
   console.log('[DEBUG] getStarbaseName called', { rpcUrl, starbasePubkey });
-  const connection = new Connection(rpcUrl, 'confirmed');
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   const program = new Program(sageIdl as any, SAGE_PROGRAM_ID, { connection });
   let name: string|null = null;

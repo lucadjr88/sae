@@ -78,7 +78,7 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
                 // 429: sleep progressivo + forza endpoint diverso su retry
                 last429Delay = Math.min(5000 * Math.pow(2, Math.floor(attemptEp / 2)), 60000); // cap 60s
                 const jitter = Math.floor(Math.random() * 2000);
-                process.stdout.write(`Server responded with 429 Too Many Requests.  Retrying after ${(last429Delay + jitter) / 1000}s delay...\n`);
+                process.stdout.write(`${endpoint.url} responded with 429 Too Many Requests.  Retrying after ${(last429Delay + jitter) / 1000}s delay...\n`);
                 await new Promise(r => setTimeout(r, last429Delay + jitter));
               } else {
                 // altri errori: jitter minore
@@ -230,6 +230,7 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
           const is429 = e && (e.status === 429 || (e.message && String(e.message).includes('429')));
           release({ success: false, errorType: is429 ? '429' : undefined });
           if (is429) {
+            console.log(`${endpoint.url} responded with 429 Too Many Requests. Backing off...`);
             const backoffMs = Math.min(60000, 500 * Math.pow(2, attempt - 1));
             const jitter = Math.floor(Math.random() * (backoffMs * 0.5));
             await new Promise(r => setTimeout(r, backoffMs + jitter));

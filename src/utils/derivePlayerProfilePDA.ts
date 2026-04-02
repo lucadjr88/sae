@@ -1,4 +1,5 @@
 import { PublicKey, Connection } from '@solana/web3.js';
+import { getRpcConnectionWithUrl } from './rpc/connection.js';
 
 
 const PLAYER_PROFILE_PROGRAM_ID = 'pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9';
@@ -20,22 +21,8 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
   const variants: ProfilePDAVariant[] = [];
   try {
     console.log('[findPlayerProfilesForWalletWithRpc] Start for wallet:', wallet.toBase58());
-    let rpcToUse = rpcUrl;
-    if (!rpcToUse) {
-      const { getSingleHealthyRpc } = await import('./rpc/singleRpcManager');
-      rpcToUse = await getSingleHealthyRpc();
-    }
+    const { connection, rpcUrl: rpcToUse } = await getRpcConnectionWithUrl({ rpcUrl });
     console.log('[findPlayerProfilesForWalletWithRpc] Selected RPC:', rpcToUse);
-    if (!rpcToUse) {
-      console.log('[findPlayerProfilesForWalletWithRpc] No healthy RPC endpoint found');
-      return [{
-        label: 'error',
-        description: 'No healthy RPC endpoint found',
-        profileId: '',
-        source: 'rpc selection failed'
-      }];
-    }
-    const connection = new Connection(rpcToUse, 'confirmed');
     const programPubkey = new PublicKey(PLAYER_PROFILE_PROGRAM_ID);
     const walletBuffer = wallet.toBuffer();
     console.log('[findPlayerProfilesForWalletWithRpc] Calling getProgramAccounts with filter:', {

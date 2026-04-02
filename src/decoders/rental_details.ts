@@ -5,6 +5,7 @@
 
 import { PublicKey, Connection } from '@solana/web3.js';
 import { deserialize } from 'borsh';
+import { getRpcConnection } from '../utils/rpc/connection.js';
 
 export interface RentalFleetDetails {
   crew?: number;
@@ -49,10 +50,7 @@ export async function getRentalFleetDetails(
   contractId: PublicKey,
   connection?: Connection
 ): Promise<RentalFleetDetails> {
-  // Usa la connessione fornita o default mainnet-beta
-  const conn =
-    connection ||
-    new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+  const conn = connection ?? await getRpcConnection();
 
   // Fetch account Fleet
   const accInfo = await conn.getAccountInfo(fleetId);
