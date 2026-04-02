@@ -10,7 +10,7 @@ async function postGetVersion(url: string, timeoutMs = 5000) {
   // Usa il modulo https nativo invece di fetch per maggiore compatibilità
   const https = await import('https');
   const { URL } = await import('url');
-  
+
   return new Promise<{ httpCode: number; body: string }>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new Error('Timeout'));
@@ -19,7 +19,7 @@ async function postGetVersion(url: string, timeoutMs = 5000) {
     try {
       const parsedUrl = new URL(url);
       const postData = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getVersion', params: [] });
-      
+
       const options = {
         hostname: parsedUrl.hostname,
         port: parsedUrl.port || 443,
@@ -57,9 +57,9 @@ export async function pruneEndpoints(criteria: { unhealthy?: boolean, minFailure
   const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
   const endpoints = JSON.parse(raw);
   console.log(`[prune] Testing ${endpoints.length} endpoints...`);
-  
+
   // Chiamate parallele HTTP POST getVersion
-  const probes = await Promise.allSettled(endpoints.map(async (ep: any) => {
+  /*const probes = await Promise.allSettled(endpoints.map(async (ep: any) => {
     try {
       const res = await postGetVersion(ep.url, 4000);
       if (res.httpCode === 200) {
@@ -75,14 +75,78 @@ export async function pruneEndpoints(criteria: { unhealthy?: boolean, minFailure
   }));
   
   const valid = probes.map(p => (p.status === 'fulfilled' && p.value) ? p.value : null).filter(Boolean);
+  console.log(`[prune] Valid endpoints: ${valid.length}/${endpoints.length}`);*/
+
+  // Funzione generica per chiamare getSlot (da adattare alla tua implementazione post)
+  async function postGetSlot(url: string, timeout: number) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getSlot"
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(id);
+
+      return {
+        httpCode: response.status,
+        data: await response.json().catch(() => ({}))
+      };
+    } catch (e) {
+      return { httpCode: 0, error: e };
+    }
+  }
+
+  // Chiamate parallele HTTP POST getSlot
+  const probes = await Promise.allSettled(endpoints.map(async (ep: any) => {
+    try {
+      const res = await postGetSlot(ep.url, 4000);
+
+      // Gestione errori HTTP (incluso 429)
+      if (res.httpCode !== 200) {
+        const reason = res.httpCode === 429 ? "Rate Limited (429)" : `HTTP ${res.httpCode}`;
+        console.log(`[prune] ✗ ${ep.name} - ${reason}`);
+        return null;
+      }
+
+      // Gestione errori interni JSON-RPC (es. nodo non pronto o overload)
+      if (res.data?.error) {
+        console.log(`[prune] ✗ ${ep.name} RPC Error: ${res.data.error.message}`);
+        return null;
+      }
+
+      // Se arriviamo qui, abbiamo un numero di slot valido
+      if (typeof res.data?.result === 'number') {
+        console.log(`[prune] ✓ ${ep.name} (Slot: ${res.data.result})`);
+        return ep;
+      }
+
+    } catch (e: any) {
+      console.log(`[prune] ✗ ${ep.name} Error: ${e.message}`);
+    }
+    return null;
+  }));
+
+  const valid = probes
+    .map(p => (p.status === 'fulfilled' && p.value) ? p.value : null)
+    .filter(Boolean);
+
   console.log(`[prune] Valid endpoints: ${valid.length}/${endpoints.length}`);
-  
+
   // Se nessun endpoint è valido, ritorna l'intero pool invece di un array vuoto
   if (valid.length === 0) {
     console.warn(`[prune] WARNING: No valid endpoints found, returning full pool as fallback`);
     return endpoints;
   }
-  
+
   return valid;
 }
 

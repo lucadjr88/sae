@@ -1,7 +1,7 @@
 export async function rentTx({
   contractAddress,
+  borrower,
   borrowerProfile,
-  borrowerProfileFaction,
   starbase,
   amount,
   duration
@@ -20,8 +20,8 @@ export async function rentTx({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contractAddress,
+        borrower,
         borrowerProfile,
-        borrowerProfileFaction,
         starbase,
         amount,
         duration
@@ -40,7 +40,7 @@ export async function rentTx({
     if (response.ok) {
       // Firma e invia la transazione con il wallet desktop
       try {
-        const { Transaction, Connection } = await import("@solana/web3.js");
+        const { Transaction } = await import("@solana/web3.js");
         // Polyfill base64 -> Uint8Array compatibile browser
         function base64ToUint8Array(base64) {
           const binary = atob(base64);
@@ -56,14 +56,18 @@ export async function rentTx({
           return;
         }
         const signedTx = await window.wallet.adapter.signTransaction(tx);
-        // Invia la transazione firmata
-        // Usa la stessa connection del progetto, oppure creane una nuova se necessario
-
-        const connection = new Connection("https://mainnet.helius-rpc.com/?api-key=746b2d69-ddf7-4f2a-8a81-ff88b195679a");
+        // Invia la transazione firmata tramite il backend (pool RPC)
         const rawTx = signedTx.serialize();
-        const txid = await connection.sendRawTransaction(rawTx);
-        alert("Transazione inviata! Signature: " + txid);
-        console.log("[DEBUG] Signature inviata:", txid);
+        const base64Tx = btoa(String.fromCharCode(...rawTx));
+        const sendResp = await fetch("/api/send-tx", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transaction: base64Tx })
+        });
+        const sendData = await sendResp.json();
+        if (!sendResp.ok) throw new Error(sendData.error || "Errore broadcast tx");
+        alert("Transazione inviata! Signature: " + sendData.signature);
+        console.log("[DEBUG] Signature inviata:", sendData.signature);
       } catch (e) {
         alert("Errore firma o invio tx: " + e.message);
         console.error(e);

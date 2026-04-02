@@ -1,32 +1,61 @@
-# Copilot Custom Instructions: SAGE & Crafting Decoders
+---
+description: "Use when working on Star Atlas SAGE decoding/orchestration tasks in this repository. Enforces Solana/Anchor/Borsh/Rust/TypeScript standards and readonly usage of external knowledge repositories."
+applyTo: "**"
+---
 
-## Context & Stack
-* **Domain:** Official Star Atlas SAGE/Crafting decoders. 
-* **Scope:** Decoding only (no UI/writes). 
-* **Stack:** TypeScript (ESM), Rust (Borsh binary), Solana Web3/Anchor, Carbon decoders.
-* **Logic:** Rust is the Single Source of Truth (SSOT) for decoding. TS handles orchestration and I/O. Do NOT reimplement Borsh in TS.
+# Copilot Instructions: SAGE, Rental, and Decoders
 
-## Operational Constraints (Hard Rules)
-* **Zero Doubt:** Never doubt cache status, build processes, dev server status, or wallet activity.
-* **Server Restart:** Do NOT use `npm run`. Use exactly: 
-  `pkill -9 node; cd ~/Scaricati/sae; rm -r log; rm -r cache; rm -r dist; sleep 1; npm run build && mkdir -p log && nohup npm run dev > log/server-$(date +%Y%m%d-%H%M%S).log 2>&1 &`
-* **No Speculation:** No refactors, logic changes, or workarounds unless explicitly requested.
-* **File Limits:** Keep files between 30 and 500 lines. Reduce multiple empty lines or comment blocks to single lines.
-* **Safety:** Never modify `dist/`, do not hardcode keys (except in tests), and do not break public exports.
+## 1) Project Domain and SSOT
+- Domain: Star Atlas SAGE and related rental/crafting decoding and orchestration.
+- Runtime scope: backend decoding, transaction orchestration, cache-aware analysis; no speculative UI rewrites.
+- Stack: TypeScript (ESM), Rust (borsh-backed decoding), Solana web3.js, Anchor, Carbon decoders, StarAtlasMeta-related references.
+- Single source of truth (SSOT): Rust decoding logic and official decoder/account layouts.
+- Rule: Do not reimplement Borsh decoding logic in TypeScript if Rust/official decoder source already defines it.
 
-## Coding Style
-* **Patterns:** Prefer plain objects and maps over classes. Use short, focused functions.
-* **Conciseness:** Explicit code with minimal comments (only for non-obvious logic).
-* **Alignment:** Instruction mappings must stay aligned with official Carbon decoders.
-* **Comments:** Always use single-line comments. Never use multi-line comments.
-* **Empty Lines:** Use single empty lines to separate logical blocks only.
+## 2) Architecture and Integration Rules
+- Keep TS focused on orchestration, I/O boundaries, API shaping, and aggregation.
+- Keep binary decoding, discriminator mapping, and layout truth aligned to Rust + official IDL/decoder sources.
+- Favor deterministic mapping layers from raw chain data to typed domain objects.
+- Preserve public exports and existing module contracts unless explicitly requested.
+- For Anchor integration, keep account names and instruction mapping strictly consistent with IDL.
 
-## Output & Interaction Rules (Critical)
-* **Format:** Prefer **patch-style diffs**. Touch only relevant files and lines.
-* **No Prose:** Do NOT explain code, summarize, conclude, or restate the problem.
-* **No Examples:** Do NOT provide usage examples unless requested.
-* **Planning:** Only for non-trivial tasks: max 5 bullet points, no prose. Create `implementation_plan_for_<task>.md` only if requested.
-* **Terminal:** Use separate terminals for background processes and scripts. Do not chain commands that kill the running server.
+## 3) Safety and Change Boundaries
+- Never modify `dist/` artifacts.
+- Never hardcode private keys or secrets (tests/mocks excluded when explicitly requested).
+- Avoid destructive operations on cache/log/build folders unless explicitly requested.
+- No speculative refactors, logic rewrites, or workaround behavior changes without user request.
+- Keep edits scoped to the minimal necessary files/lines.
 
-## User Persona
-* **Level:** Expert Developer. Familiar with Solana, SAGE, Carbon, and Rust. Be direct, technical, and concise.
+## 4) External Knowledge Repositories (Read-Only)
+- Knowledge root: `/home/luca/Scaricati/staratlasRepo/**`.
+- Read-only policy: treat every file in this path as reference material.
+- Allowed operations: read, search, compare, summarize, extract APIs/contracts/caveats.
+- Forbidden operations: create, edit, rename, move, delete within the knowledge root.
+- Write boundary: implementation changes must target `/home/luca/sae/**` unless the user explicitly authorizes otherwise.
+- Pre-write guard: validate destination path is outside the knowledge root before every write/edit action.
+
+## 5) Coding Conventions
+- Prefer short, focused functions and explicit data flow.
+- Prefer plain objects/maps where they improve clarity; use classes only when justified by lifecycle/state behavior.
+- Keep comments minimal and high-value.
+- Use single-line comments only.
+- Keep vertical spacing compact and consistent.
+- Keep files reasonably sized and maintainable; split by responsibility when complexity grows.
+
+## 6) Decoder Quality Rules
+- Keep instruction/account mappings aligned with official Carbon decoders and IDLs.
+- Preserve canonical seed derivations and PDA conventions.
+- Validate numeric precision boundaries (BN/u64/i64) and signedness assumptions.
+- Document non-obvious field assumptions near the mapping layer.
+- Prefer explicit type guards/parsers at chain-data boundaries.
+
+## 7) Operational Rules
+- Use patch-style, minimal diffs by default.
+- Keep terminals separated for long-running services vs one-off scripts.
+- When restarting the backend is explicitly requested, use the exact command provided by the user/project conventions.
+- Do not chain commands that could unintentionally kill unrelated running processes.
+
+## 8) Communication Style
+- Assume expert audience (Solana, SAGE, Anchor, Rust, Borsh).
+- Be direct, technical, concise.
+- Prioritize concrete findings, risks, and exact file-level changes over generic explanations.

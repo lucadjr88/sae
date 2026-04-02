@@ -2,7 +2,7 @@ import { RentalContract } from './rental_playload';
 import { resolveMaterialImageCandidates, resolveResourceCatalogEntry } from './resource_playload';
 import { rentTx } from './rental_tx';
 import { currentProfileId } from '@/utils/state';
-import { getFactionPubkey } from '@/utils/faction';
+
 
 function formatRate(rate: number): string {
   return rate.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -177,7 +177,7 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
         if (state === 'Available') {
           rentalTxDiv.innerHTML = `
             <button id="rentButton" disabled="true">Rent</button>
-            <input type="number" id="rentDuration" placeholder="Duration (hours)" min="0" max="24" value="0">
+            <input type="number" id="rentDuration" placeholder="Duration (hours)" min="0" max="720" value="0">
             <div id="rentPriceTotal"></div>
         `;
 
@@ -201,18 +201,16 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
           rentButton.addEventListener('click', () => {
             // Prendi il profileId utente connesso
             const contractAddress = contractDetails.address;
+            const borrower = (window as any).wallet?.adapter?.publicKey?.toBase58?.() || currentProfileId;
             const borrowerProfile = currentProfileId;
-            // Fallback: fazione utente da window o 'mud'
-            const userFaction = (window as any).userFaction || 'mud';
-            const borrowerProfileFaction = getFactionPubkey(userFaction) || getFactionPubkey('mud');
             // Usa i campi definiti in RentalContract
             const starbase = contractDetails.starbase || '';
             const amount = contractDetails.rate || 1;
             const duration = parseInt(inputRentDuration.value);
             rentTx({
               contractAddress,
+              borrower,
               borrowerProfile,
-              borrowerProfileFaction,
               starbase,
               amount,
               duration

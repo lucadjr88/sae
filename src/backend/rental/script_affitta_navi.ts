@@ -2,7 +2,7 @@ import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
 import * as anchor from "@project-serum/anchor";
 import BN from "bn.js";
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import srslyIdl from "../idl/srsly_idl.json" assert { type: "json" };
+import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
 import { RentalService } from "./rentalService";
 
 // PATCH: Express endpoint minimale per orchestrare la rental tx
@@ -10,8 +10,158 @@ import express from "express";
 import fs from "fs";
 const router = express.Router();
 
+function normalizeInstructionAccounts(accounts: any[]): any[] {
+  return accounts.map((acc) => {
+    if (acc.accounts && Array.isArray(acc.accounts)) {
+      return {
+        ...acc,
+        accounts: normalizeInstructionAccounts(acc.accounts),
+      };
+    }
+    return {
+      ...acc,
+      isMut: acc.isMut ?? acc.writable ?? false,
+      isSigner: acc.isSigner ?? acc.signer ?? false,
+      isOptional: acc.isOptional ?? acc.optional ?? false,
+    };
+  });
+}
+
+function normalizeIdlType(type: any): any {
+  if (typeof type === "string") {
+    return type === "pubkey" ? "publicKey" : type;
+  }
+  if (!type || typeof type !== "object") {
+    return type;
+  }
+  if ("vec" in type) {
+    return { vec: normalizeIdlType(type.vec) };
+  }
+  if ("option" in type) {
+    return { option: normalizeIdlType(type.option) };
+  }
+  if ("array" in type && Array.isArray(type.array)) {
+    return { array: [normalizeIdlType(type.array[0]), type.array[1]] };
+  }
+  if ("defined" in type) {
+    const defined = type.defined;
+    if (typeof defined === "string") {
+      return { defined };
+    }
+    if (defined && typeof defined === "object" && typeof defined.name === "string") {
+      return { defined: defined.name };
+    }
+  }
+  return type;
+}
+
+function normalizeTypeDef(typeDef: any): any {
+  if (!typeDef?.type?.kind) {
+    return typeDef;
+  }
+
+  if (typeDef.type.kind === "struct") {
+    return {
+      ...typeDef,
+      type: {
+        ...typeDef.type,
+        fields: (typeDef.type.fields ?? []).map((field: any) => ({
+          ...field,
+          type: normalizeIdlType(field.type),
+        })),
+      },
+    };
+  }
+
+  if (typeDef.type.kind === "enum") {
+    return {
+      ...typeDef,
+      type: {
+        ...typeDef.type,
+        variants: (typeDef.type.variants ?? []).map((variant: any) => ({
+          ...variant,
+          fields: Array.isArray(variant.fields)
+            ? variant.fields.map((field: any) => {
+                if (field && typeof field === "object" && "type" in field) {
+                  return { ...field, type: normalizeIdlType(field.type) };
+                }
+                return normalizeIdlType(field);
+              })
+            : variant.fields,
+        })),
+      },
+    };
+  }
+
+  return typeDef;
+}
+
+function toLegacyAnchorIdl(rawIdl: any): anchor.Idl {
+  const types = Array.isArray(rawIdl.types) ? rawIdl.types.map(normalizeTypeDef) : [];
+  const typeByName = new Map(types.map((t: any) => [t.name, t.type]));
+
+  const accounts = Array.isArray(rawIdl.accounts)
+    ? rawIdl.accounts.map((acc: any) => {
+      const type = acc.type ?? typeByName.get(acc.name);
+      if (!type) {
+        throw new Error(`[IDL] Missing type for account ${acc.name}`);
+      }
+      return {
+        ...acc,
+        type,
+      };
+    })
+    : undefined;
+
+  const instructions = Array.isArray(rawIdl.instructions)
+    ? rawIdl.instructions.map((ix: any) => ({
+        ...ix,
+        args: (ix.args ?? []).map((arg: any) => ({
+          ...arg,
+          type: normalizeIdlType(arg.type),
+        })),
+        accounts: normalizeInstructionAccounts(ix.accounts ?? []),
+      }))
+    : [];
+
+  return {
+    ...rawIdl,
+    version: rawIdl.version ?? rawIdl.metadata?.version ?? "0.1.0",
+    name: rawIdl.name ?? rawIdl.metadata?.name ?? "unknown_program",
+    instructions,
+    accounts,
+    types,
+  } as anchor.Idl;
+}
+
+const srslyLegacyIdl = toLegacyAnchorIdl(srslyIdl);
+
+const PROFILE_FACTION_PROGRAM_ID = new PublicKey("pFACSRuobDmvfMKq1bAzwj27t6d2GJhSCHb1VcfnRmq");
+// Cache profile -> faction account pubkey (cleared on server restart only)
+const profileFactionCache = new Map<string, PublicKey>();
+async function getProfileFactionAccount(profilePk: PublicKey): Promise<PublicKey> {
+  const cacheKey = profilePk.toBase58();
+  if (profileFactionCache.has(cacheKey)) return profileFactionCache.get(cacheKey)!;
+  const accounts = await connection.getProgramAccounts(PROFILE_FACTION_PROGRAM_ID, {
+    filters: [{ memcmp: { offset: 9, bytes: profilePk.toBase58() } }],
+  });
+  if (accounts.length === 0) throw new Error(`No profile faction account found for profile ${cacheKey}`);
+  const result = accounts[0].pubkey;
+  profileFactionCache.set(cacheKey, result);
+  console.log("[FACTION] Fetched profileFaction for", cacheKey, "->", result.toBase58());
+  return result;
+}
+
 // Carica contracts.json una sola volta (in produzione meglio usare cache o fetch dinamico)
-const contractsCache = JSON.parse(fs.readFileSync("cache/contracts.json", "utf8"));
+//const contractsCache = JSON.parse(fs.readFileSync("cache/contracts.json", "utf8"));
+let contractsCache: any = null;
+try {  const data = fs.readFileSync("cache/contracts.json", "utf8");
+  contractsCache = JSON.parse(data);
+  console.log("[INIT] Contracts cache caricata con successo, totale contratti:", Array.isArray(contractsCache) ? contractsCache.length : (contractsCache.contracts ? contractsCache.contracts.length : 0));
+} catch (err) {
+  console.error("[INIT] Errore durante il caricamento della cache dei contratti:", err);
+}
+
 const rentalService = new RentalService(new PublicKey("SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT"), 30000);
 
 
@@ -21,29 +171,50 @@ router.post("/rent-fleet", async (req, res) => {
     console.log("[RENT-FLEET] Chiamata ricevuta con body:", req.body);
     const {
       contractAddress,
+      borrower,
       borrowerProfile,
       amount,
       duration,
       profileId // opzionale, per batch fetch health-aware
     } = req.body;
 
-    // Trova il contratto
-    const contractArr = Array.isArray(contractsCache) ? contractsCache : contractsCache.contracts;
-    const contract = contractArr.find((c) => c.address === contractAddress);
-    if (!contract) {
-      res.status(404).json({ error: "Contract not found" });
+    if (!borrower || !borrowerProfile) {
+      res.status(400).json({ error: "Missing required fields: borrower, borrowerProfile" });
       return;
     }
-    console.log("[RENT-FLEET] Contratto trovato:", contract);
+
+    // Trova il contratto solo se la cache è disponibile, altrimenti prosegui come in main
+    let contract = null;
+    if (contractsCache) {
+      const contractArr = Array.isArray(contractsCache) ? contractsCache : contractsCache.contracts;
+      contract = contractArr.find((c) => c.address === contractAddress);
+      if (!contract) {
+        res.status(404).json({ error: "Contract not found" });
+        return;
+      }
+      console.log("[RENT-FLEET] Contratto trovato:", contract);
+    } else {
+      // Comportamento fallback: log e prosegui (come branch main)
+      console.warn("[RENT-FLEET] ATTENZIONE: contractsCache è null, proseguo senza enrich da cache (comportamento main)");
+      // Qui puoi aggiungere logica alternativa se serve, oppure lasciare che il resto del flusso usi i parametri ricevuti
+      // Se serve un contract oggetto, puoi costruirne uno minimale dai parametri della request (se necessario)
+      contract = {
+        fleet: req.body.fleet,
+        game_id: req.body.game_id,
+        faction: req.body.faction || 1 // default mud
+      };
+    }
 
     // Derivazione PDA fedele all'esempio ufficiale
     const fleetPk = new PublicKey(contract.fleet);
     const gameIdPk = new PublicKey(contract.game_id);
-    const borrowerPk = new PublicKey(borrowerProfile);
-    const mintPk = new PublicKey("ATLASX6Ds5Z5iFv7Qq5tFQw1kQnX2U1QnX2U1QnX2U1Q");
+    const borrowerPk = new PublicKey(borrower);
+    const borrowerProfilePk = new PublicKey(borrowerProfile);
+    const mintPk = new PublicKey("ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx");
     const srslyProgramId = SRSLY_PROGRAM_ID;
-    const antigenProgramId = new PublicKey("ANTEGEN111111111111111111111111111111111111");
+    const antigenProgramId = new PublicKey("AgThdyi1P5RkVeZD2rQahTvs8HePJoGFFxKtvok5s2J1");
     const sageProgramId = new PublicKey("SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE");
+    const SLY_SQUADS = new PublicKey("FEESnQG5d8UmUUbogJUaiQjMZpRQ9fCEDf3nBRf1ut9M");
 
     // contractPda
     const [contractPda] = await PublicKey.findProgramAddress([
@@ -63,14 +234,11 @@ router.post("/rent-fleet", async (req, res) => {
     ], antigenProgramId);
     // sagePlayerProfile
     const [sagePlayerProfile] = await PublicKey.findProgramAddress([
-      Buffer.from("sage_player_profile"), borrowerPk.toBuffer(), gameIdPk.toBuffer()
+      Buffer.from("sage_player_profile"), borrowerProfilePk.toBuffer(), gameIdPk.toBuffer()
     ], sageProgramId);
 
-    // ProfileFactionAccount: derivazione PDA minimale (placeholder fedele all'esempio)
-    const [borrowerProfileFaction] = await PublicKey.findProgramAddress([
-      Buffer.from("profile_faction"), borrowerPk.toBuffer()
-    ], srslyProgramId);
-    console.log("[RENT-FLEET] borrowerProfileFaction PDA:", borrowerProfileFaction.toBase58());
+    const borrowerProfileFactionPk = await getProfileFactionAccount(borrowerProfilePk);
+    console.log("[RENT-FLEET] borrowerProfileFaction:", borrowerProfileFactionPk.toBase58());
 
     // Fazione e coordinate starbase (dummy, da fetchare se serve, qui mud)
     const factionCoords = { mud: { x: 0, y: -39 }, oni: { x: -40, y: 30 }, ustur: { x: 40, y: 30 } };
@@ -96,8 +264,9 @@ router.post("/rent-fleet", async (req, res) => {
     const rentalTokenAccount = await getAssociatedTokenAddress(
       mintPk, rentalState, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    // feeTokenAccount: SLY_SQUADS non disponibile, fallback rentalTokenAccount
-    const feeTokenAccount = rentalTokenAccount;
+    const feeTokenAccount = await getAssociatedTokenAddress(
+      mintPk, SLY_SQUADS, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    );
 
     // Log PDAs
     console.log("[RENT-FLEET] PDAs:", {
@@ -116,25 +285,26 @@ router.post("/rent-fleet", async (req, res) => {
     // Costruisci la tx fedele all'esempio ufficiale
     try {
 
-      // Forza amount a 1 ATLAS (6 decimali)
-      const forcedAmount = 1_000_000n;
-      const { createTransferInstruction } = await import("@solana/spl-token");
-      console.log("[DEBUG] SPL Transfer: from", borrowerTokenAccount.toBase58(), "to", rentalTokenAccount.toBase58(), "owner", borrowerPk.toBase58(), "amount", forcedAmount.toString());
-      const transferIx = createTransferInstruction(
-        borrowerTokenAccount,
-        rentalTokenAccount,
-        borrowerPk,
-        forcedAmount,
-        [],
-        TOKEN_PROGRAM_ID
-      );
+      // amount dal frontend è la tariffa giornaliera in ATLAS; il programma SRSLY attende il totale (rate × duration) in atomics
+      const amountAtomics = BigInt(Math.round(Number(amount) * Number(duration) * 100_000_000));
+      
+      // Debug: log dei parametri critici
+      console.log("[RENT-FLEET] TX params:", {
+        amount: amount,
+        amountAtomics: amountAtomics.toString(),
+        duration: duration,
+        durationType: typeof duration,
+        borrower: borrowerPk.toBase58(),
+        borrowerProfile: borrowerProfilePk.toBase58(),
+        contractPda: contractPda.toBase58()
+      });
 
       // Costruisci la custom instruction acceptRental
       const tx = await acceptRentalTx({
         mint: mintPk,
         borrower: borrowerPk,
-        borrower_profile: borrowerProfile,
-        borrower_profile_faction: borrowerProfileFaction,
+        borrower_profile: borrowerProfilePk,
+        borrower_profile_faction: borrowerProfileFactionPk,
         borrower_token_account: borrowerTokenAccount,
         fleet: fleetPk,
         game_id: gameIdPk,
@@ -151,12 +321,10 @@ router.post("/rent-fleet", async (req, res) => {
         token_program: TOKEN_PROGRAM_ID,
         associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
         system_program: SystemProgram.programId,
-        amount,
+        amount: amountAtomics.toString(),
         duration
       });
 
-      // Inserisci la transfer SPL come prima istruzione
-      tx.instructions.unshift(transferIx);
       // Patch minimale: imposta feePayer e recentBlockhash per compatibilità wallet
       tx.feePayer = borrowerPk;
       tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
@@ -171,6 +339,27 @@ router.post("/rent-fleet", async (req, res) => {
     }
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Broadcast tx firmata usando il pool RPC del backend
+router.post('/send-tx', async (req, res) => {
+  const { transaction } = req.body;
+  if (!transaction || typeof transaction !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid transaction field' });
+  }
+  try {
+    const { getSingleHealthyRpc } = await import('../../utils/rpc/singleRpcManager.js');
+    const rpcUrl = await getSingleHealthyRpc();
+    if (!rpcUrl) return res.status(503).json({ error: 'No healthy RPC available' });
+    const rawTx = Buffer.from(transaction, 'base64');
+    const connection = new Connection(rpcUrl, 'confirmed');
+    const signature = await connection.sendRawTransaction(rawTx, { skipPreflight: false });
+    console.log(`[SEND-TX] TX inviata con successo. Signature: ${signature} | RPC: ${rpcUrl}`);
+    res.json({ signature });
+  } catch (err: any) {
+    console.error('[SEND-TX] Error:', err);
+    res.status(500).json({ error: err.message || String(err) });
   }
 });
 
@@ -248,9 +437,8 @@ export async function acceptRentalTx(params: any) {
     signAllTransactions: async (txs: any) => txs,
   };
   const provider = new anchor.AnchorProvider(connection, dummyWallet as any, anchor.AnchorProvider.defaultOptions());
-  //const program = new anchor.Program(srslyIdl as anchor.Idl, SRSLY_PROGRAM_ID, provider);
-  const program = new anchor.Program(srslyIdl as unknown as anchor.Idl, SRSLY_PROGRAM_ID, provider);
-  const tx = await program.methods.acceptRental(new BN(amount), new BN(duration)).accounts({
+  const program = new anchor.Program(srslyLegacyIdl, SRSLY_PROGRAM_ID, provider);
+  const tx = await program.methods.acceptRental(new BN(amount), new BN(duration)).accountsStrict({
     mint: toPk(mint),
     borrower: toPk(borrower),
     borrower_profile: toPk(borrower_profile),
@@ -272,6 +460,8 @@ export async function acceptRentalTx(params: any) {
     associated_token_program: toPk(associated_token_program),
     system_program: toPk(system_program),
   }).transaction();
+  console.log("[acceptRentalTx] Instruction data (hex):", tx.instructions[0].data?.toString('hex') || "N/A");
+  console.log("[acceptRentalTx] BN values - amount:", new BN(amount).toString(), "duration:", new BN(duration).toString());
   console.log("[acceptRentalTx] TX oggetto:", tx);
   return tx;
 }

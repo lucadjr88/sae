@@ -6,6 +6,28 @@ import bs58 from 'bs58';
 import { getWalletAuthorityUtil } from './getWalletAuthority';
 import { RENTAL_DISCRIMINATOR, decodeContractState, decodeRentalState } from '../backend/rental/decode';
 
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function loadRentedFleetsFromCache(profileId: string): Promise<any[]> {
+  const rentedCacheDir = path.join(process.cwd(), 'cache', profileId, 'rented-fleets');
+  const files = await fs.readdir(rentedCacheDir).catch(() => []);
+  const jsonFiles = files.filter((file) => file.endsWith('.json'));
+  if (jsonFiles.length === 0) return [];
+  const loaded = await Promise.all(
+    jsonFiles.map(async (file) => {
+      try {
+        const raw = await fs.readFile(path.join(rentedCacheDir, file), 'utf8');
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    })
+  );
+  return loaded.filter(Boolean);
+}
+
 async function getBorrowerWallets(profileId: string): Promise<string[]> {
   const cacheFile = path.join(process.cwd(), 'cache', profileId, `${profileId}.json`);
   const wallets = new Set<string>();
@@ -218,192 +240,207 @@ function parseFleet(dataBuf: Buffer) {
 export async function fetchProfileRentedFleets(profileId: string): Promise<any[]> {
   const SRSLY_PROGRAM_ID = 'SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT';
   const BORROWER_OFFSET = 9; // discriminator(8)+borrower(32)
-  let pick: any = null;
-  try {
-    pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 2000 });
-    const { connection, release } = pick;
-    const programPubkey = new PublicKey(SRSLY_PROGRAM_ID);
+  let lastErr: any = null;
 
-    const rentedCacheDir = path.join(process.cwd(), 'cache', profileId, 'rented-fleets');
-    await fs.mkdir(rentedCacheDir, { recursive: true });
-    await clearJsonCacheDir(rentedCacheDir);
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    let pick: any = null;
+    try {
+      pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 3000, allowStale: attempt > 2 });
+      const { connection, release } = pick;
+      const programPubkey = new PublicKey(SRSLY_PROGRAM_ID);
+      const rentedCacheDir = path.join(process.cwd(), 'cache', profileId, 'rented-fleets');
+      await fs.mkdir(rentedCacheDir, { recursive: true });
 
-    const borrowerWallets = await getBorrowerWallets(profileId);
-    const rented: any[] = [];
-    const rentalStatesByContract = new Map<string, any>();
-    if (borrowerWallets.length > 0) {
-      for (const borrower of borrowerWallets) {
-        const accounts = await connection.getProgramAccounts(programPubkey, {
-          filters: [
-            { memcmp: { offset: 0, bytes: bs58.encode(RENTAL_DISCRIMINATOR) } },
-            { memcmp: { offset: BORROWER_OFFSET, bytes: borrower } }
-          ],
-          commitment: 'confirmed'
-        });
-        for (const acct of accounts) {
-          const data: Buffer = acct.account?.data instanceof Buffer ? acct.account.data : Buffer.from(acct.account.data);
-          const rentalState = decodeRentalState(data);
-          if (!rentalState || rentalState.cancelled) continue;
-          rentalStatesByContract.set(rentalState.contract, {
-            ...rentalState,
-            pubkey: acct.pubkey.toBase58()
+      const borrowerWallets = await getBorrowerWallets(profileId);
+      const rented: any[] = [];
+      const rentalStatesByContract = new Map<string, any>();
+      if (borrowerWallets.length > 0) {
+        for (const borrower of borrowerWallets) {
+          const accounts = await connection.getProgramAccounts(programPubkey, {
+            filters: [
+              { memcmp: { offset: 0, bytes: bs58.encode(RENTAL_DISCRIMINATOR) } },
+              { memcmp: { offset: BORROWER_OFFSET, bytes: borrower } }
+            ],
+            commitment: 'confirmed'
           });
+          for (const acct of accounts) {
+            const data: Buffer = acct.account?.data instanceof Buffer ? acct.account.data : Buffer.from(acct.account.data);
+            const rentalState = decodeRentalState(data);
+            if (!rentalState || rentalState.cancelled) continue;
+            rentalStatesByContract.set(rentalState.contract, {
+              ...rentalState,
+              pubkey: acct.pubkey.toBase58()
+            });
+          }
         }
-      }
-      const contractAddresses = Array.from(rentalStatesByContract.keys());
-      if (contractAddresses.length > 0) {
-        const contractInfos = await connection.getMultipleAccountsInfo(
-          contractAddresses.map((address) => new PublicKey(address)),
-          'confirmed'
-        );
-        const activeContracts = contractInfos.map((account, index) => {
-          if (!account) return null;
-          const contractAddress = contractAddresses[index];
-          const rentalState = contractAddress ? rentalStatesByContract.get(contractAddress) : null;
-          if (!contractAddress || !rentalState) return null;
-          const decoded = decodeContractState(Buffer.from(account.data));
-          if (!decoded || decoded.to_close) return null;
-          if (!decoded.current_rental_state || decoded.current_rental_state !== rentalState.pubkey) return null;
-          return {
-            contractAddress,
-            contract: decoded,
-            rentalState
-          };
-        }).filter(Boolean) as Array<{ contractAddress: string; contract: any; rentalState: any }>;
-        for (const { contractAddress, contract, rentalState } of activeContracts) {
-          let fleetParsed: any = null;
-          try {
-            const fleetAcc = await connection.getAccountInfo(new PublicKey(contract.fleet));
-            if (fleetAcc?.data) {
-              fleetParsed = parseFleet(Buffer.from(fleetAcc.data));
-              if (fleetParsed) {
-                fleetParsed.pubkey = contract.fleet;
+        const contractAddresses = Array.from(rentalStatesByContract.keys());
+        if (contractAddresses.length > 0) {
+          const contractInfos = await connection.getMultipleAccountsInfo(
+            contractAddresses.map((address) => new PublicKey(address)),
+            'confirmed'
+          );
+          const activeContracts = contractInfos.map((account, index) => {
+            if (!account) return null;
+            const contractAddress = contractAddresses[index];
+            const rentalState = contractAddress ? rentalStatesByContract.get(contractAddress) : null;
+            if (!contractAddress || !rentalState) return null;
+            const decoded = decodeContractState(Buffer.from(account.data));
+            if (!decoded || decoded.to_close) return null;
+            if (!decoded.current_rental_state || decoded.current_rental_state !== rentalState.pubkey) return null;
+            return {
+              contractAddress,
+              contract: decoded,
+              rentalState
+            };
+          }).filter(Boolean) as Array<{ contractAddress: string; contract: any; rentalState: any }>;
+          for (const { contractAddress, contract, rentalState } of activeContracts) {
+            let fleetParsed: any = null;
+            try {
+              const fleetAcc = await connection.getAccountInfo(new PublicKey(contract.fleet));
+              if (fleetAcc?.data) {
+                fleetParsed = parseFleet(Buffer.from(fleetAcc.data));
+                if (fleetParsed) {
+                  fleetParsed.pubkey = contract.fleet;
+                }
               }
+            } catch (fleetErr) {
+              console.log(`[DEBUG RENTAL] Failed fetching fleet ${contract.fleet}: ${fleetErr}`);
             }
-          } catch (fleetErr) {
-            console.log(`[DEBUG RENTAL] Failed fetching fleet ${contract.fleet}: ${fleetErr}`);
+            const rentedFleet = {
+              ...(fleetParsed || {}),
+              pubkey: contract.fleet,
+              fleet: contract.fleet,
+              isRented: true,
+              contractPubkey: contractAddress,
+              owner: contract.owner,
+              owner_profile: contract.owner_profile,
+              owner_token_account: contract.owner_token_account,
+              current_rental_state: contract.current_rental_state,
+              rate: contract.rate,
+              duration_min: contract.duration_min,
+              duration_max: contract.duration_max,
+              payment_frequency: contract.payment_frequency,
+              borrower: rentalState.borrower,
+              rental_state_pubkey: rentalState.pubkey,
+              rental_start_time: rentalState.start_time,
+              rental_end_time: rentalState.end_time,
+              rental_cancelled: rentalState.cancelled
+            };
+            rented.push(rentedFleet);
           }
-          const rentedFleet = {
-            ...(fleetParsed || {}),
-            pubkey: contract.fleet,
-            fleet: contract.fleet,
-            isRented: true,
-            contractPubkey: contractAddress,
-            owner: contract.owner,
-            owner_profile: contract.owner_profile,
-            owner_token_account: contract.owner_token_account,
-            current_rental_state: contract.current_rental_state,
-            rate: contract.rate,
-            duration_min: contract.duration_min,
-            duration_max: contract.duration_max,
-            payment_frequency: contract.payment_frequency,
-            borrower: rentalState.borrower,
-            rental_state_pubkey: rentalState.pubkey,
-            rental_start_time: rentalState.start_time,
-            rental_end_time: rentalState.end_time,
-            rental_cancelled: rentalState.cancelled
-          };
-          try {
-            const file = path.join(rentedCacheDir, `${contract.fleet}.json`);
-            await fs.writeFile(file, JSON.stringify(rentedFleet, null, 2), 'utf8');
-          } catch (wfErr) {
-            console.log(`[DEBUG RENTAL] Failed writing ${contract.fleet}: ${wfErr}`);
-          }
-          rented.push(rentedFleet);
         }
       }
-    }
 
-    // PATCH: aggiungi flotte possedute e messe in rent (listed)
-    // Offset owner_profile: discriminator(8) + version(1) + game_id(32) = 41
-    const OWNER_PROFILE_OFFSET = 41;
-    const ownerProfileFilter = { offset: OWNER_PROFILE_OFFSET, bytes: profileId };
-    console.log('[DEBUG RENTAL] getProgramAccounts owner_profile filter:', {
-      offset: OWNER_PROFILE_OFFSET,
-      profileId,
-      profileIdBase58: profileId,
-      profileIdHex: Buffer.from(bs58.decode(profileId)).toString('hex'),
-    });
-    const listedAccounts = await connection.getProgramAccounts(programPubkey, {
-      filters: [
-        { memcmp: { offset: 195, bytes: profileId } }
-      ],
-      commitment: 'confirmed'
-    });
-    // PATCH: processa tutte le flotte possedute (owner_profile), sia listed che loaned
-    // LOG: stampa tutte le fleetId trovate tra i contratti owner_profile
-    const foundFleetIds = [];
-    for (const acct of listedAccounts) {
-      const data: Buffer = acct.account?.data instanceof Buffer ? acct.account.data : Buffer.from(acct.account.data);
-      const contractState = decodeContractState(data);
-      if (!contractState || contractState.to_close) continue;
-      foundFleetIds.push(contractState.fleet);
-      let fleetParsed: any = null;
-      try {
-        const fleetAcc = await connection.getAccountInfo(new PublicKey(contractState.fleet));
-        if (fleetAcc?.data) {
-          fleetParsed = parseFleet(Buffer.from(fleetAcc.data));
-          if (fleetParsed) fleetParsed.pubkey = contractState.fleet;
-        }
-      } catch (fleetErr) {
-        console.log(`[DEBUG RENTAL] Failed fetching fleet (owned) ${contractState.fleet}: ${fleetErr}`);
-      }
-      // Una fleet "loaned" è di tua proprietà e attualmente affittata a qualcuno (current_rental_state valorizzato)
-      // Una fleet "listed" è di tua proprietà e non affittata (current_rental_state null/undefined)
-      const isLoaned = !!contractState.current_rental_state;
-      const ownedFleet = {
-        ...(fleetParsed || {}),
-        pubkey: contractState.fleet,
-        fleet: contractState.fleet,
-        isListed: !isLoaned,
-        isLoaned: isLoaned,
-        isRented: false, // solo le "borrowed" (prese in prestito) sono isRented: true
-        owner_profile: contractState.owner_profile,
-        contractPubkey: acct.pubkey.toBase58(),
-        current_rental_state: contractState.current_rental_state,
-        rate: contractState.rate,
-        duration_min: contractState.duration_min,
-        duration_max: contractState.duration_max,
-        payment_frequency: contractState.payment_frequency,
-        // altri campi utili...
-      };
-      console.log('[DEBUG RENTAL][CATALOGAZIONE FLEET]', {
-        fleet: contractState.fleet,
-        isLoaned,
-        isListed: !isLoaned,
-        isRented: false,
-        current_rental_state: contractState.current_rental_state,
-        owner_profile: contractState.owner_profile,
-        contractPubkey: acct.pubkey.toBase58(),
+      // PATCH: aggiungi flotte possedute e messe in rent (listed)
+      // Offset owner_profile: discriminator(8) + version(1) + game_id(32) = 41
+      const OWNER_PROFILE_OFFSET = 41;
+      console.log('[DEBUG RENTAL] getProgramAccounts owner_profile filter:', {
+        offset: OWNER_PROFILE_OFFSET,
+        profileId,
+        profileIdBase58: profileId,
+        profileIdHex: Buffer.from(bs58.decode(profileId)).toString('hex'),
       });
-      try {
-        const file = path.join(
-          rentedCacheDir,
-          `${contractState.fleet}${isLoaned ? '_loaned' : '_listed'}.json`
-        );
-        await fs.writeFile(file, JSON.stringify(ownedFleet, null, 2), 'utf8');
-      } catch (wfErr) {
-        console.log(`[DEBUG RENTAL] Failed writing (owned) ${contractState.fleet}: ${wfErr}`);
+      const listedAccounts = await connection.getProgramAccounts(programPubkey, {
+        filters: [
+          { memcmp: { offset: 195, bytes: profileId } }
+        ],
+        commitment: 'confirmed'
+      });
+      const foundFleetIds = [];
+      for (const acct of listedAccounts) {
+        const data: Buffer = acct.account?.data instanceof Buffer ? acct.account.data : Buffer.from(acct.account.data);
+        const contractState = decodeContractState(data);
+        if (!contractState || contractState.to_close) continue;
+        foundFleetIds.push(contractState.fleet);
+        let fleetParsed: any = null;
+        try {
+          const fleetAcc = await connection.getAccountInfo(new PublicKey(contractState.fleet));
+          if (fleetAcc?.data) {
+            fleetParsed = parseFleet(Buffer.from(fleetAcc.data));
+            if (fleetParsed) fleetParsed.pubkey = contractState.fleet;
+          }
+        } catch (fleetErr) {
+          console.log(`[DEBUG RENTAL] Failed fetching fleet (owned) ${contractState.fleet}: ${fleetErr}`);
+        }
+        const isLoaned = !!contractState.current_rental_state;
+        const ownedFleet = {
+          ...(fleetParsed || {}),
+          pubkey: contractState.fleet,
+          fleet: contractState.fleet,
+          isListed: !isLoaned,
+          isLoaned,
+          isRented: false,
+          owner_profile: contractState.owner_profile,
+          contractPubkey: acct.pubkey.toBase58(),
+          current_rental_state: contractState.current_rental_state,
+          rate: contractState.rate,
+          duration_min: contractState.duration_min,
+          duration_max: contractState.duration_max,
+          payment_frequency: contractState.payment_frequency,
+        };
+        console.log('[DEBUG RENTAL][CATALOGAZIONE FLEET]', {
+          fleet: contractState.fleet,
+          isLoaned,
+          isListed: !isLoaned,
+          isRented: false,
+          current_rental_state: contractState.current_rental_state,
+          owner_profile: contractState.owner_profile,
+          contractPubkey: acct.pubkey.toBase58(),
+        });
+        rented.push(ownedFleet);
       }
-      rented.push(ownedFleet);
-    }
-    console.log('[DEBUG RENTAL] fleetIds trovate tra i contratti owner_profile:', foundFleetIds);
+      console.log('[DEBUG RENTAL] fleetIds trovate tra i contratti owner_profile:', foundFleetIds);
 
-    release({ success: true, latencyMs: 0 });
-    console.log(`[DEBUG RENTAL] Fetched ${rented.length} rented/owned fleets for profile ${profileId}`);
-    return rented;
-  } catch (e: any) {
-    console.log('[DEBUG RENTAL] Error fetching rented fleets for profile', {
-      profileId,
-      error: String(e.message || e)
-    });
-    if (pick && pick.release) {
-      const errMsg = String(e.message || e || '');
+      await clearJsonCacheDir(rentedCacheDir);
+      await Promise.all(
+        rented.map(async (fleet: any) => {
+          const suffix = fleet.isLoaned ? '_loaned' : fleet.isRented ? '' : '_listed';
+          const file = path.join(rentedCacheDir, `${fleet.fleet || fleet.pubkey}${suffix}.json`);
+          try {
+            await fs.writeFile(file, JSON.stringify(fleet, null, 2), 'utf8');
+          } catch (wfErr) {
+            console.log(`[DEBUG RENTAL] Failed writing ${fleet.fleet || fleet.pubkey}: ${wfErr}`);
+          }
+        })
+      );
+
+      release({ success: true, latencyMs: 0 });
+      console.log(`[DEBUG RENTAL] Fetched ${rented.length} rented/owned fleets for profile ${profileId}`);
+      return rented;
+    } catch (e: any) {
+      lastErr = e;
+      const errMsg = String(e?.message || e || '');
       const is429 = /429|Too Many Requests/i.test(errMsg);
-      try { pick.release({ success: false, errorType: is429 ? '429' : 'error' }); } catch { }
+      console.log('[DEBUG RENTAL] Error fetching rented fleets for profile', {
+        profileId,
+        attempt,
+        error: errMsg
+      });
+      if (pick && pick.release) {
+        try { pick.release({ success: false, errorType: is429 ? '429' : 'error' }); } catch { }
+      }
+      if (is429 && attempt < 5) {
+        const delayMs = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+        await sleep(delayMs);
+        continue;
+      }
+      break;
     }
-    return [];
   }
+
+  const cached = await loadRentedFleetsFromCache(profileId);
+  if (cached.length > 0) {
+    console.log(`[DEBUG RENTAL] RPC fetch failed, serving ${cached.length} rented fleets from cache for profile ${profileId}`);
+    return cached;
+  }
+
+  if (lastErr) {
+    console.log('[DEBUG RENTAL] No rented fleets cache available after RPC failure', {
+      profileId,
+      error: String(lastErr?.message || lastErr)
+    });
+  }
+  return [];
 }
 
 export default fetchProfileRentedFleets;

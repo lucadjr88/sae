@@ -2289,8 +2289,7 @@
               "The current unix timestamp."
             ],
             "type": "i64"
-          }
-        ]
+          }]
       }
     },
     {
@@ -2353,8 +2352,7 @@
             "name": "bump",
             "type": "u8"
           }
-        ]
-      }
+  ]}
     },
     {
       "name": "Equality",

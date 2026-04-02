@@ -4,17 +4,42 @@ import { RpcPoolManager } from './rpc/rpc-pool-manager';
 import fs from 'fs/promises';
 import path from 'path';
 
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function loadFleetsFromCache(profileId: string): Promise<any[]> {
+  const cacheDir = path.join(process.cwd(), 'cache', profileId, 'fleets');
+  const files = await fs.readdir(cacheDir).catch(() => []);
+  const fleetFiles = files.filter((file) => file.endsWith('.json'));
+  if (fleetFiles.length === 0) return [];
+  const loaded = await Promise.all(
+    fleetFiles.map(async (file) => {
+      const fullPath = path.join(cacheDir, file);
+      try {
+        const raw = await fs.readFile(fullPath, 'utf8');
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    })
+  );
+  return loaded.filter(Boolean);
+}
+
 // Fetch fleets associated to a profileId using getProgramAccounts + memcmp
 export async function fetchProfileFleets(profileId: string): Promise<any[]> {
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   const OWNER_PROFILE_OFFSET = 41; // 8 (disc) +1(version) +32(game_id)
-  let pick: any = null;
-  try {
-    pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 2000 });
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    let pick: any = null;
+    try {
+      pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 3000, allowStale: attempt > 2 });
     const { connection, release } = pick;
     // call getProgramAccounts with memcmp on owner_profile
     const programPubkey = new PublicKey(SAGE_PROGRAM_ID);
-    const accounts = await connection.getProgramAccounts(programPubkey, {
+      const accounts = await connection.getProgramAccounts(programPubkey, {
       filters: [
         { memcmp: { offset: OWNER_PROFILE_OFFSET, bytes: profileId } }
       ],
@@ -211,14 +236,32 @@ export async function fetchProfileFleets(profileId: string): Promise<any[]> {
     } catch (wErr) {
       console.log(`[fetchProfileFleets] Failed creating/writing cache for profile=${profileId}: ${wErr}`);
     }
-    release({ success: true, latencyMs: 0 });
-    return fleets;
-  } catch (e: any) {
-    if (pick && pick.release) {
-      const errMsg = String(e.message || e || '');
+      release({ success: true, latencyMs: 0 });
+      return fleets;
+    } catch (e: any) {
+      lastErr = e;
+      const errMsg = String(e?.message || e || '');
       const is429 = /429|Too Many Requests/i.test(errMsg);
-      try { pick.release({ success: false, errorType: is429 ? '429' : 'error' }); } catch {}
+      if (pick && pick.release) {
+        try { pick.release({ success: false, errorType: is429 ? '429' : 'error' }); } catch {}
+      }
+      if (is429 && attempt < 5) {
+        const delayMs = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+        await sleep(delayMs);
+        continue;
+      }
+      break;
     }
-    return [];
   }
+
+  const cached = await loadFleetsFromCache(profileId);
+  if (cached.length > 0) {
+    console.log(`[fetchProfileFleets] RPC fetch failed, serving ${cached.length} fleets from cache for profile=${profileId}`);
+    return cached;
+  }
+
+  if (lastErr) {
+    console.log(`[fetchProfileFleets] RPC fetch failed with no cache for profile=${profileId}: ${String(lastErr?.message || lastErr)}`);
+  }
+  return [];
 }
