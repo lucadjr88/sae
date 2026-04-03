@@ -9,6 +9,7 @@ import { getRpcConnection } from "../../utils/rpc/connection";
 // PATCH: Express endpoint minimale per orchestrare la rental tx
 import express from "express";
 import fs from "fs";
+import path from "path";
 const router = express.Router();
 
 function normalizeInstructionAccounts(accounts: any[]): any[] {
@@ -337,7 +338,25 @@ router.post("/rent-fleet", async (req, res) => {
       console.log("[RENT-FLEET] TX oggetto dopo feePayer/recentBlockhash:", tx);
       const serialized = tx.serialize({ requireAllSignatures: false }).toString('base64');
       console.log("[RENT-FLEET] TX serializzata (base64):", serialized.slice(0, 80) + '...');
-      res.json({ transaction: serialized });
+      const rentalCacheSeed = {
+        profileId: borrowerProfile,
+        fleet: contract?.fleet || null,
+        fleet_label: contract?.fleet_name || null,
+        isRented: true,
+        contractPubkey: contractAddress,
+        owner: contract?.owner || null,
+        owner_profile: contract?.owner_profile || null,
+        owner_token_account: contract?.owner_token_account || null,
+        current_rental_state: rentalState.toBase58(),
+        rate: contract?.rate ?? Number(amount),
+        duration_min: contract?.duration_min ?? null,
+        duration_max: contract?.duration_max ?? null,
+        payment_frequency: contract?.payment_frequency || null,
+        borrower: borrower,
+        rental_state_pubkey: rentalState.toBase58(),
+        rental_cancelled: false
+      };
+      res.json({ transaction: serialized, contractAddress, rentalState: rentalState.toBase58(), rentalCacheSeed });
     } catch (err) {
       console.error("[RENT-FLEET] Errore durante la creazione/serializzazione della tx:", err);
       res.status(500).json({ error: err.message || String(err) });
@@ -349,7 +368,7 @@ router.post("/rent-fleet", async (req, res) => {
 
 // Broadcast tx firmata usando il pool RPC del backend
 router.post('/send-tx', async (req, res) => {
-  const { transaction } = req.body;
+  const { transaction, contractAddress, rentalState, rentalCacheSeed } = req.body;
   if (!transaction || typeof transaction !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid transaction field' });
   }
@@ -358,6 +377,70 @@ router.post('/send-tx', async (req, res) => {
     const connection = await getRpcConnection();
     const signature = await connection.sendRawTransaction(rawTx, { skipPreflight: false });
     console.log(`[SEND-TX] TX inviata con successo. Signature: ${signature}`);
+    // Aggiorna current_rental_state in contracts.json se forniti contractAddress e rentalState
+    if (contractAddress && typeof contractAddress === 'string' && rentalState && typeof rentalState === 'string') {
+      try {
+        const contractsPath = path.join(process.cwd(), 'cache', 'contracts.json');
+        const contractsObj = JSON.parse(fs.readFileSync(contractsPath, 'utf-8'));
+        const arr: any[] = Array.isArray(contractsObj) ? contractsObj : contractsObj.contracts;
+        const idx = arr.findIndex((c: any) => c.address === contractAddress);
+        if (idx !== -1) {
+          arr[idx].current_rental_state = rentalState;
+          const toWrite = Array.isArray(contractsObj) ? arr : { ...contractsObj, contracts: arr };
+          fs.writeFileSync(contractsPath, JSON.stringify(toWrite, null, 2));
+          console.log(`[SEND-TX] contracts.json aggiornato: ${contractAddress} -> current_rental_state: ${rentalState}`);
+        } else {
+          console.warn(`[SEND-TX] Contratto non trovato in contracts.json per address: ${contractAddress}`);
+        }
+      } catch (e: any) {
+        console.error('[SEND-TX] Errore aggiornamento contracts.json:', e.message);
+      }
+    }
+
+    // Aggiorna in-place playload/latest.json per visualizzare subito la borrowed in UI (senza fetch RPC)
+    if (rentalCacheSeed && typeof rentalCacheSeed === 'object' && typeof rentalCacheSeed.profileId === 'string') {
+      try {
+        const latestPath = path.join(process.cwd(), 'cache', rentalCacheSeed.profileId, 'playload', 'latest.json');
+        const latestObj = JSON.parse(fs.readFileSync(latestPath, 'utf-8'));
+        const currentData = latestObj?.data && typeof latestObj.data === 'object' ? latestObj.data : {};
+        const rentedFleets = Array.isArray(currentData.rentedFleets) ? currentData.rentedFleets : [];
+        const nowTs = Math.floor(Date.now() / 1000);
+
+        const normalizedSeed = {
+          ...rentalCacheSeed,
+          isRented: true,
+          contractPubkey: rentalCacheSeed.contractPubkey || contractAddress,
+          current_rental_state: rentalState,
+          rental_state_pubkey: rentalState,
+          rental_start_time: rentalCacheSeed.rental_start_time ?? nowTs,
+          rental_end_time: rentalCacheSeed.rental_end_time ?? null,
+          rental_cancelled: false
+        };
+
+        const idx = rentedFleets.findIndex((f: any) =>
+          (f?.contractPubkey && normalizedSeed.contractPubkey && f.contractPubkey === normalizedSeed.contractPubkey)
+          || (f?.rental_state_pubkey && f.rental_state_pubkey === rentalState)
+        );
+
+        if (idx !== -1) {
+          rentedFleets[idx] = { ...rentedFleets[idx], ...normalizedSeed };
+        } else {
+          rentedFleets.unshift(normalizedSeed);
+        }
+
+        const toWrite = {
+          ...latestObj,
+          data: {
+            ...currentData,
+            rentedFleets
+          }
+        };
+        fs.writeFileSync(latestPath, JSON.stringify(toWrite, null, 2));
+        console.log(`[SEND-TX] playload/latest.json aggiornato (borrowed append) per profile ${rentalCacheSeed.profileId}`);
+      } catch (e: any) {
+        console.error('[SEND-TX] Errore aggiornamento playload/latest.json:', e.message);
+      }
+    }
     res.json({ signature });
   } catch (err: any) {
     console.error('[SEND-TX] Error:', err);

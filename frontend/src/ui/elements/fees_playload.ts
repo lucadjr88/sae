@@ -114,7 +114,7 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   const prices = (typeof window !== 'undefined' ? (window as any).prices : undefined);
 
   // Prefer breakdown embedded by the server when present (fallback to top-level fields)
-  const feesByFleet = (data && data.feesByFleet) ? data.feesByFleet : (data && (data as any).breakdown && (data as any).breakdown.feesByFleet ? (data as any).breakdown.feesByFleet : {});
+  const feesByFleet = (data && data.feesByFleet) ? data.feesByFleet : {};
   const feesByOperation = (data && data.feesByOperation) ? data.feesByOperation : (data && (data as any).breakdown && (data as any).breakdown.feesByOperation ? (data as any).breakdown.feesByOperation : {});
   const txs = (data.transactions?.length ? data.transactions : data.allTransactions) ?? [];
 

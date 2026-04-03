@@ -19,14 +19,19 @@ const RPC_POOL_COMPLETE = path.join(process.cwd(), 'utility', 'rpc-pool-complete
 
 // In-memory cache per profileId per evitare letture FS ripetute
 const poolCache: Record<string, any[]> = {};
+const rrCursorByProfile: Record<string, number> = {};
 
 export function resetPoolCache(profileId?: string) {
   if (profileId) {
     delete poolCache[profileId];
+    delete rrCursorByProfile[profileId];
     return;
   }
   for (const key of Object.keys(poolCache)) {
     delete poolCache[key];
+  }
+  for (const key of Object.keys(rrCursorByProfile)) {
+    delete rrCursorByProfile[key];
   }
 }
 
@@ -87,14 +92,21 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
 
   // Try to acquire within candidates; optionally wait a bit if all busy
   while (true) {
-    for (let i = 0; i < candidates.length; i++) {
+    const startIndex = rrCursorByProfile[profileId] ?? 0;
+    for (let offset = 0; offset < candidates.length; offset++) {
+      const i = (startIndex + offset) % candidates.length;
       const ep = candidates[i];
       // if not healthy but allowStale is true we still try to use it
       if (!allowStale && health.isInBackoff(ep.url)) continue;
       // Try acquire (returns boolean)
     const acquired = concurrency.acquire(ep.url, ep.maxConcurrent || 2);
       if (!acquired) continue;
-      const connection = new Connection(ep.url, { commitment: 'confirmed' });
+      rrCursorByProfile[profileId] = (i + 1) % candidates.length;
+      const connection = new Connection(ep.url, {
+        commitment: 'confirmed',
+        // Retry policy is handled by rentalService.executeRpc; avoid nested 429 retries.
+        disableRetryOnRateLimit: true,
+      });
       const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string }) => {
         concurrency.release(ep.url);
         if (r?.success) {
@@ -133,8 +145,14 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
     // none acquired: decide cosa fare
     if (allowStale && candidates.length > 0) {
       // try to force-acquire the first candidate skipping concurrency
-      const ep = candidates[0];
-      const connection = new Connection(ep.url, { commitment: 'confirmed' });
+      const startIndex = rrCursorByProfile[profileId] ?? 0;
+      const ep = candidates[startIndex % candidates.length];
+      rrCursorByProfile[profileId] = (startIndex + 1) % candidates.length;
+      const connection = new Connection(ep.url, {
+        commitment: 'confirmed',
+        // Retry policy is handled by rentalService.executeRpc; avoid nested 429 retries.
+        disableRetryOnRateLimit: true,
+      });
       const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string }) => {
         // ensure release doesn't call release twice since we didn't acquire
         if (concurrency.canAcquire(ep.url)) {

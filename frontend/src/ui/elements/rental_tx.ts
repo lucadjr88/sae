@@ -4,7 +4,16 @@ export async function rentTx({
   borrowerProfile,
   starbase,
   amount,
-  duration
+  duration,
+  onSuccess,
+}: {
+  contractAddress: string;
+  borrower: string;
+  borrowerProfile: string;
+  starbase: string;
+  amount: number;
+  duration: number;
+  onSuccess?: () => Promise<void>;
 }) {
   // Recupera i dati necessari dal form o dallo stato dell’app
   /*const contractAddress = "1GPi779d3e3fXCWrBnPLu2Tc29RQYgZCkhJCg74fmwt"; // esempio
@@ -62,12 +71,21 @@ export async function rentTx({
         const sendResp = await fetch("/api/send-tx", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transaction: base64Tx })
+          body: JSON.stringify({
+            transaction: base64Tx,
+            contractAddress,
+            rentalState: data.rentalState,
+            rentalCacheSeed: data.rentalCacheSeed,
+          })
         });
         const sendData = await sendResp.json();
         if (!sendResp.ok) throw new Error(sendData.error || "Errore broadcast tx");
-        alert("Transazione inviata! Signature: " + sendData.signature);
         console.log("[DEBUG] Signature inviata:", sendData.signature);
+        if (onSuccess) {
+          await onSuccess();
+        } else {
+          alert("Transazione inviata! Signature: " + sendData.signature);
+        }
       } catch (e) {
         alert("Errore firma o invio tx: " + e.message);
         console.error(e);

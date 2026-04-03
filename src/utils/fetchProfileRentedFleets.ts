@@ -334,12 +334,12 @@ export async function fetchProfileRentedFleets(profileId: string): Promise<any[]
       // PATCH: aggiungi flotte possedute e messe in rent (listed)
       // Offset owner_profile: discriminator(8) + version(1) + game_id(32) = 41
       const OWNER_PROFILE_OFFSET = 41;
-      console.log('[DEBUG RENTAL] getProgramAccounts owner_profile filter:', {
+      /*console.log('[DEBUG RENTAL] getProgramAccounts owner_profile filter:', {
         offset: OWNER_PROFILE_OFFSET,
         profileId,
         profileIdBase58: profileId,
         profileIdHex: Buffer.from(bs58.decode(profileId)).toString('hex'),
-      });
+      });*/
       const listedAccounts = await connection.getProgramAccounts(programPubkey, {
         filters: [
           { memcmp: { offset: 195, bytes: profileId } }
@@ -378,7 +378,7 @@ export async function fetchProfileRentedFleets(profileId: string): Promise<any[]
           duration_max: contractState.duration_max,
           payment_frequency: contractState.payment_frequency,
         };
-        console.log('[DEBUG RENTAL][CATALOGAZIONE FLEET]', {
+        /*console.log('[DEBUG RENTAL][CATALOGAZIONE FLEET]', {
           fleet: contractState.fleet,
           isLoaned,
           isListed: !isLoaned,
@@ -386,10 +386,10 @@ export async function fetchProfileRentedFleets(profileId: string): Promise<any[]
           current_rental_state: contractState.current_rental_state,
           owner_profile: contractState.owner_profile,
           contractPubkey: acct.pubkey.toBase58(),
-        });
+        });*/
         rented.push(ownedFleet);
       }
-      console.log('[DEBUG RENTAL] fleetIds trovate tra i contratti owner_profile:', foundFleetIds);
+      //console.log('[DEBUG RENTAL] fleetIds trovate tra i contratti owner_profile:', foundFleetIds);
 
       await clearJsonCacheDir(rentedCacheDir);
       await Promise.all(

@@ -154,8 +154,8 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 totalSignaturesFetched: fees.totalSignaturesFetched,
                 transactionCount24h: fees.transactionCount24h,
                 fromCache: fees.fromCache,
-                firstTxTime: fees.firstTxTime,
-                breakdown: { feesByFleet: fees.feesByFleet }
+                firstTxTime: fees.firstTxTime
+                //breakdown: { feesByFleet: fees.feesByFleet }
             });
 
             // Save EXACTLY what we send to frontend

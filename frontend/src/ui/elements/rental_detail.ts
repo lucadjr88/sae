@@ -213,7 +213,27 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
               borrowerProfile,
               starbase,
               amount,
-              duration
+              duration,
+              onSuccess: async () => {
+                // Chiudi la modale
+                document.getElementById('rentalContractWindow')?.remove();
+                document.getElementsByClassName('rentalContractOverlay')[0]?.remove();
+                // Rileggi dalla cache backend e aggiorna rentalStateBackup
+                if (!currentProfileId) return;
+                const res = await fetch('/api/analyze-profile', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ profileId: currentProfileId, wipeCache: false })
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const rentalModule = await import('./rentalState_playload');
+                rentalModule.rentalState_playload(data);
+                const resultDiv = document.getElementById('result-container');
+                if (resultDiv && rentalModule.rentalStateBackup) {
+                  resultDiv.replaceChildren(rentalModule.rentalStateBackup);
+                }
+              }
             });
           });
         } else {

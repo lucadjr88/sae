@@ -286,8 +286,8 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		//setRentalLoader(fetchAndDisplayRentals);
 		rentalState_playload(data);
 
-		if (data && data.breakdown && data.breakdown.feesByFleet && typeof data.breakdown.feesByFleet === 'object') {
-			displayFleetOperationCharts(data.breakdown.feesByFleet, processed.fleetNames);
+		if (data && data.feesByFleet && typeof data.feesByFleet === 'object') {
+			displayFleetOperationCharts(data.feesByFleet, processed.fleetNames);
 			const sidebar = document.getElementById('sidebar');
 			if (sidebar) sidebar.style.display = '';
 		} else {

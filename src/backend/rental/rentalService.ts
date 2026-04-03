@@ -357,6 +357,13 @@ export class RentalService {
 				console.log(`[rentalService] [executeRpc] Success for profileId=${profileId} in ${Date.now() - startedAt}ms`);
 				return result;
 			} catch (error) {
+				if (pick) {
+					pick.release({
+						success: false,
+						latencyMs: Date.now() - startedAt,
+						errorType: getRpcErrorType(error),
+					});
+				}
 				lastError = error;
 				console.error(`[rentalService] [executeRpc] Error on attempt ${attempt + 1} for profileId=${profileId}:`, error);
 			}
