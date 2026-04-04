@@ -108,6 +108,28 @@ router.get('/getFleetInfoMinimal', async (req, res) => {
         res.status(500).json({ error: 'Invalid JSON', details: String(e), raw: data });
       }
     } else {
+      const stderr = String(err || '').trim();
+      const isAccountNotFound = /account not found|accountnotfound/i.test(stderr);
+
+      if (isAccountNotFound) {
+        console.warn('[getFleetInfoMinimal] Fleet account not found or stale contract', {
+          fleetId,
+          rpcUrl,
+          stderr,
+        });
+        return res.json({
+          fleetId,
+          staleContract: true,
+          error: 'Account not found',
+          posizione: null,
+          cargo_tokens: [],
+          fuel: { level: 0, capacity: 0 },
+          ammo: { level: 0, capacity: 0 },
+          crew_total: 0,
+          crew_required: 0,
+        });
+      }
+
       console.log('[DEBUG] Rust process failed, stderr:', err);
       res.status(500).json({ error: 'Rust process failed', code, stderr: err });
     }

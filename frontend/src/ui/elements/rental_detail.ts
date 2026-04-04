@@ -2,6 +2,7 @@ import { RentalContract } from './rental_playload';
 import { resolveMaterialImageCandidates, resolveResourceCatalogEntry } from './resource_playload';
 import { rentTx } from './rental_tx';
 import { currentProfileId } from '@/utils/state';
+import { TICKER_CONFIG } from './footBar';
 
 
 function formatRate(rate: number): string {
@@ -172,31 +173,36 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
         // carica rental tx inserendo un input text numerico ed un pulsante "rent"
         // solo se const state = c.current_rental_state ? 'Active' : 'Available'; è "Available"
         const state = contractDetails.current_rental_state ? 'Active' : 'Available';
-
         const rentalTxDiv = document.querySelector('.rental-tx') as HTMLDivElement;
+         const atlasIcon = `<img style="width: 25%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/>`;
+        
         if (state === 'Available') {
+          const baseRate = Number(contractDetails.rate || 0);
+
           rentalTxDiv.innerHTML = `
+          <div>
             <button id="rentButton" disabled="true">Rent</button>
-            <input type="number" id="rentDuration" placeholder="Duration (hours)" min="0" max="720" value="0">
-            <div id="rentPriceTotal"></div>
+            <input type="number" id="rentDuration" placeholder="Duration" min="0" max="24" value="0">
+            <div id="rentPriceTotal">Total: 0 ${atlasIcon}</div>
+          </div>  
         `;
-
-          const inputRentDuration = document.getElementById('rentDuration') as HTMLInputElement;
           const rentButton = document.getElementById('rentButton') as HTMLButtonElement;
-          inputRentDuration.addEventListener('input', () => {
+          const inputRentDuration = document.getElementById('rentDuration') as HTMLInputElement;
+          const rentPriceTotal = document.getElementById('rentPriceTotal') as HTMLDivElement;
 
-            if (inputRentDuration.value === '' || parseInt(inputRentDuration.value) <= 0) {
-              rentButton.disabled = true;
-              const rentPriceTotal = document.getElementById('rentPriceTotal') as HTMLDivElement;
-              rentPriceTotal.textContent = '';
-            } else {
-              rentButton.disabled = false;
-            }
-            let rentDuration = parseInt(inputRentDuration.value);
-            let totalPrice = rentDuration * contractDetails.rate;
-            const rentPriceTotal = document.getElementById('rentPriceTotal') as HTMLDivElement;
-            rentPriceTotal.textContent = `Total: ${formatRate(totalPrice)}`;
-          });
+          const updateRentPriceTotal = () => {
+            const durationValue = Math.max(1, Number.parseInt(inputRentDuration.value, 10) || 1);
+            rentPriceTotal.innerHTML = `Total: ${formatRate(durationValue * baseRate)} ${atlasIcon}`;
+          };
+
+          const durationMin = Number(contractDetails.duration_min) || 1;
+          const durationMax = Number(contractDetails.duration_max) || 24;
+          const duration = Number(inputRentDuration.value) || 1;
+          inputRentDuration.addEventListener('input', updateRentPriceTotal);
+          if (duration >= durationMin && duration <= durationMax) {
+            rentButton.disabled = false;
+          }
+          updateRentPriceTotal();
 
           rentButton.addEventListener('click', () => {
             // Prendi il profileId utente connesso
@@ -206,7 +212,10 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
             // Usa i campi definiti in RentalContract
             const starbase = contractDetails.starbase || '';
             const amount = contractDetails.rate || 1;
-            const duration = parseInt(inputRentDuration.value);
+            const duration = Number.parseInt(inputRentDuration.value, 10);
+            // "payment_frequency": "Hourly", "payment_frequency": "Minute"
+            const rentPeriod = contractDetails.payment_frequency ? contractDetails.payment_frequency.toLowerCase() : 'day';
+            const durationUnit = rentPeriod ?? 'day';
             rentTx({
               contractAddress,
               borrower,
@@ -214,6 +223,7 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
               starbase,
               amount,
               duration,
+              durationUnit,
               onSuccess: async () => {
                 // Chiudi la modale
                 document.getElementById('rentalContractWindow')?.remove();

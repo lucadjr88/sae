@@ -5,6 +5,7 @@ export async function rentTx({
   starbase,
   amount,
   duration,
+  durationUnit,
   onSuccess,
 }: {
   contractAddress: string;
@@ -13,6 +14,7 @@ export async function rentTx({
   starbase: string;
   amount: number;
   duration: number;
+  durationUnit: string;
   onSuccess?: () => Promise<void>;
 }) {
   // Recupera i dati necessari dal form o dallo stato dell’app
@@ -33,7 +35,8 @@ export async function rentTx({
         borrowerProfile,
         starbase,
         amount,
-        duration
+        duration,
+        durationUnit,
       })
     });
     const rawText = await response.text();
@@ -188,15 +191,26 @@ export async function cancelRentTx({
       })));
       const rawTx = signedTx.serialize();
       const base64Tx = btoa(String.fromCharCode(...rawTx));
+      const { currentProfileId } = await import("@/utils/state");
+      const cancelTxMeta = {
+        operation: "cancel-rent",
+        profileId: currentProfileId || undefined,
+        fleet_id,
+        borrower,
+        contract: data?.derivedAccounts?.contract,
+        rentalState: data?.derivedAccounts?.rentalState,
+        rentalThread: data?.derivedAccounts?.rentalThread,
+      };
       console.log("[DEBUG][cancel-rent] Signed transaction serialized:", {
         rawLength: rawTx.length,
         base64Length: base64Tx.length,
+        meta: cancelTxMeta,
       });
       console.log("[DEBUG][cancel-rent] Sending signed transaction to /api/send-tx");
       const sendResp = await fetch("/api/send-tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transaction: base64Tx }),
+        body: JSON.stringify({ transaction: base64Tx, txMeta: cancelTxMeta }),
       });
       const sendData = await sendResp.json();
       console.log("[DEBUG][cancel-rent] /api/send-tx response:", sendData);
@@ -206,6 +220,19 @@ export async function cancelRentTx({
 
       alert("Transazione di cancel inviata! Signature: " + sendData.signature);
       console.log("[DEBUG][cancel-rent] Signature inviata:", sendData.signature);
+      try {
+        if (cancelTxMeta.profileId) {
+          const { analyzeFees } = await import("@/services/api");
+          console.log("[DEBUG][cancel-rent] Refreshing rental status for profile:", cancelTxMeta.profileId);
+          await analyzeFees(cancelTxMeta.profileId, false);
+        } else {
+          console.warn("[DEBUG][cancel-rent] Missing profileId for refresh, falling back to page reload");
+          window.location.reload();
+        }
+      } catch (refreshErr: any) {
+        console.error("[DEBUG][cancel-rent] Failed to refresh rental status after successful cancel:", refreshErr);
+        window.location.reload();
+      }
     } catch (e) {
       console.error("[DEBUG][cancel-rent] Error during sign/send phase:", e);
       alert("Errore firma o invio tx: " + e.message);

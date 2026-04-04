@@ -2,10 +2,11 @@ import { TICKER_CONFIG } from "./footBar";
 import { fetchAndDisplayRentals } from "./rental_playload";
 import { setCachedRentalView } from "./toggleSwitch";
 import { cancelRentTx } from "./rental_tx";
+import { computeDisplayedRentalTotal } from "../../utils/rentalDisplay";
 
 // creiamo un dom da esportare come copia backup
 export let rentalStateBackup: HTMLElement | null = null;
-
+const MIN_CANCEL_NOTICE_SECONDS = 24 * 60 * 60;
 
 // creiamo la funzione che crearà dentro resultdiv un div rentalState con all'interno 2 div in colonna, uno per le proprie date in affitto un altro per quelle affittate
 export function rentalState_playload(data: any,) {
@@ -85,24 +86,25 @@ export function rentalState_playload(data: any,) {
             isListed: fleet.isListed,
         });
         const fleetName = fleet.fleet_label || fleet.fleet || "Unknown";
-        const fleetRate = fleet.rate || "Unknown";
+        const fleetRate = fleet.rate != null
+            ? `${fleet.rate}`
+            : "Unknown";
         const fleetRentalStart = fleet.rental_start_time
             ? new Date(fleet.rental_start_time * 1000).toLocaleString()
             : "-";
         const fleetRentalEnd = fleet.rental_end_time
             ? new Date(fleet.rental_end_time * 1000).toLocaleString()
             : "-";
+        const secondsRemaining = fleet.rental_end_time
+            ? Number(fleet.rental_end_time) - Math.floor(Date.now() / 1000)
+            : null;
+        const isInsideCancellationNotice = typeof secondsRemaining === "number"
+            && secondsRemaining < MIN_CANCEL_NOTICE_SECONDS;
+
 
         // Creiamo la riga
         const row = document.createElement("tr");
-        // calcoliamo total amount moltiplicando rate per la durata in giorni, se rental_start_time e rental_end_time sono presenti, altrimenti mostriamo "-"
-        let total_amount = null;
-        if (fleet.rental_start_time && fleet.rental_end_time && fleet.rate) {
-            const start = new Date(fleet.rental_start_time * 1000);
-            const end = new Date(fleet.rental_end_time * 1000);
-            const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24); // durata in giorni
-            total_amount = (duration * fleet.rate).toFixed(2);
-        }
+        const total_amount = computeDisplayedRentalTotal(fleet);
 
         if (fleet.isRented) {
             row.classList.add("fleet-item-rented");
@@ -115,15 +117,27 @@ export function rentalState_playload(data: any,) {
             <td>${fleetRentalStart}</td>
             <td>${fleetRentalEnd}</td>
             
-            <td style="color:#ff3000; display: flex; flex-direction: row; align-items: center;">
-            <div>${total_amount ? total_amount : "-"}</div>
-            ${total_amount ? atlasIcon : ""}
-            <button class="cancel-rental-button" data-fleet-id="${fleet.fleet_id || fleet.fleet || ""}" style="margin-left: 10px;">Cancel</button>
+            <td style="color:#7f2713; display: flex; flex-direction: row; align-items: center;">
+            <div>${total_amount !== null ? total_amount : "-"}</div>
+            ${total_amount !== null ? atlasIcon : ""}
+            <button
+                class="cancel-rental-button"
+                data-fleet-id="${fleet.fleet_id || fleet.fleet || ""}"
+                style="margin-left: 10px;"
+            >Cancel</button>
             </td>
 
         `;
 
             const cancelRentalButton = row.querySelector(".cancel-rental-button") as HTMLButtonElement | null;
+            if (isInsideCancellationNotice && cancelRentalButton) {
+                console.log("[rentalState_playload] Cancel disabled due to minimum notice window:", {
+                    fleetId: fleet.fleet_id || fleet.fleet,
+                    fleetName,
+                    rentalEndTime: fleet.rental_end_time,
+                    secondsRemaining,
+                });
+            }
             cancelRentalButton?.addEventListener("click", async () => {
                 const fleetId = fleet.fleet_id || fleet.fleet;
                 const borrower = window.wallet?.adapter?.publicKey?.toBase58?.();
@@ -183,8 +197,8 @@ export function rentalState_playload(data: any,) {
             <td>${fleetRentalStart}</td>
             <td>${endDateDisplay}</td>
             <td style="color:green; display: flex; flex-direction: row; align-items: center;">
-            <div>${total_amount ? total_amount : "-"}</div>
-            ${total_amount ? atlasIcon : ""}
+            <div>${total_amount !== null ? total_amount : "-"}</div>
+            ${total_amount !== null ? atlasIcon : ""}
             </td>
         `;
             loanedBody.appendChild(row);

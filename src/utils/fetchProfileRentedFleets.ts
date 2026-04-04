@@ -10,6 +10,32 @@ async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getRpcRetryInfo(error: unknown): { errorType: '429' | '503' | 'error'; retryable: boolean } {
+  const status = typeof (error as { status?: unknown })?.status === 'number'
+    ? Number((error as { status?: number }).status)
+    : undefined;
+  const message = error instanceof Error ? error.message : String(error ?? '');
+
+  if (status === 429 || /429|Too Many Requests/i.test(message)) {
+    return { errorType: '429', retryable: true };
+  }
+
+  const looksLikeRetryableRelayError =
+    status === 500 ||
+    status === 503 ||
+    /500 Internal Server Error/i.test(message) ||
+    /503|Service Unavailable|RPC backend not ready/i.test(message) ||
+    /"code"\s*:\s*-31001/.test(message) ||
+    /jsonrpc_invalid_empty_array/i.test(message) ||
+    /"retryable"\s*:\s*"?true"?/i.test(message);
+
+  if (looksLikeRetryableRelayError) {
+    return { errorType: '503', retryable: true };
+  }
+
+  return { errorType: 'error', retryable: false };
+}
+
 async function loadRentedFleetsFromCache(profileId: string): Promise<any[]> {
   const rentedCacheDir = path.join(process.cwd(), 'cache', profileId, 'rented-fleets');
   const files = await fs.readdir(rentedCacheDir).catch(() => []);
@@ -410,16 +436,18 @@ export async function fetchProfileRentedFleets(profileId: string): Promise<any[]
     } catch (e: any) {
       lastErr = e;
       const errMsg = String(e?.message || e || '');
-      const is429 = /429|Too Many Requests/i.test(errMsg);
+      const { errorType, retryable } = getRpcRetryInfo(e);
       console.log('[DEBUG RENTAL] Error fetching rented fleets for profile', {
         profileId,
         attempt,
+        retryable,
+        errorType,
         error: errMsg
       });
       if (pick && pick.release) {
-        try { pick.release({ success: false, errorType: is429 ? '429' : 'error' }); } catch { }
+        try { pick.release({ success: false, errorType }); } catch { }
       }
-      if (is429 && attempt < 5) {
+      if (retryable && attempt < 5) {
         const delayMs = Math.min(500 * Math.pow(2, attempt - 1), 4000);
         await sleep(delayMs);
         continue;

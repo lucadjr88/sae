@@ -20,57 +20,89 @@ export class Wallet {
         // Non caricare più gli adapter qui: lo farà connect()
     }
 
-    async connect() {
+    private async refreshAdapters() {
+        const adapters = await getWalletAdapters();
+        this.adapters = adapters;
+        this.walletInfos = adapters.map((adapter: any) => ({
+            name: adapter.name || 'Wallet',
+            icon: adapter.icon || '',
+            detect: () => true
+        }));
+    }
+
+    private async wait(ms: number) {
+        await new Promise(resolve => window.setTimeout(resolve, ms));
+    }
+
+    async connect(maxAttempts = 3) {
         if (this.isConnecting) return;
         this.isConnecting = true;
         this.error = null;
 
-        if (this.adapters.length === 0) {
-            const adapters = await getWalletAdapters();
-            this.adapters = adapters;
-            this.walletInfos = adapters.map((adapter: any) => ({
-                name: adapter.name || 'Wallet',
-                icon: adapter.icon || '',
-                detect: () => true
-            }));
-        }
-
-
-        // DESKTOP: mostra popup per selezione wallet
-        const choice = await this.showWalletModal();
-        if (choice === null) {
-            this.isConnecting = false;
-            this.error = 'No wallet found.';
-            window.dispatchEvent(new Event('walletStateChanged'));
-            alert('No wallet found..');
-            return;
-        }
-        const adapter = this.adapters[choice];
-        if (!adapter || typeof adapter.connect !== 'function') {
-            this.isConnecting = false;
-            this.isConnected = false;
-            this.error = 'Adapter non trovato o non valido';
-            alert('Adapter non trovato o non valido');
-            window.dispatchEvent(new Event('walletStateChanged'));
-            return;
-        }
         try {
-            await adapter.connect();
-            this.isConnected = true;
-            this.publicKey = adapter.publicKey || null;
-            this.error = null;
-            this.selected = choice;
-            this.adapter = adapter;
-        } catch (e: any) {
-            this.isConnected = false;
-            this.publicKey = null;
-            this.error = e.message || 'Connection failed';
-            alert('Error during connection: ' + (e.message || e));
+            await this.refreshAdapters();
+
+            // DESKTOP: mostra popup per selezione wallet
+            const choice = await this.showWalletModal();
+            if (choice === null) {
+                this.isConnected = false;
+                this.error = 'No wallet found.';
+                alert('No wallet found..');
+                return;
+            }
+
+            let lastError = 'Connection failed';
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                const adapter = this.adapters[choice];
+
+                if (!adapter || typeof adapter.connect !== 'function') {
+                    lastError = 'Adapter non trovato o non valido';
+                    this.isConnected = false;
+                    this.publicKey = null;
+                    this.adapter = null;
+                    this.error = lastError;
+
+                    if (attempt < maxAttempts) {
+                        console.warn(`[Wallet] Adapter non valido, retry ${attempt}/${maxAttempts}`);
+                        await this.refreshAdapters();
+                        await this.wait(250 * attempt);
+                        continue;
+                    }
+
+                    alert(`${lastError} (tentativo ${attempt}/${maxAttempts})`);
+                    return;
+                }
+
+                try {
+                    await adapter.connect();
+                    this.isConnected = true;
+                    this.publicKey = adapter.publicKey || null;
+                    this.error = null;
+                    this.selected = choice;
+                    this.adapter = adapter;
+                    return;
+                } catch (e: any) {
+                    lastError = e?.message || 'Connection failed';
+                    this.isConnected = false;
+                    this.publicKey = null;
+                    this.adapter = null;
+                    this.error = lastError;
+
+                    if (attempt < maxAttempts) {
+                        console.warn(`[Wallet] connect retry ${attempt}/${maxAttempts} fallito:`, e);
+                        await this.wait(400 * attempt);
+                        continue;
+                    }
+
+                    alert('Error during connection: ' + lastError);
+                }
+            }
         } finally {
             this.isConnecting = false;
+            window.dispatchEvent(new Event('walletStateChanged'));
+            console.log("[Wallet] connect() completed with state:", { isConnected: this.isConnected, publicKey: this.publicKey, error: this.error });
         }
-        window.dispatchEvent(new Event('walletStateChanged'));
-        console.log("[Wallet] connect() completed with state:", { isConnected: this.isConnected, publicKey: this.publicKey, error: this.error });
     }
 
     async disconnect() {
@@ -127,10 +159,11 @@ export class Wallet {
             document.body.appendChild(modal);
             // Click su wallet
             modal.querySelectorAll('button[data-wallet-idx]').forEach(btn => {
-                btn.addEventListener('click', (e: any) => {
-                    const idx = parseInt(e.target.getAttribute('data-wallet-idx'), 10);
+                btn.addEventListener('click', () => {
+                    const idxAttr = (btn as HTMLButtonElement).dataset.walletIdx;
+                    const idx = typeof idxAttr === 'string' ? parseInt(idxAttr, 10) : NaN;
                     modal.remove();
-                    resolve(idx);
+                    resolve(Number.isNaN(idx) ? null : idx);
                 });
             });
             // Chiudi cliccando fuori dal box

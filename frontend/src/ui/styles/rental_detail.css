@@ -12,6 +12,10 @@
 }
 
 .rental-contract-window {
+  background-image: url("../../assets/MetalPlatePatterned3.svg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   position: fixed;
   top: 50%;
   left: 50%;
@@ -37,7 +41,7 @@
 
 .window-header h2 {
   margin: 0;
- font-size: 1.5rem;
+  font-size: 1.5rem;
   color: #b94b4b;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
@@ -198,7 +202,7 @@
 .fleet-state-position {
   border: solid 1px;
   border-radius: 15px;
-  background-color: #dc143c2e;
+  background-color: #dc143c69;
 }
 
 .status-badge {
@@ -213,7 +217,7 @@
 .stat-box {
   border: solid 1px;
   border-radius: 15px;
-  background-color: #dc143c2e;
+  background-color: #dc143c69;
   margin: 2%;
 }
 
@@ -225,7 +229,7 @@
 }
 
 .rent-stat-value {
-font-size: inherit;
+  font-size: inherit;
   font-weight: 680;
   display: block;
 }
@@ -238,7 +242,7 @@ font-size: inherit;
   flex-direction: column;
   border: solid 1px;
   border-radius: 15px;
-  background-color: #dc143c2e;
+  background-color: #dc143c69;
 }
 
 .cargo-item {
@@ -267,7 +271,7 @@ font-size: inherit;
 }
 
 .rental-material-cell {
-min-width: 0;
+  min-width: 0;
   flex-direction: row;
   display: flex;
   justify-content: space-between;
@@ -283,8 +287,9 @@ min-width: 0;
 
 .rental-tx {
   display: flex;
+  flex-flow: column;
   gap: 6%;
-  align-items: center;
+  align-items: baseline;
   margin-top: auto;
   padding-bottom: 3%;
 }
@@ -298,15 +303,15 @@ min-width: 0;
   white-space: nowrap;
   transition: all .15s;
   border-radius: 15px;
-  background-color: #dc143c2e;
+  background-color: #dc143c69;
 }
 
 #rentDuration {
-flex: 1;
+  flex: 1;
   background: #0b0e1a;
-    background-color: rgb(11, 14, 26);
+  background-color: rgb(11, 14, 26);
   border: 1px solid #1e222e;
-  font-family: Roboto Mono,monospace;
+  font-family: Roboto Mono, monospace;
   pointer-events: auto;
   min-width: 0;
   padding: 6px 16px;
@@ -317,11 +322,23 @@ flex: 1;
   white-space: nowrap;
   transition: all .15s;
   border-radius: 15px;
-  background-color: #dc143c2e;
+  background-color: #dc143c69;
 }
 
 #rentPriceTotal {
-  font-size: large;
-  font-weight: 500;
-  color: aquamarine;
+  font-size: 149%;
+  font-weight: 1000;
+  color: #d2c2e9;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background: #0b0e1a;
+  background-color: rgb(11, 14, 26);
+  border: 1px solid #1e222e;
+  font-family: Roboto Mono, monospace;
+  white-space: nowrap;
+  transition: all .15s;
+  border-radius: 15px;
+  background-color: #dc143c69;
+  padding: 3%;
 }

@@ -34,16 +34,6 @@ export interface RentalContract {
     // altri campi se vuoi
   };
 }
-
-function formatRate(rate: number): string {
-  return rate.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-/*function formatTs(ts: number | undefined): string {
-  if (!ts) return '-';
-  return new Date(ts * 1000).toLocaleString();
-}*/
-
 // DIV CONTENITORE FILTRI E ORDINAMENTO
 // Aggiungiamo il parametro callback
 function createFilterBar(onFilterChange: (
@@ -213,7 +203,7 @@ function buildTable(contracts: RentalContract[]) {
       tr.innerHTML = `
         <td id="fleet_${c.fleet}" title="${c.fleet}">${c.fleet_name ?? c.fleet.slice(0, 8) + '…'}</td>
         <td>${c.starbase?.toUpperCase() ?? '-'}</td>
-        <td style="font-weight:bold">${formatRate(c.rate)}</td>
+        <td style="font-weight:bold">${c.rate}</td>
         <td class="composition-cell" title="${c.fleet_composition ?? '-'}">${c.fleet_composition ?? '-'}</td>
         <td><span class="state-pill ${stateClass}">${state}</span></td>
       `;

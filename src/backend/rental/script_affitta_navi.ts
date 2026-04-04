@@ -4,13 +4,61 @@ import BN from "bn.js";
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
 import { RentalService } from "./rentalService";
-import { getRpcConnection } from "../../utils/rpc/connection";
+import { decodeRentalState } from "./decode";
+import { pickOptimisticRentalRate } from "./rentalCacheUtils";
+import { RpcPoolManager } from "../../utils/rpc/rpc-pool-manager";
 
 // PATCH: Express endpoint minimale per orchestrare la rental tx
 import express from "express";
 import fs from "fs";
 import path from "path";
 const router = express.Router();
+
+const DURATION_SECONDS_BY_UNIT: Record<string, number> = {
+  decasecond: 10,
+  minute: 60,
+  hourly: 3600,
+  hour: 3600,
+  daily: 86400,
+  day: 86400,
+  weekly: 604800,
+  week: 604800,
+  monthly: 2592000,
+  month: 2592000,
+};
+
+function normalizeDurationUnit(value: unknown): string {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'decaseconds') return 'decasecond';
+  if (normalized.startsWith('min')) return 'minute';
+  if (normalized.startsWith('hour')) return 'hourly';
+  if (normalized.startsWith('day')) return 'daily';
+  if (normalized.startsWith('week')) return 'weekly';
+  if (normalized.startsWith('month')) return 'monthly';
+  return normalized;
+}
+
+function convertDurationToContractUnits(duration: number, requestedUnit: unknown, paymentFrequency: unknown): number {
+  const sourceUnit = normalizeDurationUnit(requestedUnit || 'day');
+  const targetUnit = normalizeDurationUnit(paymentFrequency);
+  const sourceSeconds = DURATION_SECONDS_BY_UNIT[sourceUnit];
+  const targetSeconds = DURATION_SECONDS_BY_UNIT[targetUnit];
+
+  if (!sourceSeconds) {
+    throw new Error(`Unsupported duration unit: ${requestedUnit}`);
+  }
+
+  if (!targetSeconds) {
+    return duration;
+  }
+
+  const convertedDuration = (duration * sourceSeconds) / targetSeconds;
+  if (!Number.isInteger(convertedDuration) || convertedDuration <= 0) {
+    throw new Error(`Duration ${duration} ${sourceUnit} is not compatible with payment frequency ${paymentFrequency}`);
+  }
+
+  return convertedDuration;
+}
 
 function normalizeInstructionAccounts(accounts: any[]): any[] {
   return accounts.map((acc) => {
@@ -141,28 +189,77 @@ const srslyLegacyIdl = toLegacyAnchorIdl(srslyIdl);
 const PROFILE_FACTION_PROGRAM_ID = new PublicKey("pFACSRuobDmvfMKq1bAzwj27t6d2GJhSCHb1VcfnRmq");
 // Cache profile -> faction account pubkey (cleared on server restart only)
 const profileFactionCache = new Map<string, PublicKey>();
-async function getProfileFactionAccount(profilePk: PublicKey): Promise<PublicKey> {
+
+function normalizeRpcProfileId(value?: string | null): string {
+  const cleaned = typeof value === 'string' ? value.trim() : '';
+  return cleaned.length > 0 ? cleaned : 'default';
+}
+
+function getRpcErrorType(error: unknown): '429' | '503' | 'error' {
+  const status = typeof (error as { status?: unknown })?.status === 'number'
+    ? Number((error as { status?: number }).status)
+    : undefined;
+  const message = error instanceof Error ? error.message : String(error ?? '');
+
+  if (status === 429 || /429|Too Many Requests/i.test(message)) return '429';
+  if (status === 503 || /503|Service Unavailable/i.test(message)) return '503';
+  return 'error';
+}
+
+async function executeRpcWithPool<T>(profileId: string, operation: (connection: Connection) => Promise<T>): Promise<T> {
+  const normalizedProfileId = normalizeRpcProfileId(profileId);
+  const pool = await RpcPoolManager.loadOrCreateRpcPool(normalizedProfileId);
+  const maxAttempts = Math.max(4, Math.round(pool.length * 1.5));
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | null = null;
+    const startedAt = Date.now();
+
+    try {
+      pick = await RpcPoolManager.pickRpcConnection(normalizedProfileId, {
+        waitForMs: 3000,
+        allowStale: attempt > 2,
+      });
+      const result = await operation(pick.connection as Connection);
+      pick.release({ success: true, latencyMs: Date.now() - startedAt });
+      return result;
+    } catch (error) {
+      if (pick) {
+        pick.release({
+          success: false,
+          latencyMs: Date.now() - startedAt,
+          errorType: getRpcErrorType(error),
+        });
+      }
+      lastError = error;
+      console.error(`[rent-rpc] attempt ${attempt + 1}/${maxAttempts} failed for profile ${normalizedProfileId}:`, error);
+    }
+  }
+
+  if (lastError instanceof Error) throw lastError;
+  throw new Error('RPC request failed');
+}
+
+async function getProfileFactionAccount(profilePk: PublicKey, profileId?: string): Promise<PublicKey> {
   const cacheKey = profilePk.toBase58();
   if (profileFactionCache.has(cacheKey)) return profileFactionCache.get(cacheKey)!;
-  const connection = await getRpcConnection();
-  const accounts = await connection.getProgramAccounts(PROFILE_FACTION_PROGRAM_ID, {
-    filters: [{ memcmp: { offset: 9, bytes: profilePk.toBase58() } }],
-  });
+  const accounts = await executeRpcWithPool(profileId || cacheKey, (connection) =>
+    connection.getProgramAccounts(PROFILE_FACTION_PROGRAM_ID, {
+      filters: [{ memcmp: { offset: 9, bytes: profilePk.toBase58() } }],
+    }),
+  );
   if (accounts.length === 0) throw new Error(`No profile faction account found for profile ${cacheKey}`);
   const result = accounts[0].pubkey;
   profileFactionCache.set(cacheKey, result);
   console.log("[FACTION] Fetched profileFaction for", cacheKey, "->", result.toBase58());
   return result;
 }
-
 // Carica contracts.json una sola volta (in produzione meglio usare cache o fetch dinamico)
 //const contractsCache = JSON.parse(fs.readFileSync("cache/contracts.json", "utf8"));
 let contractsCache: any = null;
 
-
 const rentalService = new RentalService(new PublicKey("SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT"), 30000);
-
-
 
 router.post("/rent-fleet", async (req, res) => {
   try {
@@ -173,11 +270,27 @@ router.post("/rent-fleet", async (req, res) => {
       borrowerProfile,
       amount,
       duration,
+      durationUnit,
       profileId // opzionale, per batch fetch health-aware
     } = req.body;
 
     if (!borrower || !borrowerProfile) {
       res.status(400).json({ error: "Missing required fields: borrower, borrowerProfile" });
+      return;
+    }
+
+    const quotedRate = Number(amount);
+    const requestedDuration = Number(duration);
+    const requestedDurationUnit = typeof durationUnit === 'string' ? durationUnit : 'day';
+    const rpcProfileId = normalizeRpcProfileId(profileId || borrowerProfile);
+
+    if (!Number.isFinite(quotedRate) || quotedRate <= 0) {
+      res.status(400).json({ error: "Invalid amount" });
+      return;
+    }
+
+    if (!Number.isFinite(requestedDuration) || requestedDuration <= 0) {
+      res.status(400).json({ error: "Invalid duration" });
       return;
     }
 
@@ -209,6 +322,23 @@ router.post("/rent-fleet", async (req, res) => {
         faction: req.body.faction || 1 // default mud
       };
     }
+
+    const contractPaymentFrequency = String(contract?.payment_frequency || 'Daily');
+
+    let contractDuration = requestedDuration;
+    try {
+      contractDuration = convertDurationToContractUnits(requestedDuration, requestedDurationUnit, contractPaymentFrequency);
+    } catch (err: any) {
+      res.status(400).json({ error: err?.message || String(err) });
+      return;
+    }
+
+    console.log("[RENT-FLEET] Duration normalized:", {
+      requestedDuration,
+      requestedDurationUnit,
+      paymentFrequency: contractPaymentFrequency,
+      contractDuration,
+    });
 
     // Derivazione PDA fedele all'esempio ufficiale
     const fleetPk = new PublicKey(contract.fleet);
@@ -242,7 +372,7 @@ router.post("/rent-fleet", async (req, res) => {
       Buffer.from("sage_player_profile"), borrowerProfilePk.toBuffer(), gameIdPk.toBuffer()
     ], sageProgramId);
 
-    const borrowerProfileFactionPk = await getProfileFactionAccount(borrowerProfilePk);
+    const borrowerProfileFactionPk = await getProfileFactionAccount(borrowerProfilePk, rpcProfileId);
     console.log("[RENT-FLEET] borrowerProfileFaction:", borrowerProfileFactionPk.toBase58());
 
     // Fazione e coordinate starbase (dummy, da fetchare se serve, qui mud)
@@ -290,15 +420,17 @@ router.post("/rent-fleet", async (req, res) => {
     // Costruisci la tx fedele all'esempio ufficiale
     try {
 
-      // amount dal frontend è la tariffa giornaliera in ATLAS; il programma SRSLY attende il totale (rate × duration) in atomics
-      const amountAtomics = BigInt(Math.round(Number(amount) * Number(duration) * 100_000_000));
+      // Il rate del contratto è espresso nella `payment_frequency`; convertiamo prima la durata e poi calcoliamo il totale atteso dal programma SRSLY.
+      const amountAtomics = BigInt(Math.round(quotedRate * contractDuration * 100_000_000));
 
       // Debug: log dei parametri critici
       console.log("[RENT-FLEET] TX params:", {
-        amount: amount,
+        amount: quotedRate,
         amountAtomics: amountAtomics.toString(),
-        duration: duration,
-        durationType: typeof duration,
+        requestedDuration,
+        requestedDurationUnit,
+        contractDuration,
+        contractPaymentFrequency,
         borrower: borrowerPk.toBase58(),
         borrowerProfile: borrowerProfilePk.toBase58(),
         contractPda: contractPda.toBase58()
@@ -327,13 +459,16 @@ router.post("/rent-fleet", async (req, res) => {
         associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
         system_program: SystemProgram.programId,
         amount: amountAtomics.toString(),
-        duration
+        duration: contractDuration,
+        rpcProfileId,
       });
 
       // Patch minimale: imposta feePayer e recentBlockhash per compatibilità wallet
       tx.feePayer = borrowerPk;
-      const connection = await getRpcConnection();
-      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+      const latestBlockhash = await executeRpcWithPool(rpcProfileId, (connection) =>
+        connection.getLatestBlockhash('confirmed'),
+      );
+      tx.recentBlockhash = latestBlockhash.blockhash;
       // Log oggetto tx DOPO l'assegnazione
       console.log("[RENT-FLEET] TX oggetto dopo feePayer/recentBlockhash:", tx);
       const serialized = tx.serialize({ requireAllSignatures: false }).toString('base64');
@@ -341,6 +476,7 @@ router.post("/rent-fleet", async (req, res) => {
       const rentalCacheSeed = {
         profileId: borrowerProfile,
         fleet: contract?.fleet || null,
+        fleet_ships: contract?.fleet_ships || null,
         fleet_label: contract?.fleet_name || null,
         isRented: true,
         contractPubkey: contractAddress,
@@ -348,7 +484,10 @@ router.post("/rent-fleet", async (req, res) => {
         owner_profile: contract?.owner_profile || null,
         owner_token_account: contract?.owner_token_account || null,
         current_rental_state: rentalState.toBase58(),
-        rate: contract?.rate ?? Number(amount),
+        rate: contract?.rate ?? quotedRate,
+        duration: contractDuration,
+        requested_duration: requestedDuration,
+        requested_duration_unit: requestedDurationUnit,
         duration_min: contract?.duration_min ?? null,
         duration_max: contract?.duration_max ?? null,
         payment_frequency: contract?.payment_frequency || null,
@@ -368,29 +507,75 @@ router.post("/rent-fleet", async (req, res) => {
 
 // Broadcast tx firmata usando il pool RPC del backend
 router.post('/send-tx', async (req, res) => {
-  const { transaction, contractAddress, rentalState, rentalCacheSeed } = req.body;
+  const { transaction, contractAddress, rentalState, rentalCacheSeed, txMeta } = req.body;
   if (!transaction || typeof transaction !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid transaction field' });
   }
   try {
+    if (txMeta && typeof txMeta === 'object') {
+      console.log('[SEND-TX] txMeta:', txMeta);
+    }
+    const isCancelRent = txMeta?.operation === 'cancel-rent';
+    const effectiveContractAddress = typeof contractAddress === 'string'
+      ? contractAddress
+      : typeof txMeta?.contract === 'string'
+        ? txMeta.contract
+        : null;
+    const effectiveRentalState = typeof rentalState === 'string'
+      ? rentalState
+      : typeof txMeta?.rentalState === 'string'
+        ? txMeta.rentalState
+        : null;
     const rawTx = Buffer.from(transaction, 'base64');
-    const connection = await getRpcConnection();
-    const signature = await connection.sendRawTransaction(rawTx, { skipPreflight: false });
+    const rpcProfileId = normalizeRpcProfileId(
+      (typeof rentalCacheSeed?.profileId === 'string' && rentalCacheSeed.profileId)
+      || (typeof txMeta?.profileId === 'string' && txMeta.profileId)
+      || undefined,
+    );
+    const signature = await executeRpcWithPool(rpcProfileId, (connection) =>
+      connection.sendRawTransaction(rawTx, { skipPreflight: false }),
+    );
     console.log(`[SEND-TX] TX inviata con successo. Signature: ${signature}`);
-    // Aggiorna current_rental_state in contracts.json se forniti contractAddress e rentalState
-    if (contractAddress && typeof contractAddress === 'string' && rentalState && typeof rentalState === 'string') {
+
+    let confirmedRentalState: ReturnType<typeof decodeRentalState> | null = null;
+    if (!isCancelRent && effectiveRentalState) {
+      try {
+        confirmedRentalState = await executeRpcWithPool(rpcProfileId, async (connection) => {
+          await connection.confirmTransaction(signature, 'confirmed');
+          const accountInfo = await connection.getAccountInfo(new PublicKey(effectiveRentalState), 'confirmed');
+          if (!accountInfo?.data) return null;
+          return decodeRentalState(Buffer.from(accountInfo.data));
+        });
+
+        if (confirmedRentalState) {
+          console.log('[SEND-TX] rental state confermato da chain:', {
+            rentalState: effectiveRentalState,
+            start_time: confirmedRentalState.start_time,
+            end_time: confirmedRentalState.end_time,
+            cancelled: confirmedRentalState.cancelled,
+          });
+        } else {
+          console.warn(`[SEND-TX] rental state ${effectiveRentalState} non ancora leggibile dopo la conferma, uso fallback ottimistico`);
+        }
+      } catch (e: any) {
+        console.warn(`[SEND-TX] Impossibile leggere il rental state confermato ${effectiveRentalState}, uso fallback ottimistico: ${e?.message || e}`);
+      }
+    }
+
+    // Aggiorna current_rental_state in contracts.json sia per acceptRental che per cancelRental
+    if (effectiveContractAddress && typeof effectiveContractAddress === 'string') {
       try {
         const contractsPath = path.join(process.cwd(), 'cache', 'contracts.json');
         const contractsObj = JSON.parse(fs.readFileSync(contractsPath, 'utf-8'));
         const arr: any[] = Array.isArray(contractsObj) ? contractsObj : contractsObj.contracts;
-        const idx = arr.findIndex((c: any) => c.address === contractAddress);
+        const idx = arr.findIndex((c: any) => c.address === effectiveContractAddress);
         if (idx !== -1) {
-          arr[idx].current_rental_state = rentalState;
+          arr[idx].current_rental_state = isCancelRent ? null : effectiveRentalState;
           const toWrite = Array.isArray(contractsObj) ? arr : { ...contractsObj, contracts: arr };
           fs.writeFileSync(contractsPath, JSON.stringify(toWrite, null, 2));
-          console.log(`[SEND-TX] contracts.json aggiornato: ${contractAddress} -> current_rental_state: ${rentalState}`);
+          console.log(`[SEND-TX] contracts.json aggiornato: ${effectiveContractAddress} -> current_rental_state: ${isCancelRent ? 'null' : effectiveRentalState}`);
         } else {
-          console.warn(`[SEND-TX] Contratto non trovato in contracts.json per address: ${contractAddress}`);
+          console.warn(`[SEND-TX] Contratto non trovato in contracts.json per address: ${effectiveContractAddress}`);
         }
       } catch (e: any) {
         console.error('[SEND-TX] Errore aggiornamento contracts.json:', e.message);
@@ -405,6 +590,10 @@ router.post('/send-tx', async (req, res) => {
         const currentData = latestObj?.data && typeof latestObj.data === 'object' ? latestObj.data : {};
         const rentedFleets = Array.isArray(currentData.rentedFleets) ? currentData.rentedFleets : [];
         const nowTs = Math.floor(Date.now() / 1000);
+        const durationNum = Number(rentalCacheSeed.duration ?? 0);
+        const frequencyKey = normalizeDurationUnit(rentalCacheSeed.payment_frequency || '');
+        const secondsPerUnit = DURATION_SECONDS_BY_UNIT[frequencyKey] ?? 0;
+        const computedEndTs = durationNum > 0 && secondsPerUnit > 0 ? nowTs + (durationNum * secondsPerUnit) : null;
 
         const normalizedSeed = {
           ...rentalCacheSeed,
@@ -412,9 +601,11 @@ router.post('/send-tx', async (req, res) => {
           contractPubkey: rentalCacheSeed.contractPubkey || contractAddress,
           current_rental_state: rentalState,
           rental_state_pubkey: rentalState,
-          rental_start_time: rentalCacheSeed.rental_start_time ?? nowTs,
-          rental_end_time: rentalCacheSeed.rental_end_time ?? null,
-          rental_cancelled: false
+          borrower: confirmedRentalState?.borrower || rentalCacheSeed.borrower,
+          rate: pickOptimisticRentalRate(rentalCacheSeed.rate, confirmedRentalState?.rate),
+          rental_start_time: confirmedRentalState?.start_time ?? rentalCacheSeed.rental_start_time ?? nowTs,
+          rental_end_time: confirmedRentalState?.end_time ?? rentalCacheSeed.rental_end_time ?? computedEndTs,
+          rental_cancelled: confirmedRentalState?.cancelled ?? false
         };
 
         const idx = rentedFleets.findIndex((f: any) =>
@@ -441,10 +632,71 @@ router.post('/send-tx', async (req, res) => {
         console.error('[SEND-TX] Errore aggiornamento playload/latest.json:', e.message);
       }
     }
+
+    if (isCancelRent && typeof txMeta?.profileId === 'string') {
+      try {
+        const latestPath = path.join(process.cwd(), 'cache', txMeta.profileId, 'playload', 'latest.json');
+        const latestObj = JSON.parse(fs.readFileSync(latestPath, 'utf-8'));
+        const currentData = latestObj?.data && typeof latestObj.data === 'object' ? latestObj.data : {};
+        const rentedFleets = Array.isArray(currentData.rentedFleets) ? currentData.rentedFleets : [];
+        const filteredRentedFleets = rentedFleets.filter((fleet: any) => {
+          const sameFleet = typeof txMeta?.fleet_id === 'string' && (
+            fleet?.fleet_id === txMeta.fleet_id
+            || fleet?.fleet === txMeta.fleet_id
+            || fleet?.pubkey === txMeta.fleet_id
+          );
+          const sameContract = typeof txMeta?.contract === 'string' && fleet?.contractPubkey === txMeta.contract;
+          const sameRentalState = typeof txMeta?.rentalState === 'string' && (
+            fleet?.rental_state_pubkey === txMeta.rentalState
+            || fleet?.current_rental_state === txMeta.rentalState
+          );
+          return !(sameFleet || sameContract || sameRentalState);
+        });
+
+        const removedCount = rentedFleets.length - filteredRentedFleets.length;
+        const toWrite = {
+          ...latestObj,
+          data: {
+            ...currentData,
+            rentedFleets: filteredRentedFleets,
+          }
+        };
+        fs.writeFileSync(latestPath, JSON.stringify(toWrite, null, 2));
+        console.log(`[SEND-TX] playload/latest.json aggiornato (cancel-rent remove) per profile ${txMeta.profileId}, removed=${removedCount}`);
+      } catch (e: any) {
+        console.error('[SEND-TX] Errore rimozione rented fleet da playload/latest.json:', e.message);
+      }
+    }
     res.json({ signature });
   } catch (err: any) {
     console.error('[SEND-TX] Error:', err);
-    res.status(500).json({ error: err.message || String(err) });
+    const simulationLogs = err?.logs || err?.data?.logs || err?.value?.logs || null;
+    const simulationErr = err?.data?.err || err?.value?.err || err?.simulationResponse?.err || null;
+    const instructionError = simulationErr?.InstructionError || null;
+
+    if (txMeta && typeof txMeta === 'object') {
+      console.error('[SEND-TX] txMeta on failure:', txMeta);
+    }
+    if (simulationErr) {
+      console.error('[SEND-TX] Simulation err:', simulationErr);
+    }
+    if (instructionError) {
+      console.error('[SEND-TX] InstructionError:', instructionError);
+    }
+    if (Array.isArray(simulationLogs)) {
+      console.error('[SEND-TX] Simulation logs:');
+      for (const line of simulationLogs) {
+        console.error('[SEND-TX][SIM-LOG]', line);
+      }
+    }
+
+    res.status(500).json({
+      error: err.message || String(err),
+      txMeta: txMeta || null,
+      simulationErr,
+      simulationLogs,
+      instructionError,
+    });
   }
 });
 
@@ -486,7 +738,8 @@ export async function acceptRentalTx(params: any) {
     associated_token_program,
     system_program,
     amount,
-    duration
+    duration,
+    rpcProfileId,
   } = params;
   // Minimal debug: print all params before toBase58 conversion
   console.log("[acceptRentalTx] RAW params:", params);
@@ -520,33 +773,46 @@ export async function acceptRentalTx(params: any) {
     signTransaction: async (tx: any) => tx,
     signAllTransactions: async (txs: any) => txs,
   };
-  const connection = await getRpcConnection();
-  const provider = new anchor.AnchorProvider(connection, dummyWallet as any, anchor.AnchorProvider.defaultOptions());
-  const program = new anchor.Program(srslyLegacyIdl, SRSLY_PROGRAM_ID, provider);
-  const tx = await program.methods.acceptRental(new BN(amount), new BN(duration)).accountsStrict({
-    mint: toPk(mint),
-    borrower: toPk(borrower),
-    borrower_profile: toPk(borrower_profile),
-    borrower_profile_faction: toPk(borrower_profile_faction),
-    borrower_token_account: toPk(borrower_token_account),
-    fleet: toPk(fleet),
-    game_id: toPk(game_id),
-    starbase: toPk(starbase),
-    starbase_player: toPk(starbase_player),
-    contract: toPk(contract),
-    rental_state: toPk(rental_state),
-    rental_authority: toPk(rental_authority),
-    rental_token_account: toPk(rental_token_account),
-    rental_thread: toPk(rental_thread),
-    fee_token_account: toPk(fee_token_account),
-    sage_program: toPk(sage_program),
-    antegen_program: toPk(antegen_program),
-    token_program: toPk(token_program),
-    associated_token_program: toPk(associated_token_program),
-    system_program: toPk(system_program),
-  }).transaction();
-  console.log("[acceptRentalTx] Instruction data (hex):", tx.instructions[0].data?.toString('hex') || "N/A");
-  console.log("[acceptRentalTx] BN values - amount:", new BN(amount).toString(), "duration:", new BN(duration).toString());
-  console.log("[acceptRentalTx] TX oggetto:", tx);
-  return tx;
+
+  let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | null = null;
+  try {
+    pick = await RpcPoolManager.pickRpcConnection(
+      normalizeRpcProfileId(rpcProfileId || toPk(borrower_profile).toBase58()),
+      { waitForMs: 3000, allowStale: true },
+    );
+    const provider = new anchor.AnchorProvider(pick.connection as Connection, dummyWallet as any, anchor.AnchorProvider.defaultOptions());
+    const program = new anchor.Program(srslyLegacyIdl, SRSLY_PROGRAM_ID, provider);
+    const tx = await program.methods.acceptRental(new BN(amount), new BN(duration)).accountsStrict({
+      mint: toPk(mint),
+      borrower: toPk(borrower),
+      borrower_profile: toPk(borrower_profile),
+      borrower_profile_faction: toPk(borrower_profile_faction),
+      borrower_token_account: toPk(borrower_token_account),
+      fleet: toPk(fleet),
+      game_id: toPk(game_id),
+      starbase: toPk(starbase),
+      starbase_player: toPk(starbase_player),
+      contract: toPk(contract),
+      rental_state: toPk(rental_state),
+      rental_authority: toPk(rental_authority),
+      rental_token_account: toPk(rental_token_account),
+      rental_thread: toPk(rental_thread),
+      fee_token_account: toPk(fee_token_account),
+      sage_program: toPk(sage_program),
+      antegen_program: toPk(antegen_program),
+      token_program: toPk(token_program),
+      associated_token_program: toPk(associated_token_program),
+      system_program: toPk(system_program),
+    }).transaction();
+    pick.release({ success: true });
+    console.log("[acceptRentalTx] Instruction data (hex):", tx.instructions[0].data?.toString('hex') || "N/A");
+    console.log("[acceptRentalTx] BN values - amount:", new BN(amount).toString(), "duration:", new BN(duration).toString());
+    console.log("[acceptRentalTx] TX oggetto:", tx);
+    return tx;
+  } catch (error) {
+    if (pick) {
+      pick.release({ success: false, errorType: getRpcErrorType(error) });
+    }
+    throw error;
+  }
 }
