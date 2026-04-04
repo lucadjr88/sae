@@ -41,9 +41,10 @@
 
 .window-header h2 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 2rem;
   color: #b94b4b;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
+  text-shadow: -4px 3px 3px rgb(255 255 255);
 }
 
 #closeWindow {
@@ -96,14 +97,13 @@
 }
 
 .label {
-  font-weight: 700;
-  color: #666;
-  font-size: 0.85rem;
+  font-weight: 900;
+  color: #ff1818;
+  font-size: .85rem;
   text-transform: uppercase;
   flex-shrink: 0;
-  /* Impedisce alla label di restringersi troppo */
   min-width: 100px;
-  /* Forza una larghezza minima costante per le etichette */
+
 }
 
 .value {
@@ -202,11 +202,22 @@
 .fleet-state-position {
   border: solid 1px;
   border-radius: 15px;
-  background-color: #dc143c69;
+  background-color: #4f2e6fb8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  max-width: 100%;
+  padding: 8px 15px;
 }
 
 .status-badge {
-  font-weight: bold;
+    font-weight: 900;
+    color: #72f5cc;
+    font-size: .85rem;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    min-width: 100px;
 }
 
 .sector-info {
@@ -217,15 +228,18 @@
 .stat-box {
   border: solid 1px;
   border-radius: 15px;
-  background-color: #dc143c69;
+  background-color: #4f2e6fb8;
   margin: 2%;
 }
 
 
 .rent-stat-label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  font-weight: 700;
+font-weight: 900;
+    color: #e272f5;
+    font-size: .85rem;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    min-width: 100px;
 }
 
 .rent-stat-value {
@@ -242,7 +256,7 @@
   flex-direction: column;
   border: solid 1px;
   border-radius: 15px;
-  background-color: #dc143c69;
+  background-color: #4f2e6fb8;
 }
 
 .cargo-item {
@@ -303,7 +317,7 @@
   white-space: nowrap;
   transition: all .15s;
   border-radius: 15px;
-  background-color: #dc143c69;
+  background-color: #4f2e6fb8;
 }
 
 #rentDuration {
@@ -322,7 +336,30 @@
   white-space: nowrap;
   transition: all .15s;
   border-radius: 15px;
-  background-color: #dc143c69;
+  background-color: #4f2e6fb8;
+}
+
+/* Nasconde le freccette originali ovunque */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Firefox */
+
+.custom-number-input {
+  display: flex;
+  align-items: center;
+}
+
+.custom-number-input button {
+  padding: 5px 10px;
+  cursor: pointer;
 }
 
 #rentPriceTotal {
@@ -339,6 +376,6 @@
   white-space: nowrap;
   transition: all .15s;
   border-radius: 15px;
-  background-color: #dc143c69;
+  background-color: #4f2e6fb8;
   padding: 3%;
 }

@@ -174,35 +174,56 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
         // solo se const state = c.current_rental_state ? 'Active' : 'Available'; è "Available"
         const state = contractDetails.current_rental_state ? 'Active' : 'Available';
         const rentalTxDiv = document.querySelector('.rental-tx') as HTMLDivElement;
-         const atlasIcon = `<img style="width: 25%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/>`;
-        
+        const atlasIcon = `<img style="width: 25%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/>`;
+
         if (state === 'Available') {
           const baseRate = Number(contractDetails.rate || 0);
 
           rentalTxDiv.innerHTML = `
-          <div>
-            <button id="rentButton" disabled="true">Rent</button>
-            <input type="number" id="rentDuration" placeholder="Duration" min="0" max="24" value="0">
-            <div id="rentPriceTotal">Total: 0 ${atlasIcon}</div>
-          </div>  
-        `;
-          const rentButton = document.getElementById('rentButton') as HTMLButtonElement;
+            <div>
+              <div class="custom-number-input">
+                <button id="rentButton" disabled>Rent</button>
+                <button id="rentMinus" type="button">-</button>
+                <input type="number" id="rentDuration" min="0" max="24" value="0">
+                <button id="rentPlus" type="button">+</button>
+              </div>
+              <div id="rentPriceTotal">Total: 0 ${atlasIcon}</div>
+            </div>
+          `;
+
           const inputRentDuration = document.getElementById('rentDuration') as HTMLInputElement;
+          (document.getElementById('rentMinus') as HTMLButtonElement).onclick = () => {
+            inputRentDuration.stepDown();
+            inputRentDuration.dispatchEvent(new Event('change'));
+          };
+          (document.getElementById('rentPlus') as HTMLButtonElement).onclick = () => {
+            inputRentDuration.stepUp();
+            inputRentDuration.dispatchEvent(new Event('change'));
+          };
+          const rentButton = document.getElementById('rentButton') as HTMLButtonElement;
           const rentPriceTotal = document.getElementById('rentPriceTotal') as HTMLDivElement;
 
           const updateRentPriceTotal = () => {
+            const durationMin = Number(contractDetails.duration_min) || 1;
+            const durationMax = Number(contractDetails.duration_max) || 24;
+            const duration = Number(inputRentDuration.value) || 1;
+            if (duration >= durationMin && duration <= durationMax) {
+              rentButton.disabled = false;
+            } else {
+              rentButton.disabled = true;
+            }
             const durationValue = Math.max(1, Number.parseInt(inputRentDuration.value, 10) || 1);
             rentPriceTotal.innerHTML = `Total: ${formatRate(durationValue * baseRate)} ${atlasIcon}`;
+
           };
 
-          const durationMin = Number(contractDetails.duration_min) || 1;
-          const durationMax = Number(contractDetails.duration_max) || 24;
-          const duration = Number(inputRentDuration.value) || 1;
-          inputRentDuration.addEventListener('input', updateRentPriceTotal);
-          if (duration >= durationMin && duration <= durationMax) {
-            rentButton.disabled = false;
-          }
-          updateRentPriceTotal();
+          //attiviamo event listner sull'on-change dell'input per aggiornare il prezzo totale e abilitare/disabilitare il pulsante di rent in base alla validità della durata inserita
+          inputRentDuration.addEventListener('change', () => {
+            updateRentPriceTotal();
+          });
+          inputRentDuration.addEventListener('input', () => {
+            updateRentPriceTotal();
+          });
 
           rentButton.addEventListener('click', () => {
             // Prendi il profileId utente connesso
