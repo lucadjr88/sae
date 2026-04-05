@@ -34,7 +34,7 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
   contractWindow.innerHTML = `
     <div class="window-header">
       <h2>Rental Contract Details</h2>
-      <button id="closeWindow" aria-label="Close">&times;</button>
+      <button id="closeWindow" class="closeWindow" aria-label="Close">&times;</button>
     </div>
 
     <div class="window-content">
@@ -192,11 +192,16 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
           `;
 
           const inputRentDuration = document.getElementById('rentDuration') as HTMLInputElement;
-          (document.getElementById('rentMinus') as HTMLButtonElement).onclick = () => {
+          const rentMinusButton = document.getElementById('rentMinus') as HTMLButtonElement;
+          rentMinusButton.style.backgroundColor = 'darkcyan';
+          const rentPlusButton = document.getElementById('rentPlus') as HTMLButtonElement;
+          rentPlusButton.style.backgroundColor = 'darkcyan';
+          
+          rentMinusButton.onclick = () => {
             inputRentDuration.stepDown();
             inputRentDuration.dispatchEvent(new Event('change'));
           };
-          (document.getElementById('rentPlus') as HTMLButtonElement).onclick = () => {
+          rentPlusButton.onclick = () => {
             inputRentDuration.stepUp();
             inputRentDuration.dispatchEvent(new Event('change'));
           };

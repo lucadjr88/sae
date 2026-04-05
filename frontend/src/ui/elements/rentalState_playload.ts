@@ -1,8 +1,9 @@
 import { TICKER_CONFIG } from "./footBar";
 import { fetchAndDisplayRentals } from "./rental_playload";
 import { setCachedRentalView } from "./toggleSwitch";
-import { cancelRentTx } from "./rental_tx";
+import { cancelRentTx, delistFleetTx } from "./rental_tx";
 import { computeDisplayedRentalTotal } from "../../utils/rentalDisplay";
+import { createListingDetailWindow } from "./list_detail";
 
 // creiamo un dom da esportare come copia backup
 export let rentalStateBackup: HTMLElement | null = null;
@@ -73,6 +74,18 @@ export function rentalState_playload(data: any,) {
     // Referenze ai corpi delle tabelle per l'inserimento rapido
     const loanedBody = loanedContainer.querySelector("tbody");
     const borrowedBody = borrowedContainer.querySelector("tbody");
+
+    // creiamo il pulsante per aprire la finestra di listing
+    const listButton = document.createElement("button");
+    listButton.textContent = "List";
+    listButton.classList.add("list-button");
+    listButton.addEventListener("click", () => {
+        createListingDetailWindow("", {
+            fleets: data?.fleets || [],
+        });
+    });
+    loanedContainer.appendChild(listButton);
+
 
     const atlasIcon = `<div><img style="width: 50%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/></div>`;
 
@@ -199,8 +212,57 @@ export function rentalState_playload(data: any,) {
             <td style="color:green; display: flex; flex-direction: row; align-items: center;">
             <div>${total_amount !== null ? total_amount : "-"}</div>
             ${total_amount !== null ? atlasIcon : ""}
+            <button
+                class="delist-button"
+                data-fleet-id="${fleet.fleet_id || fleet.fleet || ""}"
+                style="margin-left: 10px;"
+            >Delist</button>
             </td>
         `;
+
+            const delistButton = row.querySelector(".delist-button") as HTMLButtonElement | null;
+            delistButton?.addEventListener("click", async () => {
+                const fleetId = fleet.fleet_id || fleet.fleet;
+                const owner = window.wallet?.adapter?.publicKey?.toBase58?.();
+                const contractAddress = fleet.contractPubkey || fleet.contract || fleet.address || undefined;
+
+                console.log("[rentalState_playload] Delist button clicked:", {
+                    fleetId,
+                    owner,
+                    contractAddress,
+                    fleetName,
+                    isLoaned: fleet.isLoaned,
+                    isListed: fleet.isListed,
+                });
+
+                if (!fleetId) {
+                    console.warn("[rentalState_playload] Missing fleetId, aborting delist flow");
+                    alert("Fleet ID non disponibile per questo listing");
+                    return;
+                }
+
+                if (!owner) {
+                    console.warn("[rentalState_playload] Missing owner wallet, aborting delist flow");
+                    alert("Wallet non connesso");
+                    return;
+                }
+
+                delistButton.disabled = true;
+                const previousText = delistButton.textContent;
+                delistButton.textContent = "Delisting...";
+
+                try {
+                    await delistFleetTx({
+                        fleet_id: fleetId,
+                        owner,
+                        contractAddress,
+                    });
+                } finally {
+                    delistButton.disabled = false;
+                    delistButton.textContent = previousText;
+                }
+            });
+
             loanedBody.appendChild(row);
         }
     }

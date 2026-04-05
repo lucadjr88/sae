@@ -60,6 +60,66 @@ function convertDurationToContractUnits(duration: number, requestedUnit: unknown
   return convertedDuration;
 }
 
+function matchesFleetByTxMeta(fleet: any, txMeta: any): boolean {
+  const sameFleet = typeof txMeta?.fleet_id === 'string' && (
+    fleet?.fleet_id === txMeta.fleet_id
+    || fleet?.fleet === txMeta.fleet_id
+    || fleet?.pubkey === txMeta.fleet_id
+    || fleet?.key === txMeta.fleet_id
+    || fleet?.data?.fleetShips === txMeta.fleet_id
+  );
+  const sameContract = typeof txMeta?.contract === 'string' && (
+    fleet?.contractPubkey === txMeta.contract
+    || fleet?.contract === txMeta.contract
+    || fleet?.address === txMeta.contract
+  );
+  const sameRentalState = typeof txMeta?.rentalState === 'string' && (
+    fleet?.rental_state_pubkey === txMeta.rentalState
+    || fleet?.current_rental_state === txMeta.rentalState
+    || fleet?.rentalState === txMeta.rentalState
+  );
+  return sameFleet || sameContract || sameRentalState;
+}
+
+function buildListedFleetPreview(currentData: any, txMeta: any): any {
+  const fleets = Array.isArray(currentData?.fleets) ? currentData.fleets : [];
+  const sourceFleet = fleets.find((fleet: any) => matchesFleetByTxMeta(fleet, txMeta)) ?? null;
+  const fleetId = sourceFleet?.key || sourceFleet?.pubkey || sourceFleet?.fleet || txMeta?.fleet_id || null;
+  const fleetLabel = sourceFleet?.callsign || sourceFleet?.fleet_label || sourceFleet?.fleet_name || txMeta?.fleet_label || fleetId || 'Unknown';
+  const rateRaw = txMeta?.rate ?? sourceFleet?.rate ?? null;
+  const parsedRate = rateRaw === null || rateRaw === undefined || rateRaw === '' ? null : Number(rateRaw);
+  const durationMinRaw = txMeta?.durationMin ?? sourceFleet?.duration_min ?? 1;
+  const durationMaxRaw = txMeta?.durationMax ?? sourceFleet?.duration_max ?? 24;
+
+  return {
+    ...(sourceFleet && typeof sourceFleet === 'object' ? sourceFleet : {}),
+    fleet: fleetId,
+    fleet_id: fleetId,
+    key: sourceFleet?.key ?? fleetId,
+    pubkey: fleetId,
+    fleet_label: fleetLabel,
+    callsign: sourceFleet?.callsign ?? fleetLabel,
+    isListed: true,
+    isLoaned: false,
+    isRented: false,
+    contractPubkey: typeof txMeta?.contract === 'string' ? txMeta.contract : sourceFleet?.contractPubkey ?? null,
+    contract: typeof txMeta?.contract === 'string' ? txMeta.contract : sourceFleet?.contract ?? null,
+    address: typeof txMeta?.contract === 'string' ? txMeta.contract : sourceFleet?.address ?? null,
+    owner_profile: typeof txMeta?.ownerProfile === 'string' ? txMeta.ownerProfile : sourceFleet?.owner_profile ?? null,
+    current_rental_state: null,
+    rental_state_pubkey: null,
+    rate: Number.isFinite(parsedRate as number) ? parsedRate : rateRaw,
+    duration_min: Number(durationMinRaw) || 1,
+    duration_max: Number(durationMaxRaw) || 24,
+    payment_frequency: typeof txMeta?.paymentFrequency === 'string'
+      ? String(txMeta.paymentFrequency).replace(/^@/, '')
+      : sourceFleet?.payment_frequency ?? 'daily',
+    rental_start_time: null,
+    rental_end_time: null,
+    rental_cancelled: false,
+  };
+}
+
 function normalizeInstructionAccounts(accounts: any[]): any[] {
   return accounts.map((acc) => {
     if (acc.accounts && Array.isArray(acc.accounts)) {
@@ -516,6 +576,9 @@ router.post('/send-tx', async (req, res) => {
       console.log('[SEND-TX] txMeta:', txMeta);
     }
     const isCancelRent = txMeta?.operation === 'cancel-rent';
+    const isDelistFleet = txMeta?.operation === 'delist-fleet';
+    const isListFleet = txMeta?.operation === 'list-fleet';
+    const isRemovalOp = isCancelRent || isDelistFleet;
     const effectiveContractAddress = typeof contractAddress === 'string'
       ? contractAddress
       : typeof txMeta?.contract === 'string'
@@ -532,13 +595,24 @@ router.post('/send-tx', async (req, res) => {
       || (typeof txMeta?.profileId === 'string' && txMeta.profileId)
       || undefined,
     );
+    console.log('[SEND-TX] Effective tx context:', {
+      operation: txMeta?.operation || 'unknown',
+      isCancelRent,
+      isDelistFleet,
+      isListFleet,
+      isRemovalOp,
+      effectiveContractAddress,
+      effectiveRentalState,
+      rpcProfileId,
+      rawTxBytes: rawTx.length,
+    });
     const signature = await executeRpcWithPool(rpcProfileId, (connection) =>
       connection.sendRawTransaction(rawTx, { skipPreflight: false }),
     );
     console.log(`[SEND-TX] TX inviata con successo. Signature: ${signature}`);
 
     let confirmedRentalState: ReturnType<typeof decodeRentalState> | null = null;
-    if (!isCancelRent && effectiveRentalState) {
+    if (!isRemovalOp && effectiveRentalState) {
       try {
         confirmedRentalState = await executeRpcWithPool(rpcProfileId, async (connection) => {
           await connection.confirmTransaction(signature, 'confirmed');
@@ -570,10 +644,10 @@ router.post('/send-tx', async (req, res) => {
         const arr: any[] = Array.isArray(contractsObj) ? contractsObj : contractsObj.contracts;
         const idx = arr.findIndex((c: any) => c.address === effectiveContractAddress);
         if (idx !== -1) {
-          arr[idx].current_rental_state = isCancelRent ? null : effectiveRentalState;
+          arr[idx].current_rental_state = isRemovalOp ? null : effectiveRentalState;
           const toWrite = Array.isArray(contractsObj) ? arr : { ...contractsObj, contracts: arr };
           fs.writeFileSync(contractsPath, JSON.stringify(toWrite, null, 2));
-          console.log(`[SEND-TX] contracts.json aggiornato: ${effectiveContractAddress} -> current_rental_state: ${isCancelRent ? 'null' : effectiveRentalState}`);
+          console.log(`[SEND-TX] contracts.json aggiornato: ${effectiveContractAddress} -> current_rental_state: ${isRemovalOp ? 'null' : effectiveRentalState}`);
         } else {
           console.warn(`[SEND-TX] Contratto non trovato in contracts.json per address: ${effectiveContractAddress}`);
         }
@@ -633,36 +707,83 @@ router.post('/send-tx', async (req, res) => {
       }
     }
 
-    if (isCancelRent && typeof txMeta?.profileId === 'string') {
+    if (isListFleet && typeof txMeta?.profileId === 'string') {
       try {
         const latestPath = path.join(process.cwd(), 'cache', txMeta.profileId, 'playload', 'latest.json');
         const latestObj = JSON.parse(fs.readFileSync(latestPath, 'utf-8'));
         const currentData = latestObj?.data && typeof latestObj.data === 'object' ? latestObj.data : {};
         const rentedFleets = Array.isArray(currentData.rentedFleets) ? currentData.rentedFleets : [];
-        const filteredRentedFleets = rentedFleets.filter((fleet: any) => {
-          const sameFleet = typeof txMeta?.fleet_id === 'string' && (
-            fleet?.fleet_id === txMeta.fleet_id
-            || fleet?.fleet === txMeta.fleet_id
-            || fleet?.pubkey === txMeta.fleet_id
-          );
-          const sameContract = typeof txMeta?.contract === 'string' && fleet?.contractPubkey === txMeta.contract;
-          const sameRentalState = typeof txMeta?.rentalState === 'string' && (
-            fleet?.rental_state_pubkey === txMeta.rentalState
-            || fleet?.current_rental_state === txMeta.rentalState
-          );
-          return !(sameFleet || sameContract || sameRentalState);
+        const fleets = Array.isArray(currentData.fleets) ? currentData.fleets : [];
+        const listedFleet = buildListedFleetPreview(currentData, txMeta);
+        const nextRentedFleets = [
+          listedFleet,
+          ...rentedFleets.filter((fleet: any) => !matchesFleetByTxMeta(fleet, txMeta)),
+        ];
+        const updatedFleets = fleets.map((fleet: any) => {
+          if (!matchesFleetByTxMeta(fleet, txMeta)) return fleet;
+          return {
+            ...fleet,
+            isRented: false,
+            isLoaned: false,
+            isListed: true,
+          };
+        });
+
+        const updatedFleetCount = updatedFleets.filter((fleet: any, index: number) => fleets[index] !== fleet).length;
+        const toWrite = {
+          ...latestObj,
+          data: {
+            ...currentData,
+            rentedFleets: nextRentedFleets,
+            fleets: updatedFleets,
+          }
+        };
+        fs.writeFileSync(latestPath, JSON.stringify(toWrite, null, 2));
+        console.log('[SEND-TX] playload/latest.json aggiornato (list-fleet append)', {
+          profileId: txMeta.profileId,
+          fleet: listedFleet.fleet,
+          fleet_label: listedFleet.fleet_label,
+          rate: listedFleet.rate,
+          payment_frequency: listedFleet.payment_frequency,
+          rentedFleetsCount: nextRentedFleets.length,
+          fleetsUpdated: updatedFleetCount,
+        });
+      } catch (e: any) {
+        console.error('[SEND-TX] Errore append listed fleet a playload/latest.json:', e.message);
+      }
+    }
+
+    if (isRemovalOp && typeof txMeta?.profileId === 'string') {
+      try {
+        const latestPath = path.join(process.cwd(), 'cache', txMeta.profileId, 'playload', 'latest.json');
+        const latestObj = JSON.parse(fs.readFileSync(latestPath, 'utf-8'));
+        const currentData = latestObj?.data && typeof latestObj.data === 'object' ? latestObj.data : {};
+        const rentedFleets = Array.isArray(currentData.rentedFleets) ? currentData.rentedFleets : [];
+        const fleets = Array.isArray(currentData.fleets) ? currentData.fleets : [];
+
+        const filteredRentedFleets = rentedFleets.filter((fleet: any) => !matchesFleetByTxMeta(fleet, txMeta));
+        const updatedFleets = fleets.map((fleet: any) => {
+          if (!matchesFleetByTxMeta(fleet, txMeta)) return fleet;
+          return {
+            ...fleet,
+            isRented: false,
+            isLoaned: false,
+            isListed: false,
+          };
         });
 
         const removedCount = rentedFleets.length - filteredRentedFleets.length;
+        const updatedFleetCount = updatedFleets.filter((fleet: any, index: number) => fleets[index] !== fleet).length;
         const toWrite = {
           ...latestObj,
           data: {
             ...currentData,
             rentedFleets: filteredRentedFleets,
+            fleets: updatedFleets,
           }
         };
         fs.writeFileSync(latestPath, JSON.stringify(toWrite, null, 2));
-        console.log(`[SEND-TX] playload/latest.json aggiornato (cancel-rent remove) per profile ${txMeta.profileId}, removed=${removedCount}`);
+        console.log(`[SEND-TX] playload/latest.json aggiornato (${isDelistFleet ? 'delist-fleet remove' : 'cancel-rent remove'}) per profile ${txMeta.profileId}, removed=${removedCount}, fleetsUpdated=${updatedFleetCount}`);
       } catch (e: any) {
         console.error('[SEND-TX] Errore rimozione rented fleet da playload/latest.json:', e.message);
       }

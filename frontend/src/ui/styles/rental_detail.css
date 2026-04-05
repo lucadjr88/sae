@@ -47,21 +47,7 @@
   text-shadow: -4px 3px 3px rgb(255 255 255);
 }
 
-#closeWindow {
-  background: #ff5f57;
-  /* Stile stile Mac */
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 25px;
-  height: 25px;
-  cursor: pointer;
-  transition: transform 0.2s;
-}
 
-#closeWindow:hover {
-  transform: scale(1.1);
-}
 
 /* Corpo del contenuto */
 .window-content {
@@ -121,7 +107,7 @@
 }
 
 /* 2. Sistemazione pulsante X */
-#closeWindow {
+.closeWindow {
   background: #ff5f57;
   color: white;
   border: none;
@@ -140,7 +126,7 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-#closeWindow:hover {
+.closeWindow:hover {
   background: #ff3b30;
   transform: scale(1.1);
 }

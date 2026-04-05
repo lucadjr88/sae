@@ -1,0 +1,17 @@
+.list-button{
+        display: block;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 5%;
+}
+.listingRateInput {
+        padding: 12px;
+    border-radius: 8px;
+    font-size: 2rem;
+    background-color: #8a2be23d;
+}
+.listingSubmitButton{
+    background-color: #6415ad;
+    border-radius: 8px;
+    font-size: 1rem;
+}

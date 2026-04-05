@@ -82,12 +82,16 @@ box-shadow: 0 4px 6px #000000cf;
   margin-block: auto;
   block-size: auto;
   border: 6px solid #6ccebcb8;
-  margin: 10px;
+    border-radius: 8px;
+    margin: 10px;
+    padding: 1%;
 }
 
 .borrowed {
   margin-block: auto;
   block-size: auto;
   border: 6px solid #f9a602b8;
-  margin: 10px;
+    border-radius: 8px;
+    margin: 10px;
+    padding: 1%;
 }

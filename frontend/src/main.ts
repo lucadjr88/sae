@@ -15,6 +15,7 @@ import "@/ui/styles/toggleSwitch.css";
 import "@/ui/styles/rental_playload.css";
 import "@/ui/styles/rentalState_playload.css";
 import "@/ui/styles/rental_detail.css";
+import "@/ui/styles/list_detail.css";
 import { createHomePage, getWalletConnection, manualProfileEntryListener, getWalletIcon } from "@/hompage";
 
 import { Wallet } from '@/services/wallet';
