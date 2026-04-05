@@ -1,3 +1,4 @@
+import { TICKER_CONFIG } from './footBar';
 import { listFleetTx } from './rental_tx';
 
 export interface ListingDetailWindowOptions {
@@ -50,7 +51,8 @@ export function createListingDetailWindow(
       removeListingDetailWindow();
     }
   });
-
+  const atlasIcon = `<img style="width: 25%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/>`;
+  
   const listingWindow = document.createElement('div');
   listingWindow.id = 'listingDetailWindow';
   listingWindow.className = 'rental-contract-window listing-detail-window';
@@ -64,7 +66,7 @@ export function createListingDetailWindow(
     <div class="window-content" style="display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px; padding-top: 24px;">
       <select id="listingFleetSelect" style="min-width: 320px; padding: 12px; border-radius: 8px; font-size: 1rem;"></select>
       <div id="listingActionArea" style="display: none; flex-direction: column; gap: 12px; width: 320px;">
-        <input id="listingRateInput" type="number" min="1" step="1" placeholder="Rate / day" class="listingRateInput">
+        <input id="listingRateInput" type="number" min="1" step="1" placeholder="Rate / day" class="listingRateInput" onchange="this.value = this.value += ${atlasIcon})">
         <button id="listingSubmitButton" class="listingSubmitButton" type="button">List</button>
       </div>
     </div>
@@ -146,19 +148,19 @@ export function createListingDetailWindow(
 
     if (!fleetId) {
       console.warn('[listing-window] Submit blocked: missing fleet selection');
-      alert('Select a fleet first');
+      //alert('Select a fleet first');
       return;
     }
 
     if (!owner) {
       console.warn('[listing-window] Submit blocked: wallet not connected');
-      alert('Wallet non connesso');
+      //alert('Wallet non connesso');
       return;
     }
 
     if (!Number.isFinite(ratePerDay) || ratePerDay <= 0) {
       console.warn('[listing-window] Submit blocked: invalid rate/day', { rateInput: rateInput.value });
-      alert('Inserisci un rate/day valido');
+      //alert('Inserisci un rate/day valido');
       rateInput.focus();
       return;
     }

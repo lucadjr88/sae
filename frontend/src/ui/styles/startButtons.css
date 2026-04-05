@@ -135,6 +135,18 @@
 .profile-list-minimal-icon {
   margin-right: 10px;
   font-size: 16px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-list-minimal-icon .profile-faction-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  display: block;
 }
 
 .profile-list-minimal-icon-primary {

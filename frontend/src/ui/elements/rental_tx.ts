@@ -1,3 +1,5 @@
+import { setActiveViewPreference } from "./toggleSwitch";
+
 export async function rentTx({
   contractAddress,
   borrower,
@@ -46,7 +48,7 @@ export async function rentTx({
     try {
       data = JSON.parse(rawText);
     } catch (e) {
-      alert("Risposta non JSON dal backend: " + rawText);
+      //alert("Risposta non JSON dal backend: " + rawText);
       return;
     }
     if (response.ok) {
@@ -64,7 +66,7 @@ export async function rentTx({
         const tx = Transaction.from(base64ToUint8Array(data.transaction));
         // Firma con il wallet desktop (wallet-adapter)
         if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
-          alert("Wallet desktop non connesso o non supportato!");
+          //alert("Wallet desktop non connesso o non supportato!");
           return;
         }
         const signedTx = await window.wallet.adapter.signTransaction(tx);
@@ -87,17 +89,17 @@ export async function rentTx({
         if (onSuccess) {
           await onSuccess();
         } else {
-          alert("Transazione inviata! Signature: " + sendData.signature);
+          //alert("Transazione inviata! Signature: " + sendData.signature);
         }
       } catch (e) {
-        alert("Errore firma o invio tx: " + e.message);
+        //alert("Errore firma o invio tx: " + e.message);
         console.error(e);
       }
     } else {
-      alert("Errore: " + data.error);
+      //alert("Errore: " + data.error);
     }
   } catch (err) {
-    alert("Errore di rete: " + err.message);
+    //alert("Errore di rete: " + err.message);
   }
 }
 
@@ -131,7 +133,7 @@ export async function cancelRentTx({
       data = JSON.parse(rawText);
     } catch (e) {
       console.error("[DEBUG][cancel-rent] Failed to parse backend response as JSON", e);
-      alert("Risposta non JSON dal backend: " + rawText);
+      //alert("Risposta non JSON dal backend: " + rawText);
       return;
     }
 
@@ -139,7 +141,7 @@ export async function cancelRentTx({
 
     if (!response.ok) {
       console.error("[DEBUG][cancel-rent] Backend returned non-OK response:", data);
-      alert("Errore: " + data.error);
+      //alert("Errore: " + data.error);
       return;
     }
 
@@ -176,7 +178,7 @@ export async function cancelRentTx({
       console.log("[DEBUG][cancel-rent][COPY-FRONTEND-PRESIGN-TX-END]");
       if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
         console.error("[DEBUG][cancel-rent] Wallet adapter unavailable for signing");
-        alert("Wallet desktop non connesso o non supportato!");
+        //alert("Wallet desktop non connesso o non supportato!");
         return;
       }
 
@@ -218,8 +220,9 @@ export async function cancelRentTx({
         throw new Error(sendData.error || "Errore broadcast tx");
       }
 
-      alert("Transazione di cancel inviata! Signature: " + sendData.signature);
+      //alert("Transazione di cancel inviata! Signature: " + sendData.signature);
       console.log("[DEBUG][cancel-rent] Signature inviata:", sendData.signature);
+      setActiveViewPreference("rental");
       try {
         if (cancelTxMeta.profileId) {
           const { analyzeFees } = await import("@/services/api");
@@ -235,12 +238,12 @@ export async function cancelRentTx({
       }
     } catch (e) {
       console.error("[DEBUG][cancel-rent] Error during sign/send phase:", e);
-      alert("Errore firma o invio tx: " + e.message);
+      //alert("Errore firma o invio tx: " + e.message);
       console.error(e);
     }
   } catch (err) {
     console.error("[DEBUG][cancel-rent] Network or request setup error:", err);
-    alert("Errore di rete: " + err.message);
+    //alert("Errore di rete: " + err.message);
   }
 }
 
@@ -278,7 +281,7 @@ export async function delistFleetTx({
       data = JSON.parse(rawText);
     } catch (e) {
       console.error("[DEBUG][delist] Failed to parse backend response as JSON", e);
-      alert("Risposta non JSON dal backend: " + rawText);
+      //alert("Risposta non JSON dal backend: " + rawText);
       return;
     }
 
@@ -286,7 +289,7 @@ export async function delistFleetTx({
 
     if (!response.ok) {
       console.error("[DEBUG][delist] Backend returned non-OK response:", data);
-      alert("Errore: " + data.error);
+      //alert("Errore: " + data.error);
       return;
     }
 
@@ -313,7 +316,7 @@ export async function delistFleetTx({
 
       if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
         console.error("[DEBUG][delist] Wallet adapter unavailable for signing");
-        alert("Wallet desktop non connesso o non supportato!");
+        //alert("Wallet desktop non connesso o non supportato!");
         return;
       }
 
@@ -342,7 +345,8 @@ export async function delistFleetTx({
         throw new Error(sendData.error || "Errore broadcast tx");
       }
 
-      alert("Transazione di delist inviata! Signature: " + sendData.signature);
+      //alert("Transazione di delist inviata! Signature: " + sendData.signature);
+      setActiveViewPreference("rental");
       try {
         if (delistTxMeta.profileId) {
           const { analyzeFees } = await import("@/services/api");
@@ -356,11 +360,11 @@ export async function delistFleetTx({
       }
     } catch (e) {
       console.error("[DEBUG][delist] Error during sign/send phase:", e);
-      alert("Errore firma o invio tx: " + e.message);
+      //alert("Errore firma o invio tx: " + e.message);
     }
   } catch (err) {
     console.error("[DEBUG][delist] Network or request setup error:", err);
-    alert("Errore di rete: " + err.message);
+    //alert("Errore di rete: " + err.message);
   }
 }
 
@@ -405,7 +409,7 @@ export async function listFleetTx({
       data = JSON.parse(rawText);
     } catch (e) {
       console.error("[DEBUG][list] Failed to parse backend response as JSON", e);
-      alert("Risposta non JSON dal backend: " + rawText);
+      //alert("Risposta non JSON dal backend: " + rawText);
       return false;
     }
 
@@ -417,7 +421,7 @@ export async function listFleetTx({
 
     if (!response.ok) {
       console.error("[DEBUG][list] Backend returned non-OK response:", data);
-      alert("Errore: " + data.error);
+      //alert("Errore: " + data.error);
       return false;
     }
 
@@ -441,7 +445,7 @@ export async function listFleetTx({
 
     if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
       console.error("[DEBUG][list] Wallet adapter unavailable for signing");
-      alert("Wallet desktop non connesso o non supportato!");
+      //alert("Wallet desktop non connesso o non supportato!");
       return false;
     }
 
@@ -486,7 +490,8 @@ export async function listFleetTx({
       profileId: resolvedProfileId,
       fleet_id,
     });
-    alert("Transazione di listing inviata! Signature: " + sendData.signature);
+    //alert("Transazione di listing inviata! Signature: " + sendData.signature);
+    setActiveViewPreference("rental");
     try {
       if (resolvedProfileId) {
         console.log("[DEBUG][list] Refreshing analyzeFees after successful listing", { resolvedProfileId });
@@ -507,10 +512,10 @@ export async function listFleetTx({
     const isRejected = /rejected|declined|cancelled|canceled/i.test(message);
     if (isRejected) {
       console.warn("[DEBUG][list] Wallet rejected the signature request:", err);
-      alert("Firma transazione rifiutata/annullata nel wallet.");
+      //alert("Firma transazione rifiutata/annullata nel wallet.");
     } else {
       console.error("[DEBUG][list] Error during list flow:", err);
-      alert("Errore firma o invio tx: " + message);
+      //alert("Errore firma o invio tx: " + message);
     }
     return false;
   }

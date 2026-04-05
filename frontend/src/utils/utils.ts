@@ -16,7 +16,7 @@ export function copyToClipboard(text: string, event: MouseEvent | KeyboardEvent)
 		}
 	}).catch(err => {
 		console.log('Failed to copy:', err);
-		alert('Failed to copy to clipboard');
+		//alert('Failed to copy to clipboard');
 	});
 	event.stopPropagation();
 	event.preventDefault();

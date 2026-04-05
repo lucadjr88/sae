@@ -8,6 +8,7 @@ import { decodeResources } from '../utils/resources_analyses';
 import { deriveStarbaseCargoIdsForProfile } from '../utils/deriveStarbaseCargoIdsForProfile';
 import { getWalletAuthorityUtil } from '../utils/getWalletAuthority';
 import { getWalletTxsUtil } from '../utils/getWalletTxs';
+import { getProfileFactionUtil } from '../utils/getProfileFaction';
 
 const router = Router();
 
@@ -68,6 +69,21 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 if (cachedPlayload && cachedPlayload.data) {
                     let payloadData = cachedPlayload.data;
 
+                    const factionMissing = typeof payloadData.profileFaction === 'undefined'
+                        && typeof payloadData.profileFactionId === 'undefined'
+                        && typeof payloadData.profileFactionAccount === 'undefined';
+
+                    if (factionMissing) {
+                        try {
+                            console.log('[analyze-profile] Cached playload missing profileFaction, rebuilding profile meta');
+                            const profileFactionInfo = await getProfileFactionUtil(profileId as string);
+                            payloadData = Object.assign({}, payloadData, profileFactionInfo);
+                            await setCache('playload', 'latest', payloadData, profileId as string);
+                        } catch (profileFactionCacheHitErr) {
+                            console.warn('[analyze-profile] Failed rebuilding profileFaction on cache hit', profileFactionCacheHitErr);
+                        }
+                    }
+
                     if (!payloadData.resourceFlows || typeof payloadData.resourceFlows !== 'object') {
                         try {
                             console.log('[analyze-profile] Cached playload missing resourceFlows, rebuilding Phase 8');
@@ -96,12 +112,26 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         resetConcurrencyMap();
         resetMetricsMap();
 
+        let profileFactionInfo = {
+            profileFaction: null as string | null,
+            profileFactionId: null as number | null,
+            profileFactionAccount: null as string | null,
+        };
+
         // FASE 1: GET WALLET AUTHORITY
         console.log("###################### INIZIO FASE 1: GET WALLET AUTHORITY #########################");
         const req1: any = { query: { profileId } };
         const res1: any = { json: (data: any) => data, status: () => res1, send: () => { } };
         const walletAuthority = await getWalletAuthorityHandler(req1, res1);
-        console.log("###################### FINE FASE 1, INIZIO FASE 2: GET WALLET TXS #########################");
+
+        // FASE 1B: GET PROFILE FACTION
+        console.log("###################### FASE 1B: GET PROFILE FACTION #########################");
+        profileFactionInfo = await getProfileFactionUtil(profileId).catch((e: unknown) => {
+            console.warn(`[analyze-profile] error fetching profile faction: ${e}`);
+            return profileFactionInfo;
+        });
+        console.log('[analyze-profile] Profile faction resolved:', profileFactionInfo);
+        console.log("###################### FINE FASE 1B, INIZIO FASE 2: GET WALLET TXS #########################");
 
         // FASE 2: GET WALLET TXS
         const req2: any = { query: { profileId, cutoffH: lats || 24 } };
@@ -142,12 +172,15 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         // FASE 7: PLAYLOAD (aggregazione finale, identica a GET /api/debug/playload)
         const req7: any = { query: { profileId, wipeCache } };
         const res7: any = { json: (data: any) => data, status: () => res7, send: () => { } };
-        const playload = await playloadHandler(req7, res7);
+        const playload: any = await playloadHandler(req7, res7);
         // Ensure frontend receives the aggregated fees/breakdown used for displays
         try {
             const fees = await buildFeesDetailed(profileId as string);
             // Merge fee details into returned playload to match frontend expectations
             const merged = Object.assign({}, playload || {}, {
+                profileFaction: playload?.profileFaction ?? profileFactionInfo.profileFaction,
+                profileFactionId: playload?.profileFactionId ?? profileFactionInfo.profileFactionId,
+                profileFactionAccount: playload?.profileFactionAccount ?? profileFactionInfo.profileFactionAccount,
                 feesByFleet: fees.feesByFleet,
                 feesByOperation: fees.feesByOperation,
                 sageFees24h: fees.sageFees24h,

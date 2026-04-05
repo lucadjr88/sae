@@ -39,6 +39,7 @@ export async function playloadHandler(req: Request, res: Response) {
 
     // walletAuthority e feePayer
     const metaCache = await getCache('', profileId, profileId);
+    const meta = metaCache?.data || metaCache || {};
 
     let rawFleets = await aggregateCacheDir('fleets');
     
@@ -76,8 +77,11 @@ export async function playloadHandler(req: Request, res: Response) {
     const cleanPayload: any = {
       fleets: cleanFleets,
       rentedFleets: await aggregateCacheDir('rented-fleets'),
-      walletAuthority: metaCache?.data?.walletAuthority,
-      feePayer: metaCache?.data?.feePayer,
+      walletAuthority: meta?.walletAuthority,
+      feePayer: meta?.feePayer,
+      profileFaction: meta?.profileFaction ?? null,
+      profileFactionId: typeof meta?.profileFactionId === 'number' ? meta.profileFactionId : null,
+      profileFactionAccount: meta?.profileFactionAccount ?? null,
       fleetBreakdown: await aggregateCacheDir('fleet-breakdowns'),
       playerOps: await aggregateCacheDir('player-ops'),
     };

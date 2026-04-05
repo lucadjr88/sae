@@ -4,6 +4,10 @@ import rentalIcon from '@/assets/icons/rental2.svg'; // Nuova icona
 //import { rentalState_playload } from './rentalState_playload';
 //import { data } from '@/services/api';
 
+type ToggleView = 'fee' | 'resource' | 'rental';
+
+let activeViewPreference: ToggleView = 'fee';
+
 export const toggleSwitchHTML = `
   <input type="radio" id="opt-fee" name="view-selector" class="toggle-switch-input" value="fee" checked>
   <input type="radio" id="opt-resource" name="view-selector" class="toggle-switch-input" value="resource">
@@ -31,6 +35,48 @@ export const setCachedFeeView = (view: HTMLElement) => { cachedFeeView = view; }
 export const setCachedResourceView = (view: HTMLElement) => { cachedResourceView = view; };
 export const setCachedRentalView = (view: HTMLElement) => { cachedRentalView = view; };
 
+function isToggleView(value: string | null): value is ToggleView {
+  return value === 'fee' || value === 'resource' || value === 'rental';
+}
+
+export function getActiveViewPreference(): ToggleView {
+  return activeViewPreference;
+}
+
+export function setActiveViewPreference(view: ToggleView): void {
+  activeViewPreference = view;
+}
+
+export function showCachedView(view: ToggleView, persist: boolean = true): void {
+  const resultDiv = document.getElementById('result-container');
+  if (!resultDiv) {
+    return;
+  }
+
+  if (persist) {
+    setActiveViewPreference(view);
+  }
+
+  const selectedInput = document.querySelector<HTMLInputElement>(`.toggle-switch-input[name="view-selector"][value="${view}"]`);
+  if (selectedInput) {
+    selectedInput.checked = true;
+  }
+
+  const targetView = view === 'fee'
+    ? cachedFeeView
+    : view === 'resource'
+      ? cachedResourceView
+      : cachedRentalView;
+
+  if (targetView) {
+    resultDiv.replaceChildren(targetView);
+    return;
+  }
+
+  if (view !== 'fee' && cachedFeeView) {
+    resultDiv.replaceChildren(cachedFeeView);
+  }
+}
 
 export function initializeToggleSwitch(): void {
   const inputs = document.querySelectorAll<HTMLInputElement>('.toggle-switch-input[name="view-selector"]');
@@ -42,20 +88,16 @@ export function initializeToggleSwitch(): void {
   }
 
   inputs.forEach(input => {
-    input.addEventListener('change', () => {
-      if (!input.checked) return;
+    if (input.dataset.toggleBound === 'true') {
+      return;
+    }
 
-      switch (input.value) {
-        case 'fee':
-           resultDiv.replaceChildren(cachedFeeView);
-          break;
-        case 'resource':
-          resultDiv.replaceChildren(cachedResourceView);
-          break;
-        case 'rental':
-          resultDiv.replaceChildren(cachedRentalView);
-          break;
-      }
+    input.dataset.toggleBound = 'true';
+    input.addEventListener('change', () => {
+      if (!input.checked || !isToggleView(input.value)) return;
+      showCachedView(input.value);
     });
   });
+
+  showCachedView(getActiveViewPreference(), false);
 }

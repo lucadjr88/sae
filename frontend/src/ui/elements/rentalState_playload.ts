@@ -165,13 +165,13 @@ export function rentalState_playload(data: any,) {
 
                 if (!fleetId) {
                     console.warn("[rentalState_playload] Missing fleetId, aborting cancel flow");
-                    alert("Fleet ID non disponibile per questa rental");
+                    //alert("Fleet ID non disponibile per questa rental");
                     return;
                 }
 
                 if (!borrower) {
                     console.warn("[rentalState_playload] Missing borrower wallet, aborting cancel flow");
-                    alert("Wallet non connesso");
+                    //alert("Wallet non connesso");
                     return;
                 }
 
@@ -237,13 +237,13 @@ export function rentalState_playload(data: any,) {
 
                 if (!fleetId) {
                     console.warn("[rentalState_playload] Missing fleetId, aborting delist flow");
-                    alert("Fleet ID non disponibile per questo listing");
+                    //alert("Fleet ID non disponibile per questo listing");
                     return;
                 }
 
                 if (!owner) {
                     console.warn("[rentalState_playload] Missing owner wallet, aborting delist flow");
-                    alert("Wallet non connesso");
+                    //alert("Wallet non connesso");
                     return;
                 }
 

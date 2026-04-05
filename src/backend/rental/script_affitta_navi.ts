@@ -304,16 +304,35 @@ async function executeRpcWithPool<T>(profileId: string, operation: (connection: 
 async function getProfileFactionAccount(profilePk: PublicKey, profileId?: string): Promise<PublicKey> {
   const cacheKey = profilePk.toBase58();
   if (profileFactionCache.has(cacheKey)) return profileFactionCache.get(cacheKey)!;
-  const accounts = await executeRpcWithPool(profileId || cacheKey, (connection) =>
-    connection.getProgramAccounts(PROFILE_FACTION_PROGRAM_ID, {
-      filters: [{ memcmp: { offset: 9, bytes: profilePk.toBase58() } }],
-    }),
-  );
-  if (accounts.length === 0) throw new Error(`No profile faction account found for profile ${cacheKey}`);
-  const result = accounts[0].pubkey;
-  profileFactionCache.set(cacheKey, result);
-  console.log("[FACTION] Fetched profileFaction for", cacheKey, "->", result.toBase58());
-  return result;
+
+  const normalizedProfileId = normalizeRpcProfileId(profileId || cacheKey);
+  const cacheCandidates = [
+    path.join(process.cwd(), 'cache', normalizedProfileId, `${normalizedProfileId}.json`),
+    path.join(process.cwd(), 'cache', normalizedProfileId, 'playload', 'latest.json'),
+  ];
+
+  for (const cacheFile of cacheCandidates) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+      const data = raw?.data || raw || {};
+      const factionAccount = typeof data.profileFactionAccount === 'string'
+        ? data.profileFactionAccount.trim()
+        : '';
+
+      if (!factionAccount) {
+        continue;
+      }
+
+      const result = new PublicKey(factionAccount);
+      profileFactionCache.set(cacheKey, result);
+      console.log('[FACTION] Loaded profileFaction from cache for', normalizedProfileId, '->', result.toBase58());
+      return result;
+    } catch {
+      // try next cache candidate
+    }
+  }
+
+  throw new Error(`Missing cached profileFactionAccount for profile ${normalizedProfileId}; run analyze-profile first`);
 }
 // Carica contracts.json una sola volta (in produzione meglio usare cache o fetch dinamico)
 //const contractsCache = JSON.parse(fs.readFileSync("cache/contracts.json", "utf8"));

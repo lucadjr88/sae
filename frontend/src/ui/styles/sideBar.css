@@ -57,6 +57,13 @@ display: flex;
   transition: all 0.2s ease;
 }
 
+.profile-icon .profile-faction-icon {
+  width: 120%;
+  height: 120%;
+  object-fit: contain;
+  display: block;
+}
+
 .profile-icon.cache-fresh {
   background: rgba(52, 211, 153, 0.2);
   box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.4);
@@ -216,6 +223,11 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     width: 36px;
     height: 36px;
     margin-bottom: -6px;
+  }
+
+  .profile-icon .profile-faction-icon {
+    width: 20px;
+    height: 20px;
   }
 
   .profile-id {

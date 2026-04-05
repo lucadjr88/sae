@@ -100,7 +100,7 @@ if (connectBtn) {
   connectBtn.addEventListener('click', () => {
     //console.log('[DEBUG] Connect Wallet button pressed');
     if (!window.wallet) {
-      alert('window.wallet non è definito!');
+      //alert('window.wallet non è definito!');
       console.log('[DEBUG] window.wallet non è definito!');
       return;
     }
@@ -109,7 +109,7 @@ if (connectBtn) {
     window.wallet.connect().then(() => {
       console.log('[DEBUG] Connect chiamato, stato wallet:', window.wallet);
     }).catch((err: any) => {
-      alert('Errore durante la connessione al wallet: ' + (err?.message || err));
+      //alert('Errore durante la connessione al wallet: ' + (err?.message || err));
       console.log('[DEBUG] Errore connect wallet:', err);
     });
   });

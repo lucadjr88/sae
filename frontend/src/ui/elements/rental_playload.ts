@@ -2,6 +2,9 @@ import { currentProfileId } from '@/utils/state';
 import { createLoadingElement, updateProgress, setLoadingBackgroundState } from './loading';
 import { rentalStateBackup } from './rentalState_playload';
 import refresh_icon from '@/assets/icons/refresh_button.png';
+import mudWhiteIcon from '@/assets/icons/mud_w.png';
+import oniWhiteIcon from '@/assets/icons/oni_w.png';
+import usturWhiteIcon from '@/assets/icons/ustur_w.png';
 import { createRentalContractWindow } from './rental_detail';
 
 // creiamo un dom da esportare come copia backup
@@ -86,9 +89,18 @@ function createFilterBar(onFilterChange: (
   sbFilter.className = 'starbase-filter';
   sbFilter.innerHTML = `
     <label><input type="radio" name="starbase" value="all" checked> All</label>
-    <label><input type="radio" name="starbase" value="mud"> MUD</label>
-    <label><input type="radio" name="starbase" value="oni"> ONI</label>
-    <label><input type="radio" name="starbase" value="ustur"> USTUR</label>
+    <label class="faction-option" title="MUD">
+      <input type="radio" name="starbase" value="mud" aria-label="MUD">
+      <img src="${mudWhiteIcon}" alt="MUD" class="faction-icon">
+    </label>
+    <label class="faction-option" title="ONI">
+      <input type="radio" name="starbase" value="oni" aria-label="ONI">
+      <img src="${oniWhiteIcon}" alt="ONI" class="faction-icon">
+    </label>
+    <label class="faction-option" title="USTUR">
+      <input type="radio" name="starbase" value="ustur" aria-label="USTUR">
+      <img src="${usturWhiteIcon}" alt="USTUR" class="faction-icon">
+    </label>
   `;
   sbFilter.addEventListener('change', (e) => {
     const target = e.target as HTMLInputElement;
@@ -172,6 +184,19 @@ function createFilterBar(onFilterChange: (
 let currentSortCol: string | null = null;
 let isAsc = true;
 
+function renderStarbaseIcon(starbase?: RentalContract['starbase']): string {
+  if (!starbase) return '-';
+
+  const iconMap = {
+    mud: mudWhiteIcon,
+    oni: oniWhiteIcon,
+    ustur: usturWhiteIcon,
+  };
+
+  const label = starbase.toUpperCase();
+  return `<span class="table-starbase-icon-wrap" title="${label}"><img src="${iconMap[starbase]}" alt="${label}" class="table-starbase-icon"></span>`;
+}
+
 function buildTable(contracts: RentalContract[]) {
   let currentData = [...contracts]; // Copia locale dei dati originali
   let filteredData = [...contracts]; // Dati attualmente visualizzati (dopo filtro)
@@ -202,7 +227,7 @@ function buildTable(contracts: RentalContract[]) {
 
       tr.innerHTML = `
         <td id="fleet_${c.fleet}" title="${c.fleet}">${c.fleet_name ?? c.fleet.slice(0, 8) + '…'}</td>
-        <td>${c.starbase?.toUpperCase() ?? '-'}</td>
+        <td class="starbase-cell" title="${c.starbase?.toUpperCase() ?? '-'}">${renderStarbaseIcon(c.starbase)}</td>
         <td style="font-weight:bold">${c.rate}</td>
         <td class="composition-cell" title="${c.fleet_composition ?? '-'}">${c.fleet_composition ?? '-'}</td>
         <td><span class="state-pill ${stateClass}">${state}</span></td>

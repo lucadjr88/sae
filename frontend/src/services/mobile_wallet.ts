@@ -149,7 +149,7 @@ export function getMobileIcon(): string | undefined {
                 this.isConnected = false;
                 this.publicKey = null;
                 this.error = e.message || 'Connection failed';
-                alert('Error during connection: ' + (e.message || e));
+                //alert('Error during connection: ' + (e.message || e));
                 console.log('[MOBILE WALLET] Errore durante la connessione:', e);
             } finally {
                 this.isConnecting = false;

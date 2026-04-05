@@ -1,4 +1,5 @@
 import { currentProfileId, connectedWalletPublicKey, connectedWalletIcon } from '@/utils/state';
+import { applyProfileFactionIcon, getCachedProfileFaction } from '@/utils/faction';
 import { normalizeOpName } from '@/utils/utils';
 import { drawPieChart } from '@/services/charts';
 import { createFleetList, createOperationList, createOtherOperationsList } from '@/services/fleet-operations';
@@ -83,6 +84,7 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   }
   if (sidebarProfileId && currentProfileId) {
     sidebarProfileId.textContent = currentProfileId.substring(0, 4) + '...' + currentProfileId.substring(currentProfileId.length - 4);
+    applyProfileFactionIcon(document.getElementById('profileIcon') as HTMLDivElement | null, getCachedProfileFaction(currentProfileId));
   }
 
   // Mostra logo wallet SOLO se la selezione avviene da wallet connect

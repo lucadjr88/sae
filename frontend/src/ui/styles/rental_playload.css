@@ -99,6 +99,24 @@
   color: var(--accent-color);
 }
 
+.rental-table td.starbase-cell {
+  text-align: center;
+}
+
+.table-starbase-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+.table-starbase-icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
+}
+
 .rental-filter-bar {
   margin-block: 15px;
   border-block: #b82bf9;
@@ -123,6 +141,30 @@
   border: solid;
   padding: 10px;
   border-color: blueviolet;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.starbase-filter .faction-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.starbase-filter .faction-option input {
+  margin: 0;
+}
+
+.starbase-filter .faction-icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
 }
 
 .fleet-filter {

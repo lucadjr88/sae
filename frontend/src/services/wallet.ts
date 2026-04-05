@@ -47,7 +47,7 @@ export class Wallet {
             if (choice === null) {
                 this.isConnected = false;
                 this.error = 'No wallet found.';
-                alert('No wallet found..');
+                //alert('No wallet found..');
                 return;
             }
 
@@ -70,7 +70,7 @@ export class Wallet {
                         continue;
                     }
 
-                    alert(`${lastError} (tentativo ${attempt}/${maxAttempts})`);
+                    //alert(`${lastError} (tentativo ${attempt}/${maxAttempts})`);
                     return;
                 }
 
@@ -95,7 +95,7 @@ export class Wallet {
                         continue;
                     }
 
-                    alert('Error during connection: ' + lastError);
+                    //alert('Error during connection: ' + lastError);
                 }
             }
         } finally {

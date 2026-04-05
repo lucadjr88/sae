@@ -4,6 +4,7 @@
 import { wipeAndReload } from "@/services/wipe_reload";
 import { createPrivacyPolicySidebarElement } from "@/ui/elements/privacyPolicy";
 import { toggleSwitchHTML } from "@/ui/elements/toggleSwitch";
+import { applyProfileFactionIcon, getCachedProfileFaction } from "@/utils/faction";
 import { currentProfileId } from "@/utils/state";
 import homeIcona from "@/assets/icons/home.png";
 import playstoreIcona from "@/assets/icons/playstore.png";
@@ -97,6 +98,7 @@ profileIcon.id = 'profileIcon';
 profileIcon.className = 'profile-icon';
 profileIcon.textContent = '👤';
 profileIcon.title = 'Profile';
+applyProfileFactionIcon(profileIcon, getCachedProfileFaction(currentProfileId));
 walletAndIconContainer.appendChild(profileIcon);
 
 // 4. ID Profilo

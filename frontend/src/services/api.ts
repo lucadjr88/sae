@@ -12,6 +12,7 @@ import type { FeesByFleet } from '@/types/operation-list';
 import { initializeToggleSwitch } from '@/ui/elements/toggleSwitch';
 import { rentalState_playload } from '@/ui/elements/rentalState_playload';
 import { startHideTimer } from '@/ui/elements/sideBar';
+import { applyProfileFactionIcon, getCachedProfileFaction, saveProfileFactionToCache } from '@/utils/faction';
 
 export let data: any = null; // Variabile globale per condividere i dati con rentalState_playload
 
@@ -214,12 +215,13 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 	}
 	if (!profileId) {
 		setLoadingBackgroundState(false);
-		alert('Inserisci un Player Profile ID!');
+		//alert('Inserisci un Player Profile ID!');
 		console.warn('[analyzeFees] profileId missing, aborting');
 		return;
 	}
 	setCurrentProfileId(profileId);
 	console.log('[analyzeFees] currentProfileId dopo set:', currentProfileId);
+	applyProfileFactionIcon(document.getElementById('profileIcon'), getCachedProfileFaction(profileId));
 	const formBox = document.querySelector('.form-box');
 	if (formBox) formBox.style.display = 'none';
 	if (btn) {
@@ -275,7 +277,9 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 
 		try {
 			const profileIconEnd = document.getElementById('profileIcon');
-			if (profileIconEnd) { profileIconEnd.textContent = '👤'; profileIconEnd.title = ''; }
+			const resolvedFaction = saveProfileFactionToCache(profileId, data?.profileFaction ?? data?.profileFactionId)
+				?? getCachedProfileFaction(profileId);
+			applyProfileFactionIcon(profileIconEnd, resolvedFaction);
 		} catch (_) { }
 		if (!data.feesByFleet || typeof data.feesByFleet !== 'object') {
 			data.feesByFleet = {};
