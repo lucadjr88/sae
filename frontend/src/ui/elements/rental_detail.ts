@@ -84,12 +84,14 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
       `;
     additionalDetails.innerHTML = loadingTemplate;
 
-    // PATCH MINIMA: chiama l'API getFleetInfoMinimal
-    import('@/services/getFleetInfoMinimal').then(async ({ getFleetInfoMinimal }) => {
+
+    // chiamata minimale al backend via fetch condivisa col frontend
+    (async () => {
       try {
-        // Parametri hardcoded come da esempio
         const fleetId = contractDetails.fleet;
-        const data = await getFleetInfoMinimal(fleetId);
+        const res = await fetch(`/api/getFleetInfoMinimal?fleetId=${encodeURIComponent(fleetId)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
         // Mostra la risposta in modo semplice
         try {
           // 1. Calcolo percentuali con protezione contro divisioni per zero o dati mancanti
@@ -196,7 +198,7 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
           rentMinusButton.style.backgroundColor = 'darkcyan';
           const rentPlusButton = document.getElementById('rentPlus') as HTMLButtonElement;
           rentPlusButton.style.backgroundColor = 'darkcyan';
-          
+
           rentMinusButton.onclick = () => {
             inputRentDuration.stepDown();
             inputRentDuration.dispatchEvent(new Event('change'));
@@ -276,7 +278,7 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
           rentalTxDiv.innerHTML = `<span class="status-badge active">Currently Rented</span>`;
         }
       }
-    });
+    })();
   }
 
 }

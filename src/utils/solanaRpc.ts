@@ -7,6 +7,127 @@
 import { PublicKey } from '@solana/web3.js';
 import { RpcPoolManager } from './rpc/rpc-pool-manager';
 
+type RpcFetchErrorInfo = {
+  errorType: '429' | '503' | 'error';
+  retryable: boolean;
+  maxAttempts: number;
+  delayMs: number;
+  summary: string;
+};
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function withRpcTimeout<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error(`RPC timeout after ${timeoutMs}ms (${label})`) as Error & { status?: number };
+          error.name = 'RpcTimeoutError';
+          error.status = 504;
+          reject(error);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function summarizeRpcFetchError(error: unknown): string {
+  const name = typeof (error as { name?: unknown })?.name === 'string'
+    ? String((error as { name?: string }).name)
+    : 'Error';
+  const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+  const rpcCode = typeof (error as { value?: { error?: { code?: unknown } } })?.value?.error?.code === 'number'
+    ? Number((error as { value?: { error?: { code?: number } } }).value?.error?.code)
+    : undefined;
+  const rpcMessage = typeof (error as { value?: { error?: { message?: unknown } } })?.value?.error?.message === 'string'
+    ? String((error as { value?: { error?: { message?: string } } }).value?.error?.message)
+    : '';
+  const compactMessage = message.split('\n')[0]?.trim() || message;
+
+  if (rpcCode !== undefined) {
+    return `${name}: rpcCode=${rpcCode}${rpcMessage ? ` ${rpcMessage}` : ''}`;
+  }
+  return `${name}: ${compactMessage}`;
+}
+
+function classifyRpcFetchError(error: unknown, attempt: number): RpcFetchErrorInfo {
+  const status = typeof (error as { status?: unknown })?.status === 'number'
+    ? Number((error as { status?: number }).status)
+    : undefined;
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const rpcCode = typeof (error as { value?: { error?: { code?: unknown } } })?.value?.error?.code === 'number'
+    ? Number((error as { value?: { error?: { code?: number } } }).value?.error?.code)
+    : undefined;
+  const rpcMessage = typeof (error as { value?: { error?: { message?: unknown } } })?.value?.error?.message === 'string'
+    ? String((error as { value?: { error?: { message?: string } } }).value?.error?.message)
+    : '';
+  const haystack = `${message} ${rpcMessage}`.toLowerCase();
+
+  if (status === 429 || /429|too many requests/.test(haystack)) {
+    const backoffMs = Math.min(60000, 500 * Math.pow(2, attempt - 1));
+    const jitter = Math.floor(Math.random() * Math.max(250, Math.floor(backoffMs * 0.5)));
+    return {
+      errorType: '429',
+      retryable: true,
+      maxAttempts: 3,
+      delayMs: backoffMs + jitter,
+      summary: summarizeRpcFetchError(error),
+    };
+  }
+
+  if (
+    status === 503 ||
+    status === 504 ||
+    /503|504|service unavailable|gateway timeout|gateway time-out|backend not ready|timed out|rpc timeout/.test(haystack)
+  ) {
+    return {
+      errorType: '503',
+      retryable: true,
+      maxAttempts: 2,
+      delayMs: 150 + Math.floor(Math.random() * 250),
+      summary: summarizeRpcFetchError(error),
+    };
+  }
+
+  if (
+    status === 403 ||
+    /403|forbidden|not available on your current plan|archive, debug and trace requests/.test(haystack)
+  ) {
+    return {
+      errorType: 'error',
+      retryable: false,
+      maxAttempts: 1,
+      delayMs: 0,
+      summary: summarizeRpcFetchError(error),
+    };
+  }
+
+  if (rpcCode === -32603 && (error as { value?: { result?: unknown } })?.value?.result === null) {
+    return {
+      errorType: '503',
+      retryable: true,
+      maxAttempts: 2,
+      delayMs: 120 + Math.floor(Math.random() * 180),
+      summary: summarizeRpcFetchError(error),
+    };
+  }
+
+  return {
+    errorType: 'error',
+    retryable: true,
+    maxAttempts: 2,
+    delayMs: 100 + Math.floor(Math.random() * 200),
+    summary: summarizeRpcFetchError(error),
+  };
+}
+
 // Utility per limitare il parallelismo usando una coda
 async function fetchWithLimit<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
   const results: T[] = [];
@@ -65,25 +186,27 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
             const { connection, endpoint, release } = pick;
             const start = Date.now();
             try {
-              pageSigs = await connection.getSignaturesForAddress(address, { limit: 1000, before });
+              pageSigs = await withRpcTimeout(
+                connection.getSignaturesForAddress(address, { limit: 1000, before }),
+                10000,
+                `getSignaturesForAddress ${endpoint.url}`,
+              );
               release({ success: true, latencyMs: Date.now() - start });
               console.log(`[fetchWalletTransactions] wallet=${pubkey} page=${page} endpoint=${endpoint.url} signaturesTrovate=${pageSigs.length}`);
               last429Delay = 0; // reset se successo
               break;
             } catch (e: any) {
-              const is429 = e && (e.status === 429 || (e.message && String(e.message).includes('429')));
-              release({ success: false, errorType: is429 ? '429' : undefined });
-              sigErr = e;
-              if (is429) {
-                // 429: sleep progressivo + forza endpoint diverso su retry
-                last429Delay = Math.min(5000 * Math.pow(2, Math.floor(attemptEp / 2)), 60000); // cap 60s
-                const jitter = Math.floor(Math.random() * 2000);
-                process.stdout.write(`${endpoint.url} responded with 429 Too Many Requests.  Retrying after ${(last429Delay + jitter) / 1000}s delay...\n`);
-                await new Promise(r => setTimeout(r, last429Delay + jitter));
-              } else {
-                // altri errori: jitter minore
-                await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 200)));
+              const retryPlan = classifyRpcFetchError(e, attemptEp + 1);
+              release({ success: false, errorType: retryPlan.errorType });
+              sigErr = retryPlan.summary;
+              if (!retryPlan.retryable) {
+                break;
               }
+              if (retryPlan.errorType === '429') {
+                last429Delay = retryPlan.delayMs;
+                process.stdout.write(`${endpoint.url} responded with 429 Too Many Requests.  Retrying after ${last429Delay / 1000}s delay...\n`);
+              }
+              await sleep(retryPlan.delayMs);
             }
           } catch (e: any) {
             sigErr = e;
@@ -194,7 +317,39 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
     const failed: string[] = [];
     const MAX_CONCURRENT = 10; // RIDOTTO da 20 per rispettare rate limit Helius
     const INTER_REQUEST_DELAY_MS = 150; // delay tra richieste per throttling
-    
+    const progressStep = filtered.length <= 10 ? Math.max(1, filtered.length) : Math.max(5, Math.ceil(filtered.length / 4));
+    const endpointHits = new Map<string, number>();
+    const endpoint429 = new Map<string, number>();
+    const batchStats = { processed: 0, succeeded: 0, rateLimited: 0 };
+    const bumpCounter = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) || 0) + 1);
+    const shortEndpoint = (url: string) => {
+      try {
+        return new URL(url).host;
+      } catch {
+        return url;
+      }
+    };
+    const logBatchProgress = (force = false) => {
+      if (!force && (batchStats.processed === 0 || batchStats.processed % progressStep !== 0)) return;
+      const endpointsSummary = Array.from(endpointHits.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([url, count]) => `${shortEndpoint(url)}:${count}`)
+        .join(', ') || '-';
+      const rateLimitSummary = Array.from(endpoint429.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([url, count]) => `${shortEndpoint(url)}:${count}`)
+        .join(', ');
+      console.log(
+        `[fetchWalletTransactions] rpc-batch wallet=${pubkey} progress=${batchStats.processed}/${filtered.length} ok=${batchStats.succeeded} failed=${failed.length} 429=${batchStats.rateLimited} endpoints=[${endpointsSummary}]${rateLimitSummary ? ` 429ByEndpoint=[${rateLimitSummary}]` : ''}`
+      );
+    };
+
+    console.log(
+      `[fetchWalletTransactions] rpc-batch start wallet=${pubkey} signatures=${filtered.length} concurrency=${MAX_CONCURRENT} maxRetries=${maxRetries} poolEndpoints=${endpoints.length}`
+    );
+
     const tasks = filtered.map(sig => async () => {
       let tx = null;
       let attempt = 0;
@@ -211,38 +366,58 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
         }
         const { connection, endpoint, release } = pick;
         const start = Date.now();
+        bumpCounter(endpointHits, endpoint.url);
         try {
           // Throttle: aggiunge un piccolo delay per rispettare rate limits
-          await new Promise(r => setTimeout(r, Math.random() * INTER_REQUEST_DELAY_MS / 2));
-          tx = await connection.getTransaction(sig.signature, { 
-            maxSupportedTransactionVersion: 0,
-            commitment: 'confirmed'
-          });
-          if (tx) {
-            txs.push({ signature: sig.signature, blockTime: sig.blockTime, ...tx });
+          await sleep(Math.random() * INTER_REQUEST_DELAY_MS / 2);
+          const fetchedTx: any = await withRpcTimeout(
+            connection.getTransaction(sig.signature, {
+              maxSupportedTransactionVersion: 0,
+              commitment: 'confirmed'
+            }),
+            12000,
+            `getTransaction ${shortEndpoint(endpoint.url)}`,
+          );
+          if (fetchedTx) {
+            tx = fetchedTx;
+            txs.push({ signature: sig.signature, blockTime: sig.blockTime, ...fetchedTx });
             release({ success: true, latencyMs: Date.now() - start });
             break;
-          } else {
-            release({ success: false });
           }
+
+          const nullResultError = new Error(`RPC returned null transaction for known signature=${sig.signature}`) as Error & { status?: number };
+          nullResultError.name = 'RpcNullTransactionError';
+          nullResultError.status = 503;
+          lastErr = nullResultError;
+          release({ success: false, errorType: '503' });
+
+          const retryPlan = classifyRpcFetchError(nullResultError, attempt);
+          if (!retryPlan.retryable || attempt >= Math.min(maxRetries, retryPlan.maxAttempts)) {
+            break;
+          }
+          await sleep(retryPlan.delayMs);
         } catch (e: any) {
           lastErr = e;
-          const is429 = e && (e.status === 429 || (e.message && String(e.message).includes('429')));
-          release({ success: false, errorType: is429 ? '429' : undefined });
-          if (is429) {
-            console.log(`${endpoint.url} responded with 429 Too Many Requests. Backing off...`);
-            const backoffMs = Math.min(60000, 500 * Math.pow(2, attempt - 1));
-            const jitter = Math.floor(Math.random() * (backoffMs * 0.5));
-            await new Promise(r => setTimeout(r, backoffMs + jitter));
-          } else {
-            await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 200)));
+          const retryPlan = classifyRpcFetchError(e, attempt);
+          release({ success: false, errorType: retryPlan.errorType });
+          if (retryPlan.errorType === '429') {
+            batchStats.rateLimited++;
+            bumpCounter(endpoint429, endpoint.url);
           }
+          if (!retryPlan.retryable || attempt >= Math.min(maxRetries, retryPlan.maxAttempts)) {
+            break;
+          }
+          await sleep(retryPlan.delayMs);
         }
       }
       if (!tx) {
         failed.push(sig.signature);
-        console.log(`[fetchWalletTransactions] FALLIMENTO signature=${sig.signature} dopo ${maxRetries} tentativi. Ultimo errore:`, lastErr);
+        console.log(`[fetchWalletTransactions] FALLIMENTO signature=${sig.signature} dopo ${attempt} tentativi. Ultimo errore: ${summarizeRpcFetchError(lastErr)}`);
+      } else {
+        batchStats.succeeded++;
       }
+      batchStats.processed++;
+      logBatchProgress(batchStats.processed === filtered.length);
     });
     
     await fetchWithLimit(tasks, MAX_CONCURRENT);

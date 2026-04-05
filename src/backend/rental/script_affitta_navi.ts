@@ -301,6 +301,69 @@ async function executeRpcWithPool<T>(profileId: string, operation: (connection: 
   throw new Error('RPC request failed');
 }
 
+function isConfirmedSignatureStatus(status: any): boolean {
+  if (!status || status.err) return false;
+  const confirmationStatus = String(status.confirmationStatus || '').toLowerCase();
+  return confirmationStatus === 'confirmed' || confirmationStatus === 'finalized';
+}
+
+async function waitForSignatureConfirmation(
+  profileId: string,
+  signature: string,
+  opts?: { rentalState?: string | null; timeoutMs?: number; pollIntervalMs?: number }
+): Promise<'signature-status' | 'rental-state'> {
+  const timeoutMs = opts?.timeoutMs ?? 45_000;
+  const pollIntervalMs = opts?.pollIntervalMs ?? 1_200;
+  const startedAt = Date.now();
+  const rentalStateKey = typeof opts?.rentalState === 'string' && opts.rentalState.trim().length > 0
+    ? new PublicKey(opts.rentalState)
+    : null;
+  let lastTransientError: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const result = await executeRpcWithPool(profileId, async (connection) => {
+        const response = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+        const status = response?.value?.[0];
+
+        if (status?.err) {
+          throw new Error(`Transaction ${signature} failed on chain: ${JSON.stringify(status.err)}`);
+        }
+
+        if (isConfirmedSignatureStatus(status)) {
+          return 'signature-status' as const;
+        }
+
+        if (rentalStateKey) {
+          const accountInfo = await connection.getAccountInfo(rentalStateKey, 'confirmed');
+          if (accountInfo?.data && accountInfo.data.length > 0) {
+            return 'rental-state' as const;
+          }
+        }
+
+        return null;
+      });
+
+      if (result) {
+        return result;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (/failed on chain/i.test(message)) {
+        throw error;
+      }
+      lastTransientError = error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  const lastErrorMessage = lastTransientError instanceof Error
+    ? ` Last RPC error: ${lastTransientError.message}`
+    : '';
+  throw new Error(`Timed out waiting for on-chain confirmation for ${signature}.${lastErrorMessage}`);
+}
+
 async function getProfileFactionAccount(profilePk: PublicKey, profileId?: string): Promise<PublicKey> {
   const cacheKey = profilePk.toBase58();
   if (profileFactionCache.has(cacheKey)) return profileFactionCache.get(cacheKey)!;
@@ -630,11 +693,23 @@ router.post('/send-tx', async (req, res) => {
     );
     console.log(`[SEND-TX] TX inviata con successo. Signature: ${signature}`);
 
+    try {
+      const confirmationSource = await waitForSignatureConfirmation(rpcProfileId, signature, {
+        rentalState: !isRemovalOp ? effectiveRentalState : null,
+      });
+      console.log(`[SEND-TX] conferma on-chain rilevata via ${confirmationSource}: ${signature}`);
+    } catch (e: any) {
+      const message = e?.message || String(e);
+      if (/failed on chain/i.test(message)) {
+        throw e;
+      }
+      console.warn(`[SEND-TX] Conferma RPC non ottenuta in tempo per ${signature}, continuo con verifica stato/cache: ${message}`);
+    }
+
     let confirmedRentalState: ReturnType<typeof decodeRentalState> | null = null;
     if (!isRemovalOp && effectiveRentalState) {
       try {
         confirmedRentalState = await executeRpcWithPool(rpcProfileId, async (connection) => {
-          await connection.confirmTransaction(signature, 'confirmed');
           const accountInfo = await connection.getAccountInfo(new PublicKey(effectiveRentalState), 'confirmed');
           if (!accountInfo?.data) return null;
           return decodeRentalState(Buffer.from(accountInfo.data));

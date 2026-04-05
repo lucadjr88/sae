@@ -1,4 +1,4 @@
-import { setCachedResourceView } from '@/ui/elements/toggleSwitch';
+import { getActiveViewPreference, setCachedResourceView, showCachedView } from '@/ui/elements/toggleSwitch';
 import { normalizeOpName } from '@/utils/utils';
 import resourceMintImageCsvRaw from '@/assets/staratlas_resource_mint_image.csv?raw';
 
@@ -31,6 +31,7 @@ type MaterialEntry = {
   totalIn: number;
   totalOut: number;
   volume: number;
+  atlasUnitPrice?: number | null;
   operations?: Record<string, { in: number; out: number; count: number }>;
 };
 
@@ -55,6 +56,45 @@ const RESOURCE_CATALOG = parseResourceCatalog(resourceMintImageCsvRaw);
 const HIDDEN_RESOURCE_MINTS = new Set([
   'ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx'
 ]);
+const RESOURCE_ATLAS_PRICE_CACHE = new Map<string, number | null>();
+
+async function loadAtlasPricesForMints(mints: string[]): Promise<boolean> {
+  const pendingMints = [...new Set(mints.filter((mint) => mint && !RESOURCE_ATLAS_PRICE_CACHE.has(mint)))];
+  if (!pendingMints.length) return false;
+
+  let changed = false;
+  for (let i = 0; i < pendingMints.length; i += 50) {
+    const batch = pendingMints.slice(i, i + 50);
+
+    try {
+      const response = await fetch('/api/prezzi-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ricchiesta_prezzi: batch })
+      });
+
+      if (!response.ok) {
+        throw new Error(`prices-batch failed: ${response.status}`);
+      }
+
+      const payload = await response.json();
+      batch.forEach((mint) => {
+        const atlas = payload?.prezzi?.[mint]?.atlas;
+        const atlasUnitPrice = atlas?.prezzo_sell ?? atlas?.prezzo_buy ?? null;
+        RESOURCE_ATLAS_PRICE_CACHE.set(mint, typeof atlasUnitPrice === 'number' ? atlasUnitPrice : null);
+        changed = true;
+      });
+    } catch (error) {
+      console.warn('[resource_playload] Failed to load ATLAS prices for mints:', batch, error);
+      batch.forEach((mint) => {
+        RESOURCE_ATLAS_PRICE_CACHE.set(mint, null);
+        changed = true;
+      });
+    }
+  }
+
+  return changed;
+}
 
 function toNumber(value: unknown): number {
   const num = Number(value);
@@ -67,6 +107,14 @@ function formatAmount(value: number): string {
     return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
   }
   return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function formatAtlasValue(amount: number, atlasUnitPrice?: number | null): string {
+  if (!Number.isFinite(amount) || !Number.isFinite(atlasUnitPrice) || !atlasUnitPrice || atlasUnitPrice <= 0) {
+    return '';
+  }
+
+  return ` <span style="opacity:0.75;font-size:0.85em;">(${formatAmount(amount * atlasUnitPrice)} ATLAS)</span>`;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -393,12 +441,12 @@ function buildResourceFlowTable(entries: MaterialEntry[], emptyMessage: string):
           <div class="resource-flow-bar-dual-track">
             <div class="resource-flow-bar-row">
               <div class="resource-flow-bar resource-flow-bar-in" style="width:${inPct.toFixed(2)}%">
-                <span class="resource-flow-value-inline">${formatAmount(entry.totalIn)}</span>
+                <span class="resource-flow-value-inline">${formatAmount(entry.totalIn)}${formatAtlasValue(entry.totalIn, entry.atlasUnitPrice)}</span>
               </div>
             </div>
             <div class="resource-flow-bar-row">
               <div class="resource-flow-bar resource-flow-bar-out" style="width:${outPct.toFixed(2)}%">
-                <span class="resource-flow-value-inline">${formatAmount(entry.totalOut)}</span>
+                <span class="resource-flow-value-inline">${formatAmount(entry.totalOut)}${formatAtlasValue(entry.totalOut, entry.atlasUnitPrice)}</span>
               </div>
             </div>
           </div>
@@ -482,6 +530,13 @@ export function displayResourceResults(data: any): void {
   }
 
   const byMaterial = resourceFlows.byMaterial || {};
+  const materialMints = Object.keys(byMaterial);
+
+  void loadAtlasPricesForMints(materialMints).then((changed) => {
+    if (!changed) return;
+    displayResourceResults(data);
+  });
+
   const materialEntries: MaterialEntry[] = Object.entries(byMaterial)
     .map(([mint, material]) => {
       const totalIn = toNumber(material.totalIn);
@@ -496,6 +551,7 @@ export function displayResourceResults(data: any): void {
         totalIn,
         totalOut,
         volume: totalIn + totalOut,
+        atlasUnitPrice: RESOURCE_ATLAS_PRICE_CACHE.get(mint) ?? null,
         operations: material.operations || {}
       };
     })
@@ -571,4 +627,7 @@ export function displayResourceResults(data: any): void {
   });
 
   setCachedResourceView(resourceResults);
+  if (getActiveViewPreference() === 'resource') {
+    showCachedView('resource', false);
+  }
 }
