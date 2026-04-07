@@ -1,8 +1,8 @@
 // Decodifica tutte le SAGE ops tra le tx (stub)
-import { getCachedWalletTxs } from './getCachedWalletTxs';
-import { decodeInstructions } from '../decoders/decodeInstructions';
-import { saveSageOpsToCache } from './saveSageOpsToCache';
-import { enrichFleetStateHandler } from '../decoders/fleetstatehandler';
+import { getCachedWalletTxs } from './getCachedWalletTxs.js';
+import { decodeInstructions } from '../decoders/decodeInstructions.js';
+import { saveSageOpsToCache } from './saveSageOpsToCache.js';
+import { enrichFleetStateHandler } from '../decoders/fleetstatehandler.js';
 
 // Decodifica tutte le SAGE ops tra le tx reali di un wallet
 export async function decodeSageOpsUtil(wallet: string, lats: number, profileId?: string): Promise<{sageOps: any[], unknown: any[]}> {

@@ -1,4 +1,4 @@
-import { setCache } from '../utils/cache';
+import { setCache } from '../utils/cache.js';
 
 function normalizeFleetForFrontend(fleet: any, isRented = false) {
   return {

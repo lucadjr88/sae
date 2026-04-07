@@ -1,9 +1,13 @@
 
+const APP_ORIGIN = typeof window !== 'undefined'
+  ? window.location.origin
+  : 'https://staratlasexplorer.duckdns.org';
+const APP_ICON_VERSION = '20260407b';
 
 export const APP_IDENTITY = {
-  name: 'React Native dApp',
-  uri: 'https://staratlasexplorer.duckdns.org', // Your dApp's URL, used as the origin for wallet authorization
-  icon: "favicon.ico", // Full path resolves to https://staratlasexplorer.duckdns.org/favicon.ico
+  name: 'Star Atlas Explorer',
+  uri: APP_ORIGIN,
+  icon: `${APP_ORIGIN}/favicon512.png?v=${APP_ICON_VERSION}`,
 };
 
 export async function getWalletAdapters() {

@@ -1,18 +1,18 @@
 
 import 'dotenv/config.js';
 import express from 'express';
-import analyzeProfileRouter from './analysis/analyzeProfile';
-import debugRouter from './analysis/debug/index';
-import getFleetsRouter from './backend/routes/get-fleets';
-import getFleetInfoMinimalRouter from './backend/routes/get-fleet-info-minimal';
-import { pricesRouter } from './backend/routes/prices';
-import richiestaPrezziBckendRouter from './backend/routes/richiestaPrezziBckend';
-import frontendRouter from './backend/routes/frontend';
+import analyzeProfileRouter from './analysis/analyzeProfile.js';
+import debugRouter from './analysis/debug/index.js';
+import getFleetsRouter from './backend/routes/get-fleets.js';
+import getFleetInfoMinimalRouter from './backend/routes/get-fleet-info-minimal.js';
+import { pricesRouter } from './backend/routes/prices.js';
+import richiestaPrezziBckendRouter from './backend/routes/richiestaPrezziBckend.js';
+import frontendRouter from './backend/routes/frontend.js';
 import authRouter from './backend/routes/auth.js';
-import resourceFlowsRouter from './backend/routes/resource-flows';
+import resourceFlowsRouter from './backend/routes/resource-flows.js';
 import assetsRouter from './backend/routes/assets.js';
-import rentalRouter from './backend/routes/rental';
-import { startNonInvasiveMetricsLogger } from './utils/rpc/metrics';
+import rentalRouter from './backend/routes/rental.js';
+import { startNonInvasiveMetricsLogger } from './utils/rpc/metrics.js';
 
 const PORT = 3000;
 

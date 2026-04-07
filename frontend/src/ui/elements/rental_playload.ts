@@ -184,7 +184,7 @@ function createFilterBar(onFilterChange: (
 let currentSortCol: string | null = null;
 let isAsc = true;
 
-function renderStarbaseIcon(starbase?: RentalContract['starbase']): string {
+function renderFactionIcon(starbase?: RentalContract['starbase']): string {
   if (!starbase) return '-';
 
   const iconMap = {
@@ -227,7 +227,7 @@ function buildTable(contracts: RentalContract[]) {
 
       tr.innerHTML = `
         <td id="fleet_${c.fleet}" title="${c.fleet}">${c.fleet_name ?? c.fleet.slice(0, 8) + '…'}</td>
-        <td class="starbase-cell" title="${c.starbase?.toUpperCase() ?? '-'}">${renderStarbaseIcon(c.starbase)}</td>
+        <td class="starbase-cell" title="${c.starbase?.toUpperCase() ?? '-'}">${renderFactionIcon(c.starbase)}</td>
         <td style="font-weight:bold">${c.rate}</td>
         <td class="composition-cell" title="${c.fleet_composition ?? '-'}">${c.fleet_composition ?? '-'}</td>
         <td><span class="state-pill ${stateClass}">${state}</span></td>

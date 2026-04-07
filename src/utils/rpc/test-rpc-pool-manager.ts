@@ -1,12 +1,15 @@
 // test-rpc-pool-manager.ts
 // Test base per RpcPoolManager
-import { RpcPoolManager } from './rpc-pool-manager';
+import assert from 'node:assert/strict';
+import { RpcPoolManager } from './rpc-pool-manager.js';
 
 async function test() {
   const profileId = 'testprofileid';
   console.log('Prune pool...');
   const valid = await RpcPoolManager.ensurePool(undefined, true);
   console.log('Valid endpoints:', valid.length);
+  const missingStats = valid.filter((ep: any) => typeof ep?.pruned !== 'number' || typeof ep?.total !== 'number');
+  assert.equal(missingStats.length, 0, `Missing prune stats on endpoints: ${missingStats.map((ep: any) => ep?.name || ep?.url).join(', ')}`);
 
   console.log('Load or create pool...');
   const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);

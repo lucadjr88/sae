@@ -17,7 +17,7 @@ export function decodeAmmo(rawData: Uint8Array): any { return null; }
 export function decodeCrew(rawData: Uint8Array): any { return null; }
 import { PublicKey } from '@solana/web3.js';
 
-import type { FleetStarbase } from './types';
+import type { FleetStarbase } from './types.js';
 
 export const CONTRACT_DISCRIMINATOR = Uint8Array.from([
   0xbe, 0x8a, 0x0a, 0xdf, 0xbd, 0x74, 0xde, 0x73,

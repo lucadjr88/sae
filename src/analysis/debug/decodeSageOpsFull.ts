@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
-import { decodeInstructions } from '../../decoders/decodeInstructions';
-import { saveSageOpsToCache } from '../../utils/saveSageOpsToCache';
-import { enrichFleetStateHandler } from '../../decoders/fleetstatehandler';
+import { decodeInstructions } from '../../decoders/decodeInstructions.js';
+import { saveSageOpsToCache } from '../../utils/saveSageOpsToCache.js';
+import { enrichFleetStateHandler } from '../../decoders/fleetstatehandler.js';
 
 // GET /api/debug/decode-sage-ops-full?profileId=...
 export async function decodeSageOpsFullHandler(req: Request, res: Response) {
@@ -74,7 +74,7 @@ export async function decodeSageOpsFullHandler(req: Request, res: Response) {
     const unknown = enriched.filter(op => !op.success || op.instructionName === 'Unknown');
     await saveSageOpsToCache(profileId, sageOps);
     if (unknown.length > 0) {
-      const { saveUnknownOps } = await import('../saveUnknownOps');
+      const { saveUnknownOps } = await import('../saveUnknownOps.js');
       await saveUnknownOps(profileId, unknown);
     }
     const total = sageOps.length + unknown.length;

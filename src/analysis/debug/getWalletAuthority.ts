@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getWalletAuthorityUtil } from '../../utils/getWalletAuthority';
+import { getWalletAuthorityUtil } from '../../utils/getWalletAuthority.js';
 
 export async function getWalletAuthorityHandler(req: Request, res: Response) {
   const profileId = req.query.profileId as string;

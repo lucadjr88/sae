@@ -1,4 +1,4 @@
-import { decodeInstructions } from '../decoders/decodeInstructions';
+import { decodeInstructions } from '../decoders/decodeInstructions.js';
 
 export async function decodeAllFleetInstructions(fleets: any[]): Promise<any[]> {
   // Supponiamo che ogni fleet abbia una lista di transazioni raw in fleet.transactions

@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { setCache } from './cache';
+import { setCache } from './cache.js';
 
 function getCacheDir(profileId: string, namespace: string) {
   return path.join(process.cwd(), 'cache', profileId, namespace);

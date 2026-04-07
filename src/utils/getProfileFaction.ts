@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { PublicKey } from '@solana/web3.js';
-import { RpcPoolManager } from './rpc/rpc-pool-manager';
+import { RpcPoolManager } from './rpc/rpc-pool-manager.js';
 
 const PROFILE_FACTION_PROGRAM_ID = new PublicKey('pFACSRuobDmvfMKq1bAzwj27t6d2GJhSCHb1VcfnRmq');
 const PROFILE_MEMCMP_OFFSETS = [9, 8] as const;
@@ -105,8 +105,10 @@ async function executeRpcWithPool<T>(profileId: string, operation: (connection: 
           errorType: getRpcErrorType(error),
         });
       }
+      const rpcName = pick?.endpoint?.name ?? 'unknown';
+      const rpcUrl = pick?.endpoint?.url ?? 'n/a';
       lastError = error;
-      console.warn(`[getProfileFactionUtil] attempt ${attempt + 1}/${maxAttempts} failed for profile ${normalizedProfileId}:`, error);
+      console.warn(`[getProfileFactionUtil] attempt ${attempt + 1}/${maxAttempts} failed for profile ${normalizedProfileId} | rpc=${rpcName} | url=${rpcUrl}:`, error);
     }
   }
 

@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import { decodeProfileWithRustHandler } from './decodeProfileWithRust';
-import { getWalletAuthorityHandler } from './getWalletAuthority';
-import { getWalletTxsHandler } from './getWalletTxs';
-import { decodeSageOpsHandler } from './decodeSageOps';
-import { decodeSageOpsFullHandler } from './decodeSageOpsFull';
-import { associateSageOpsToFleetsHandler } from './associateSageOpsToFleets';
-import { walletSageFeesDetailedHandler } from './walletSageFeesDetailed';
-import { playloadHandler } from './playload';
-import { playerProfileIdHandler } from './playerProfileId';
-import { enrichFleetStateHandler } from '../../decoders/fleetstatehandler';
+import { decodeProfileWithRustHandler } from './decodeProfileWithRust.js';
+import { getWalletAuthorityHandler } from './getWalletAuthority.js';
+import { getWalletTxsHandler } from './getWalletTxs.js';
+import { decodeSageOpsHandler } from './decodeSageOps.js';
+import { decodeSageOpsFullHandler } from './decodeSageOpsFull.js';
+import { associateSageOpsToFleetsHandler } from './associateSageOpsToFleets.js';
+import { walletSageFeesDetailedHandler } from './walletSageFeesDetailed.js';
+import { playloadHandler } from './playload.js';
+import { playerProfileIdHandler } from './playerProfileId.js';
+import { enrichFleetStateHandler } from '../../decoders/fleetstatehandler.js';
 
 const debugRouter = Router();
 

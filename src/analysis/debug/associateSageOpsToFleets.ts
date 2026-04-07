@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { associateSageOpsToFleetsUtil } from '../../utils/associateSageOpsToFleets';
+import { associateSageOpsToFleetsUtil } from '../../utils/associateSageOpsToFleets.js';
 
 export async function associateSageOpsToFleetsHandler(req: Request, res: Response) {
   const profileId = req.query.profileId as string;

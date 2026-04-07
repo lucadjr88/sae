@@ -1,5 +1,5 @@
-import { decodeProfileWithRustUtil } from '../../utils/decodeProfileWithRust';
-import { fetchSolanaAccountInfo } from '../../utils/fetchSolanaAccountInfo';
+import { decodeProfileWithRustUtil } from '../../utils/decodeProfileWithRust.js';
+import { fetchSolanaAccountInfo } from '../../utils/fetchSolanaAccountInfo.js';
 import { Request, Response } from 'express';
 
 export async function decodeProfileWithRustHandler(req: Request, res: Response) {

@@ -5,7 +5,7 @@
 
 
 import { PublicKey } from '@solana/web3.js';
-import { RpcPoolManager } from './rpc/rpc-pool-manager';
+import { RpcPoolManager } from './rpc/rpc-pool-manager.js';
 
 type RpcFetchErrorInfo = {
   errorType: '429' | '503' | 'error';

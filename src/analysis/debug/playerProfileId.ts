@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PublicKey } from '@solana/web3.js';
-import { findPlayerProfilesForWalletWithRpc } from '../../utils/derivePlayerProfilePDA';
-import { getCache } from '../../utils/cache';
+import { findPlayerProfilesForWalletWithRpc } from '../../utils/derivePlayerProfilePDA.js';
+import { getCache } from '../../utils/cache.js';
 
 export async function playerProfileIdHandler(req: Request, res: Response) {
   const wallet = req.query.wallet as string;

@@ -1,5 +1,5 @@
 import express from 'express';
-import fetchProfileRentedFleets from '../../utils/fetchProfileRentedFleets';
+import fetchProfileRentedFleets from '../../utils/fetchProfileRentedFleets.js';
 
 const router = express.Router();
 

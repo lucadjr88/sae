@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getCache, setCache } from './cache';
+import { getCache, setCache } from './cache.js';
 
 const MATERIAL_REGISTRY: Record<string, MaterialInfo> = {
   foodQJAztMzX1DKpLaiounNe2BDMds5RNuPC6jsNrDG: {

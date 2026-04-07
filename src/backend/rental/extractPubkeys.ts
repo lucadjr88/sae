@@ -1,4 +1,4 @@
-import { decodeContractState, decodeRentalState } from './decode';
+import { decodeContractState, decodeRentalState } from './decode.js';
 
 export function extractRentalStatePubkeys(contractBuffers: Buffer[]): string[] {
   const pubkeys: string[] = [];

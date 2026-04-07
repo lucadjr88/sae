@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import buildFeesDetailed from '../../utils/buildFeesDetailed';
+import buildFeesDetailed from '../../utils/buildFeesDetailed.js';
 
 export async function walletSageFeesDetailedHandler(req: Request, res: Response) {
   const profileId = (req.body && req.body.profileId) || (req.query && req.query.profileId);

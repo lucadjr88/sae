@@ -3,10 +3,10 @@ import * as anchor from "@project-serum/anchor";
 import BN from "bn.js";
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
-import { RentalService } from "./rentalService";
-import { decodeRentalState } from "./decode";
-import { pickOptimisticRentalRate } from "./rentalCacheUtils";
-import { RpcPoolManager } from "../../utils/rpc/rpc-pool-manager";
+import { RentalService } from "./rentalService.js";
+import { decodeRentalState } from "./decode.js";
+import { pickOptimisticRentalRate } from "./rentalCacheUtils.js";
+import { RpcPoolManager } from "../../utils/rpc/rpc-pool-manager.js";
 
 // PATCH: Express endpoint minimale per orchestrare la rental tx
 import express from "express";
@@ -957,7 +957,7 @@ export async function acceptRentalTx(params: any) {
     rpcProfileId,
   } = params;
   // Minimal debug: print all params before toBase58 conversion
-  console.log("[acceptRentalTx] RAW params:", params);
+  //console.log("[acceptRentalTx] RAW params:", params);
   // Log all parameters with correct snake_case names
   console.log("[acceptRentalTx] params:", {
     mint: toPk(mint).toBase58(),

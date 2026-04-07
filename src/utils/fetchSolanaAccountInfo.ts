@@ -4,7 +4,7 @@
 export async function fetchSolanaAccountInfo(profileId: string): Promise<Buffer | null> {
   let pick: any = null;
   try {
-    const { RpcPoolManager } = await import('./rpc/rpc-pool-manager');
+    const { RpcPoolManager } = await import('./rpc/rpc-pool-manager.js');
     pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 2000 });
     const { connection, release } = pick;
     const { PublicKey } = await import('@solana/web3.js');
@@ -22,7 +22,9 @@ export async function fetchSolanaAccountInfo(profileId: string): Promise<Buffer 
     if (pick && pick.release) {
       try { pick.release({ success: false }); } catch {}
     }
-    console.log(`[fetchSolanaAccountInfo] Errore:`, e);
+    const rpcName = pick?.endpoint?.name ?? 'unknown';
+    const rpcUrl = pick?.endpoint?.url ?? 'n/a';
+    console.log(`[fetchSolanaAccountInfo] Errore profileId=${profileId} rpc=${rpcName} url=${rpcUrl}:`, e);
     return null;
   }
 }

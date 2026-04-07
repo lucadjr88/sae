@@ -1,11 +1,42 @@
 
 import { PublicKey } from '@solana/web3.js';
-import { RpcPoolManager } from './rpc/rpc-pool-manager';
+import { RpcPoolManager } from './rpc/rpc-pool-manager.js';
 import fs from 'fs/promises';
 import path from 'path';
 
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRpcRetryInfo(error: unknown): { errorType: '429' | '503' | 'error'; retryable: boolean } {
+  const status = typeof (error as { status?: unknown })?.status === 'number'
+    ? Number((error as { status?: number }).status)
+    : undefined;
+  const message = error instanceof Error ? error.message : String(error ?? '');
+
+  if (status === 429 || /429|Too Many Requests/i.test(message)) {
+    return { errorType: '429', retryable: true };
+  }
+
+  const looksLikeRetryableRpcError =
+    status === 408 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    /408|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed/i.test(message) ||
+    /500 Internal Server Error/i.test(message) ||
+    /502|503|Service Unavailable|RPC backend not ready/i.test(message) ||
+    /excluded from account secondary indexes|this RPC method unavailable for key/i.test(message) ||
+    /"code"\s*:\s*-31001/.test(message) ||
+    /jsonrpc_invalid_empty_array/i.test(message) ||
+    /"retryable"\s*:\s*"?true"?/i.test(message);
+
+  if (looksLikeRetryableRpcError) {
+    return { errorType: '503', retryable: true };
+  }
+
+  return { errorType: 'error', retryable: false };
 }
 
 async function loadFleetsFromCache(profileId: string): Promise<any[]> {
@@ -31,8 +62,10 @@ async function loadFleetsFromCache(profileId: string): Promise<any[]> {
 export async function fetchProfileFleets(profileId: string): Promise<any[]> {
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   const OWNER_PROFILE_OFFSET = 41; // 8 (disc) +1(version) +32(game_id)
+  const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId).catch(() => []);
+  const maxAttempts = Math.max(5, Math.round((Array.isArray(pool) ? pool.length : 0) * 1.5));
   let lastErr: any = null;
-  for (let attempt = 1; attempt <= 5; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     let pick: any = null;
     try {
       pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 3000, allowStale: attempt > 2 });
@@ -241,12 +274,15 @@ export async function fetchProfileFleets(profileId: string): Promise<any[]> {
     } catch (e: any) {
       lastErr = e;
       const errMsg = String(e?.message || e || '');
-      const is429 = /429|Too Many Requests/i.test(errMsg);
+      const { errorType, retryable } = getRpcRetryInfo(e);
+      const rpcName = pick?.endpoint?.name ?? 'unknown';
+      const rpcUrl = pick?.endpoint?.url ?? 'n/a';
+      console.warn(`[fetchProfileFleets] attempt ${attempt}/${maxAttempts} failed for profile=${profileId} rpc=${rpcName} url=${rpcUrl} retryable=${retryable} errorType=${errorType}: ${errMsg}`);
       if (pick && pick.release) {
-        try { pick.release({ success: false, errorType: is429 ? '429' : 'error' }); } catch {}
+        try { pick.release({ success: false, errorType }); } catch {}
       }
-      if (is429 && attempt < 5) {
-        const delayMs = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+      if (attempt < maxAttempts) {
+        const delayMs = retryable ? Math.min(500 * Math.pow(2, attempt - 1), 4000) : 150;
         await sleep(delayMs);
         continue;
       }

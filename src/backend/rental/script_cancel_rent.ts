@@ -3,7 +3,7 @@ import * as anchor from "@project-serum/anchor";
 import express from "express";
 
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
-import { getRpcConnection } from "../../utils/rpc/connection";
+import { getRpcConnection } from "../../utils/rpc/connection.js";
 
 const router = express.Router();
 

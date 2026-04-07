@@ -1,14 +1,14 @@
 import { Router, Request, Response } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
-import { orchestrateFleetsForProfile } from './fleetOrchestrator';
-import { setCache, getCache } from '../utils/cache';
-import buildFeesDetailed from '../utils/buildFeesDetailed';
-import { decodeResources } from '../utils/resources_analyses';
-import { deriveStarbaseCargoIdsForProfile } from '../utils/deriveStarbaseCargoIdsForProfile';
-import { getWalletAuthorityUtil } from '../utils/getWalletAuthority';
-import { getWalletTxsUtil } from '../utils/getWalletTxs';
-import { getProfileFactionUtil } from '../utils/getProfileFaction';
+import { orchestrateFleetsForProfile } from './fleetOrchestrator.js';
+import { setCache, getCache } from '../utils/cache.js';
+import buildFeesDetailed from '../utils/buildFeesDetailed.js';
+import { decodeResources } from '../utils/resources_analyses.js';
+import { deriveStarbaseCargoIdsForProfile } from '../utils/deriveStarbaseCargoIdsForProfile.js';
+import { getWalletAuthorityUtil } from '../utils/getWalletAuthority.js';
+import { getWalletTxsUtil } from '../utils/getWalletTxs.js';
+import { getProfileFactionUtil } from '../utils/getProfileFaction.js';
 
 const router = Router();
 
@@ -26,17 +26,17 @@ async function clearNamespaces(profileId: string) {
 
 
 // Importa i 7 handler debug
-import { getWalletAuthorityHandler } from './debug/getWalletAuthority';
-import { getWalletTxsHandler } from './debug/getWalletTxs';
-import { decodeSageOpsFullHandler } from './debug/decodeSageOpsFull';
-import { associateSageOpsToFleetsHandler } from './debug/associateSageOpsToFleets';
-import playloadHandler from './debug/playload';
-import { fetchProfileFleets } from '../utils/fetchProfileFleets';
-import { fetchProfileRentedFleets } from '../utils/fetchProfileRentedFleets';
-import { resetPoolCache } from '../utils/rpc/rpc-pool-manager';
-import { resetHealthMap } from '../utils/rpc/health-manager';
-import { resetConcurrencyMap } from '../utils/rpc/concurrency-manager';
-import { resetMetricsMap } from '../utils/rpc/metrics';
+import { getWalletAuthorityHandler } from './debug/getWalletAuthority.js';
+import { getWalletTxsHandler } from './debug/getWalletTxs.js';
+import { decodeSageOpsFullHandler } from './debug/decodeSageOpsFull.js';
+import { associateSageOpsToFleetsHandler } from './debug/associateSageOpsToFleets.js';
+import playloadHandler from './debug/playload.js';
+import { fetchProfileFleets } from '../utils/fetchProfileFleets.js';
+import { fetchProfileRentedFleets } from '../utils/fetchProfileRentedFleets.js';
+import { resetPoolCache } from '../utils/rpc/rpc-pool-manager.js';
+import { resetHealthMap } from '../utils/rpc/health-manager.js';
+import { resetConcurrencyMap } from '../utils/rpc/concurrency-manager.js';
+import { resetMetricsMap } from '../utils/rpc/metrics.js';
 
 
 router.post('/analyze-profile', async (req: Request, res: Response) => {

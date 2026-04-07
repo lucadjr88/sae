@@ -1,5 +1,5 @@
-import { fetchAndCacheWalletTxs } from './fetchAndCacheWalletTxs';
-import { fetchWalletTransactions } from './solanaRpc';
+import { fetchAndCacheWalletTxs } from './fetchAndCacheWalletTxs.js';
+import { fetchWalletTransactions } from './solanaRpc.js';
 
 // Scarica e salva progressivamente tutte le tx delle ultime lats ore per un wallet
 // Restituisce anche il totale signature tentate e quelle fallite

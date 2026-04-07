@@ -1,7 +1,7 @@
 import express from 'express';
-import { getWalletTxsUtil } from '../../utils/getWalletTxs';
-import { getWalletAuthorityUtil } from '../../utils/getWalletAuthority';
-import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager';
+import { getWalletTxsUtil } from '../../utils/getWalletTxs.js';
+import { getWalletAuthorityUtil } from '../../utils/getWalletAuthority.js';
+import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager.js';
 
 const router = express.Router();
 

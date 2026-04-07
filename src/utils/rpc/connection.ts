@@ -1,5 +1,5 @@
 import { Connection, type Commitment } from '@solana/web3.js';
-import { getSingleHealthyRpc } from './prune';
+import { getSingleHealthyRpc } from './prune.js';
 
 type RpcConnectionOptions = {
   rpcUrl?: string;

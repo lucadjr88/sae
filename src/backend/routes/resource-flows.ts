@@ -1,6 +1,6 @@
 import express, { Router, Request, Response } from 'express';
-import { decodeResources, ResourceFlowSummary } from '../../utils/resources_analyses';
-import { getCache } from '../../utils/cache';
+import { decodeResources, ResourceFlowSummary } from '../../utils/resources_analyses.js';
+import { getCache } from '../../utils/cache.js';
 
 const router: Router = express.Router();
 

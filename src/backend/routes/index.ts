@@ -1,9 +1,9 @@
 import express from 'express';
 
-import debugRouter from './debug';
-import getFleetsRouter from './get-fleets';
-import getRentedFleetsRouter from './get-rented-fleets';
-import getFleetInfoMinimalRouter from './get-fleet-info-minimal';
+import debugRouter from './debug.js';
+import getFleetsRouter from './get-fleets.js';
+import getRentedFleetsRouter from './get-rented-fleets.js';
+import getFleetInfoMinimalRouter from './get-fleet-info-minimal.js';
 
 const router = express.Router();
 

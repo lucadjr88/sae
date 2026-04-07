@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getCache, setCache } from './cache';
+import { getCache, setCache } from './cache.js';
 
 type CargoLifecycleState = 'ACTIVE' | 'CLOSED';
 

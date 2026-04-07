@@ -1,6 +1,6 @@
 export async function doubleCheckWallet(wallet: string, cutoffH: number, profileId: string) {
   const sinceMs = Date.now() - cutoffH * 3600 * 1000;
-  const { getCache } = await import('./cache');
+  const { getCache } = await import('./cache.js');
   let pick: any = null;
   try {
     pick = await (await import('./rpc/rpc-pool-manager.js')).RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 2000 });
@@ -19,8 +19,8 @@ export async function doubleCheckWallet(wallet: string, cutoffH: number, profile
       console.log(`[double-check] wallet=${wallet} tutte le signature hanno una tx salvata: OK`);
     } else {
       console.log(`[double-check] wallet=${wallet} signature mancanti:`, missing);
-      const { fetchWalletTransactions } = await import('./solanaRpc');
-      const { fetchAndCacheWalletTxs } = await import('./fetchAndCacheWalletTxs');
+      const { fetchWalletTransactions } = await import('./solanaRpc.js');
+      const { fetchAndCacheWalletTxs } = await import('./fetchAndCacheWalletTxs.js');
       const { txs: retriedTxs, failed: retriedFailed } = await fetchWalletTransactions(wallet, sinceMs, profileId, missing);
       await fetchAndCacheWalletTxs(wallet, profileId, sinceMs, retriedTxs);
       if (retriedFailed.length === 0) {
@@ -33,7 +33,9 @@ export async function doubleCheckWallet(wallet: string, cutoffH: number, profile
     if (pick && pick.release) {
       try { pick.release({ success: false }); } catch {}
     }
-    console.log(`[double-check] Errore durante doubleCheck per wallet=${wallet}:`, err);
+    const rpcName = pick?.endpoint?.name ?? 'unknown';
+    const rpcUrl = pick?.endpoint?.url ?? 'n/a';
+    console.log(`[double-check] Errore durante doubleCheck per wallet=${wallet} rpc=${rpcName} url=${rpcUrl}:`, err);
   }
 }
 

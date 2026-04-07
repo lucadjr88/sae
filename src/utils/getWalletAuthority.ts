@@ -1,4 +1,4 @@
-import { fetchSolanaAccountInfo } from './fetchSolanaAccountInfo';
+import { fetchSolanaAccountInfo } from './fetchSolanaAccountInfo.js';
 import bs58 from 'bs58';
 import { promises as fs } from 'fs';
 import path from 'path';

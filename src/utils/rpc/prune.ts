@@ -5,7 +5,15 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const RPC_POOL_COMPLETE = path.join(process.cwd(), 'utility', 'rpc-pool-complete.json');
-const PRUNED_RPC_STATS = path.join(process.cwd(), 'interna_cache', 'pruned_rpc.json');
+const LEGACY_PRUNED_RPC_STATS = path.join(process.cwd(), 'interna_cache', 'pruned_rpc.json');
+
+type RpcEndpoint = {
+  name?: string;
+  url?: string;
+  pruned?: number;
+  total?: number;
+  [key: string]: unknown;
+};
 
 type PrunedRpcStats = Record<string, string>;
 async function postGetSlot(url: string, timeout: number) {
@@ -63,9 +71,9 @@ async function postGetLatestBlockhash(url: string, timeout: number) {
     }
 }
 
-async function readPrunedRpcStats(): Promise<PrunedRpcStats> {
+async function readLegacyPrunedRpcStats(): Promise<PrunedRpcStats> {
   try {
-    const raw = await fs.readFile(PRUNED_RPC_STATS, 'utf8');
+    const raw = await fs.readFile(LEGACY_PRUNED_RPC_STATS, 'utf8');
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? parsed as PrunedRpcStats : {};
   } catch {
@@ -73,32 +81,51 @@ async function readPrunedRpcStats(): Promise<PrunedRpcStats> {
   }
 }
 
-function parseCounter(value: unknown): { pruned: number; totali: number } {
-  if (typeof value !== 'string') return { pruned: 0, totali: 0 };
-  const [prunedRaw, totaliRaw] = value.split('/');
-  const pruned = Number.parseInt(prunedRaw ?? '', 10);
-  const totali = Number.parseInt(totaliRaw ?? '', 10);
+function toSafeCounter(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function parseLegacyCounter(value: unknown): { pruned: number; total: number } {
+  if (typeof value !== 'string') return { pruned: 0, total: 0 };
+  const [prunedRaw, totalRaw] = value.split('/');
   return {
-    pruned: Number.isFinite(pruned) ? pruned : 0,
-    totali: Number.isFinite(totali) ? totali : 0,
+    pruned: toSafeCounter(prunedRaw),
+    total: toSafeCounter(totalRaw),
   };
 }
 
-async function updatePrunedRpcStats(endpoints: any[], healthyUrls: Set<string>): Promise<void> {
-  const current = await readPrunedRpcStats();
-  const next: PrunedRpcStats = { ...current };
-
-  for (const ep of endpoints) {
-    const key = typeof ep?.name === 'string' && ep.name.length > 0 ? ep.name : ep?.url;
-    if (typeof key !== 'string' || key.length === 0) continue;
-    const counters = parseCounter(current[key]);
-    const updatedPruned = counters.pruned + (healthyUrls.has(ep.url) ? 1 : 0);
-    const updatedTotali = counters.totali + 1;
-    next[key] = `${updatedPruned}/${updatedTotali}`;
+function readEndpointCounters(ep: RpcEndpoint, legacyStats: PrunedRpcStats): { pruned: number; total: number } {
+  if (ep.pruned !== undefined || ep.total !== undefined) {
+    return {
+      pruned: toSafeCounter(ep.pruned),
+      total: toSafeCounter(ep.total),
+    };
   }
 
-  await fs.mkdir(path.dirname(PRUNED_RPC_STATS), { recursive: true });
-  await fs.writeFile(PRUNED_RPC_STATS, JSON.stringify(next, null, 2), 'utf8');
+  const key = typeof ep?.name === 'string' && ep.name.length > 0 ? ep.name : ep?.url;
+  if (typeof key !== 'string' || key.length === 0) {
+    return { pruned: 0, total: 0 };
+  }
+
+  return parseLegacyCounter(legacyStats[key]);
+}
+
+async function updatePrunedRpcStats(endpoints: RpcEndpoint[], healthyUrls: Set<string>): Promise<void> {
+  const legacyStats = await readLegacyPrunedRpcStats();
+
+  for (const ep of endpoints) {
+    const counters = readEndpointCounters(ep, legacyStats);
+    const endpointUrl = typeof ep.url === 'string' ? ep.url : '';
+    ep.pruned = counters.pruned + (healthyUrls.has(endpointUrl) ? 1 : 0);
+    ep.total = counters.total + 1;
+  }
+
+  await fs.writeFile(RPC_POOL_COMPLETE, JSON.stringify(endpoints, null, 2), 'utf8');
 }
 
 export async function getSingleHealthyRpc(): Promise<string | null> {

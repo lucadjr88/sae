@@ -1,4 +1,4 @@
-import { setCache } from '../utils/cache';
+import { setCache } from '../utils/cache.js';
 
 export async function saveUnknownOps(profileId: string, unknownOps: any[]) {
   const fs = await import('fs/promises');

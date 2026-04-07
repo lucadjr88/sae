@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { normalizeRawTx } from './normalizeRawTx';
+import { normalizeRawTx } from './normalizeRawTx.js';
 
 // Legge tutte le transazioni raw dalla cache per un wallet/profileId
 export async function getCachedWalletTxs(wallet: string, profileId: string): Promise<any[]> {

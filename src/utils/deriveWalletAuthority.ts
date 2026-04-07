@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { getWalletAuthorityUtil } from './getWalletAuthority';
+import { getWalletAuthorityUtil } from './getWalletAuthority.js';
 
 // Deriva wallet authority da cache o RPC (fallback)
 export async function deriveWalletAuthority(fleets: any[], profileId: string) {

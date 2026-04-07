@@ -24,7 +24,7 @@
   border-radius: 8px;
   padding: 1%;
   margin-block: 15px;
-  border: 6px solid;
+  border: 10px solid;
   border-block-color: #390d48;
 }
 
@@ -53,15 +53,16 @@
 .window-content {
   padding: 20px;
   border-radius: 0 0 12px 12px;
-  flex-direction: row;
-  display: flex;
   gap: 3%;
+  display: flex;
+  justify-content: center;
 }
 
 .detail-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-radius: 8px;
 }
 
 .detail-item {
@@ -144,15 +145,13 @@
 
 /* Stile per i box di caricamento */
 .loading-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100px;
-  /* Altezza minima per non farlo collassare */
-  background: #fafafa;
-  border: 1px dashed #ccc;
-  /* Effetto "vuoto" in attesa */
-  border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100px;
+    background: #faceff;
+    border: 1px dashed #ccc;
+    border-radius: 8px;
 }
 
 .spinner-container {
@@ -332,15 +331,16 @@ input[type=number]::-webkit-outer-spin-button {
   margin: 0;
 }
 
-input[type=number] {
+/*input[type=number] {
   -moz-appearance: textfield;
-}
+}*/
 
 /* Firefox */
 
 .custom-number-input {
   display: flex;
   align-items: center;
+  padding: 1%;
 }
 
 .custom-number-input button {

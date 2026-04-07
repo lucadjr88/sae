@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { decodeSageOpsUtil } from '../../utils/decodeSageOps';
+import { decodeSageOpsUtil } from '../../utils/decodeSageOps.js';
 
 export async function decodeSageOpsHandler(req: Request, res: Response) {
   const wallet = req.query.wallet as string;

@@ -130,7 +130,7 @@
   border: none;
   padding: 7px 0 7px 0;
   border-radius: 0;
-  cursor: default;
+  cursor: pointer;
 }
 .profile-list-minimal-icon {
   margin-right: 10px;

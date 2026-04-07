@@ -1,8 +1,8 @@
 // Fetch e cache delle transazioni raw per un wallet
 // (mock: da implementare fetch reale via RPC)
 
-import { setCache } from './cache';
-import { normalizeRawTx } from './normalizeRawTx';
+import { setCache } from './cache.js';
+import { normalizeRawTx } from './normalizeRawTx.js';
 
 // Salva solo le tx passate (già filtrate e riuscite)
 export async function fetchAndCacheWalletTxs(walletPubkey: string, profileId: string, sinceMs: number, txs: any[] = []): Promise<any[]> {

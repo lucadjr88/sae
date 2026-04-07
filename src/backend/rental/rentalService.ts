@@ -9,7 +9,7 @@ import {
 	decodeCargo,
 	decodeAmmo,
 	decodeCrew,
-} from './decode';
+} from './decode.js';
 // Decodifica fedele a Rust/Borsh della struct Fleet per estrarre FleetState e settori
 // Aggiunge log di debug per ogni stato
 import * as fs from 'fs/promises';
@@ -17,8 +17,8 @@ import * as path from 'path';
 import bs58 from 'bs58';
 import { PublicKey, type AccountInfo, type Connection } from '@solana/web3.js';
 
-import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager';
-import type { ContractQueryOptions, FleetStarbase, RentalContract } from './types';
+import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager.js';
+import type { ContractQueryOptions, FleetStarbase, RentalContract } from './types.js';
 // ...existing code...
 // ...existing code...
 
@@ -351,10 +351,11 @@ export class RentalService {
 					waitForMs: 3000,
 					allowStale: attempt > 2,
 				});
-				console.log(`[rentalService] [executeRpc] Attempt ${attempt + 1}/${maxAttempts} for profileId=${profileId}`);
+				const endpointUrl = pick?.endpoint?.url ?? 'unknown-rpc';
+				//console.log(`[rentalService] [executeRpc] Attempt ${attempt + 1}/${maxAttempts} for profileId=${profileId} rpc=${endpointUrl}`);
 				const result = await operation(pick.connection as Connection);
 				pick.release({ success: true, latencyMs: Date.now() - startedAt });
-				console.log(`[rentalService] [executeRpc] Success for profileId=${profileId} in ${Date.now() - startedAt}ms`);
+				//console.log(`[rentalService] [executeRpc] Success for profileId=${profileId} rpc=${endpointUrl} in ${Date.now() - startedAt}ms`);
 				return result;
 			} catch (error) {
 				if (pick) {
@@ -365,7 +366,7 @@ export class RentalService {
 					});
 				}
 				lastError = error;
-				console.error(`[rentalService] [executeRpc] Error on attempt ${attempt + 1} for profileId=${profileId}:`, error);
+				console.error(`[rentalService] [executeRpc] Error on attempt ${attempt + 1} for profileId=${profileId} rpc=${pick?.endpoint?.url ?? 'unknown-rpc'}:`, error);
 			}
 		}
 

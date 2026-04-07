@@ -1,6 +1,6 @@
 // selector.ts
 // Seleziona endpoint dal pool (round robin, health-aware, pluggable)
-import { isHealthy } from './health-manager';
+import { isHealthy } from './health-manager.js';
 
 let lastIndex = 0;
 

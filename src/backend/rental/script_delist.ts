@@ -9,7 +9,7 @@ import {
 } from "@solana/spl-token";
 
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
-import { getRpcConnection } from "../../utils/rpc/connection";
+import { getRpcConnection } from "../../utils/rpc/connection.js";
 
 const router = express.Router();
 

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
-import { setCache, getCache } from '../../utils/cache';
+import { setCache, getCache } from '../../utils/cache.js';
 
 export async function playloadHandler(req: Request, res: Response) {
   const profileId = (req.query && req.query.profileId) as string;

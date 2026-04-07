@@ -10,10 +10,10 @@ import {
 } from "@solana/spl-token";
 
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
-import { getRpcConnection } from "../../utils/rpc/connection";
-import { deriveWalletAuthority } from "../../utils/deriveWalletAuthority";
-import { fetchProfileFleets } from "../../utils/fetchProfileFleets";
-import { getWalletAuthorityUtil } from "../../utils/getWalletAuthority";
+import { getRpcConnection } from "../../utils/rpc/connection.js";
+import { deriveWalletAuthority } from "../../utils/deriveWalletAuthority.js";
+import { fetchProfileFleets } from "../../utils/fetchProfileFleets.js";
+import { getWalletAuthorityUtil } from "../../utils/getWalletAuthority.js";
 
 const router = express.Router();
 

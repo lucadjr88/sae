@@ -6,11 +6,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { Connection } from '@solana/web3.js';
-import * as health from './health-manager';
-import * as concurrency from './concurrency-manager';
-import * as metrics from './metrics';
-import { pickNext } from './selector';
-import * as prune from './prune';
+import * as health from './health-manager.js';
+import * as concurrency from './concurrency-manager.js';
+import * as metrics from './metrics.js';
+import { pickNext } from './selector.js';
+import * as prune from './prune.js';
 
 const RPC_POOL_NAMESPACE = 'rpc-pool';
 const RPC_POOL_FILENAME = 'rpc-pool.json';

@@ -2,9 +2,9 @@
 import { Request, Response } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
-import { getWalletAuthorityUtil } from '../../utils/getWalletAuthority';
-import { getWalletTxsUtil } from '../../utils/getWalletTxs';
-import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager';
+import { getWalletAuthorityUtil } from '../../utils/getWalletAuthority.js';
+import { getWalletTxsUtil } from '../../utils/getWalletTxs.js';
+import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager.js';
 
 // GET /api/debug/get-wallet-txs?profileId=...&cutoffH=...
 export async function getWalletTxsHandler(req: Request, res: Response) {
@@ -14,7 +14,7 @@ export async function getWalletTxsHandler(req: Request, res: Response) {
         // Force refresh pool for double-check (keeps original behaviour)
         await RpcPoolManager.ensurePool(profileId, true);
         // Ricarica pool aggiornata e usa RpcPoolManager per la connessione
-        const { getCache } = await import("../../utils/cache");
+        const { getCache } = await import("../../utils/cache.js");
         let pick: any = null;
         try {
           pick = await (await import("../../utils/rpc/rpc-pool-manager.js")).RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 2000 });
@@ -34,8 +34,8 @@ export async function getWalletTxsHandler(req: Request, res: Response) {
           } else {
             console.log(`[double-check] wallet=${wallet} signature mancanti:`, missing);
             // Retry automatico: rilancio getWalletTxsUtil solo per le signature mancanti
-            const { fetchWalletTransactions } = await import("../../utils/solanaRpc");
-            const { fetchAndCacheWalletTxs } = await import("../../utils/fetchAndCacheWalletTxs");
+            const { fetchWalletTransactions } = await import("../../utils/solanaRpc.js");
+            const { fetchAndCacheWalletTxs } = await import("../../utils/fetchAndCacheWalletTxs.js");
             // Scarica solo le tx mancanti
             const { txs: retriedTxs, failed: retriedFailed } = await fetchWalletTransactions(wallet, sinceMs, profileId, missing);
             await fetchAndCacheWalletTxs(wallet, profileId, sinceMs, retriedTxs);
@@ -96,7 +96,7 @@ export async function getWalletTxsHandler(req: Request, res: Response) {
       results.push({ wallet: w.pubkey, txCount: txs.length });
       // Double-check dopo prune pool aggiornata (shared util)
       try {
-        const { doubleCheckWallet } = await import('../../utils/doubleCheckWallet');
+        const { doubleCheckWallet } = await import('../../utils/doubleCheckWallet.js');
         await doubleCheckWallet(w.pubkey, cutoffH, profileId);
       } catch (e) {
         console.log('[get-wallet-txs] doubleCheckWallet failed', e);

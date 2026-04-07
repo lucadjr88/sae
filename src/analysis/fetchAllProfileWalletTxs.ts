@@ -1,4 +1,4 @@
-import { fetchAndCacheWalletTxs } from '../utils/fetchAndCacheWalletTxs';
+import { fetchAndCacheWalletTxs } from '../utils/fetchAndCacheWalletTxs.js';
 
 export async function fetchAllProfileWalletTxs(profileId: string, walletAuthority: string, feePayer: string, sinceMs: number) {
   const txsAuthority = await fetchAndCacheWalletTxs(walletAuthority, profileId, sinceMs);
