@@ -30,7 +30,7 @@ body::before {
     position: fixed;
     bottom: 0%;
     right: 80%;
-    width: 19%;
+    width: 26vh;
     height: auto;
     z-index: 1000;
 }
@@ -39,7 +39,7 @@ body::before {
     position: fixed;
     bottom: 0%;
     right: 0%;
-    width: 19%;
+    width: 26vh;
     height: auto;
     z-index: 1000;
 
@@ -55,7 +55,11 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
 
 .character2 {
   bottom: 4%;
+      right: 70%;
+    width: 16vh;
 }
 .character3 {
   bottom: 4%;
+      right: -5%;
+    width: 16vh;
 }

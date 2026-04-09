@@ -1,11 +1,7 @@
 
 import { transact, Web3MobileWallet } from "@solana-mobile/mobile-wallet-adapter-protocol-web3js";
 import bs58 from "bs58";
-
-const APP_ORIGIN = typeof window !== 'undefined'
-  ? window.location.origin
-  : 'https://staratlasexplorer.duckdns.org';
-const APP_ICON_VERSION = '20260407b';
+import { APP_IDENTITY } from "./wallet-adapter";
 
 // Stato locale del modulo
 let session: any = null;
@@ -36,11 +32,7 @@ export async function connectMobileWallet() {
     const result: MobileWalletAuthorizeResult = await transact(async (wallet: Web3MobileWallet) => {
       return await wallet.authorize({
         chain: "solana:mainnet",
-        identity: {
-          name: "Star Atlas Explorer",
-          uri: APP_ORIGIN,
-          icon: `${APP_ORIGIN}/favicon512.png?v=${APP_ICON_VERSION}`,
-        },
+        identity: APP_IDENTITY,
       });
     });
     session = result;
