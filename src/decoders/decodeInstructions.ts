@@ -33,6 +33,7 @@ export type DecodedInstruction = {
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { describeNativeBinaryLookup, resolveNativeBinary } from '../utils/native-binaries.js';
 
 const TRADER_PROGRAM_ID = 'traderDnaR5w6Tcoi3NFm53i48FTDNbGjBSZwWXDRrg';
 const ATLAS_MINT = 'ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx';
@@ -234,10 +235,13 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
       return compiled.some((ix: any) => typeof ix.programIdIndex === 'number' && keys[ix.programIdIndex] === SAGE_PROGRAM_ID);
     });
   //const binPath = '/home/luca/sae/dist/backend/decoder/decode_fleets';
-  const binPath = path.join(process.cwd(), 'utility', 'bin', 'carbon_decoder');
-  const binExists = fs.existsSync(binPath);
+  const binPath = resolveNativeBinary('carbon_decoder');
+  const binExists = !!binPath;
   if (!binExists) {
-    console.warn(`[decodeInstructions] WARNING: binario decode_fleets NON TROVATO a ${binPath}. Tutte le operazioni saranno marcate come Unknown.`);
+    const lookup = describeNativeBinaryLookup('carbon_decoder');
+    console.warn(
+      `[decodeInstructions] WARNING: carbon_decoder NON TROVATO | cwd=${lookup.cwd} | candidates=${lookup.candidates.join(', ')}. Tutte le operazioni saranno marcate come Unknown.`
+    );
   }
   let decodedResults: any[] = [];
   // raccolta delle istruzioni SAGE (oggetti {programId,data,txIndex})

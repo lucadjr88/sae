@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import { Program } from '@project-serum/anchor';
 import { getRpcConnection } from '../../utils/rpc/connection.js';
 import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager.js';
+import { describeNativeBinaryLookup, resolveNativeBinary } from '../../utils/native-binaries.js';
 import bs58 from 'bs58';
 import fs from 'fs';
 const sageIdlPath = new URL('../idl/sage_idl.json', import.meta.url);
@@ -18,7 +19,13 @@ const router = express.Router();
 
 function runFleetInfoMinimalBinary(rpcUrl: string, fleetId: string): Promise<{ code: number | null; data: string; err: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn('./utility/bin/get_fleet_info_minimal', [rpcUrl, fleetId]);
+    const binaryPath = resolveNativeBinary('get_fleet_info_minimal');
+    if (!binaryPath) {
+      const lookup = describeNativeBinaryLookup('get_fleet_info_minimal');
+      return reject(new Error(`get_fleet_info_minimal not found | cwd=${lookup.cwd} | candidates=${lookup.candidates.join(', ')}`));
+    }
+
+    const child = spawn(binaryPath, [rpcUrl, fleetId]);
     let data = '';
     let err = '';
 
