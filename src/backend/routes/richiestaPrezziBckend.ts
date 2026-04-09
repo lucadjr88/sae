@@ -10,7 +10,9 @@ const PREZZI_BATCH_TOTAL_TIMEOUT_MS = 25_000;
 const MINT_FORMAT = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const KNOWN_MINT_ALIASES: Record<string, string> = {
   foodQJAztMzX1DKpLaiounNe2BDMds5RNuPC6jsNrDG9: 'foodQJAztMzX1DKpLaiounNe2BDMds5RNuPC6jsNrDG',
-  ammoK8AkX2wnebQb35cDAZtTkvsXQbi82cGETnUMvfaS: 'ammoK8AkX2wnebQb35cDAZtTkvsXQbi82cGeTnUvvfK'
+  ammoK8AkX2wnebQb35cDAZtTkvsXQbi82cGETnUMvfaS: 'ammoK8AkX2wnebQb35cDAZtTkvsXQbi82cGeTnUvvfK',
+  EqXFCQHVoo89UjSUqPbLLt1T6zRKhT3E13AzF3unUs9G: 'ammoK8AkX2wnebQb35cDAZtTkvsXQbi82cGeTnUvvfK',
+  '8pbBwqniQv23ZC6UngxeZMiaAWiv9G2N8ydKJquNRZ8E': 'fueL3hBZjLLLJHiFH9cqZoozTG3XQZ53diwFPwbzNim'
 };
 
 type PrezziBatchBody = {

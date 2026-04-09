@@ -2,7 +2,33 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../Scaricati/staratlasRepo"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.readonlyInclude": {
+			"/home/luca/Scaricati/staratlasRepo/**": true
+		},
+		"files.watcherExclude": {
+			"**/staratlasRepo/**": true,
+			"**/.gradle/**": true,
+			"**/node_modules/**": true
+		},
+		"java.project.importOnFirstTimeStartup": "disabled",
+		"java.import.gradle.enabled": false,
+		"java.import.maven.enabled": false,
+		"java.project.importHint": false,
+		"java.configuration.updateBuildConfiguration": "disabled",
+		"java.autobuild.enabled": false,
+		"java.import.exclusions": [
+			"**/node_modules/**",
+			"**/.metadata/**",
+			"**/archetype-resources/**",
+			"**/staratlasRepo/**",
+			"../Scaricati/staratlasRepo/**"
+		],
+		"gradle.autoDetect": "off"
+	}
 }

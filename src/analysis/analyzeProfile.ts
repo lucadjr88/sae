@@ -84,6 +84,33 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                         }
                     }
 
+                    const feeSnapshotMissing = !Array.isArray(payloadData.hourlyFees24h)
+                        || payloadData.hourlyFees24h.length !== 24
+                        || typeof payloadData.sageFees24h !== 'number'
+                        || typeof payloadData.transactionCount24h !== 'number';
+
+                    if (feeSnapshotMissing) {
+                        try {
+                            console.log('[analyze-profile] Cached playload missing fee snapshot, rebuilding fee summary');
+                            const fees = await buildFeesDetailed(profileId as string);
+                            payloadData = Object.assign({}, payloadData, {
+                                feesByFleet: fees.feesByFleet,
+                                feesByOperation: fees.feesByOperation,
+                                sageFees24h: fees.sageFees24h,
+                                hourlyFees24h: fees.hourlyFees24h,
+                                totalSignaturesFetched: fees.totalSignaturesFetched,
+                                transactionCount24h: fees.transactionCount24h,
+                                unknownOperations: fees.unknownOperations,
+                                fromCache: fees.fromCache,
+                                timeWindow: fees.timeWindow,
+                                firstTxTime: fees.firstTxTime,
+                            });
+                            await setCache('playload', 'latest', payloadData, profileId as string);
+                        } catch (feesCacheHitErr) {
+                            console.warn('[analyze-profile] Failed rebuilding fee snapshot on cache hit', feesCacheHitErr);
+                        }
+                    }
+
                     if (!payloadData.resourceFlows || typeof payloadData.resourceFlows !== 'object') {
                         try {
                             console.log('[analyze-profile] Cached playload missing resourceFlows, rebuilding Phase 8');
@@ -95,12 +122,20 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                         }
                     }
 
-                    console.log('[analyze-profile] Serving cached playload');
-                    if (cachedPlayload.savedAt) {
-                        res.set('X-Cache-Hit', 'disk');
-                        res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
+                    const suspiciousZeroPayload = Object.keys(payloadData.feesByFleet || {}).length === 0
+                        && Number(payloadData.transactionCount24h || 0) === 0
+                        && Number(payloadData.sageFees24h || 0) === 0;
+
+                    if (!suspiciousZeroPayload) {
+                        console.log('[analyze-profile] Serving cached playload');
+                        if (cachedPlayload.savedAt) {
+                            res.set('X-Cache-Hit', 'disk');
+                            res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
+                        }
+                        return res.json(payloadData);
                     }
-                    return res.json(payloadData);
+
+                    console.warn('[analyze-profile] Cached playload is all-zero, forcing a fresh recompute');
                 }
             } catch (cacheErr) {
                 console.log('[analyze-profile] No cached playload found, proceeding with analysis');
@@ -184,9 +219,11 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 feesByFleet: fees.feesByFleet,
                 feesByOperation: fees.feesByOperation,
                 sageFees24h: fees.sageFees24h,
+                hourlyFees24h: fees.hourlyFees24h,
                 totalSignaturesFetched: fees.totalSignaturesFetched,
                 transactionCount24h: fees.transactionCount24h,
                 fromCache: fees.fromCache,
+                timeWindow: fees.timeWindow,
                 firstTxTime: fees.firstTxTime
                 //breakdown: { feesByFleet: fees.feesByFleet }
             });

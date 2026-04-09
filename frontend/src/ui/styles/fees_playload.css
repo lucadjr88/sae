@@ -18,7 +18,9 @@
 }
 
 .chart-title {
-  font-size: 9px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 100%;
   color: #7a8ba0;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -31,6 +33,54 @@
   flex-direction: column;
   gap: 8px;
   max-width: 100%;
+}
+
+.hourly-fee-card {
+  margin-bottom: 12px;
+}
+
+
+.hourly-fee-subtitle {
+  margin-bottom: 8px;
+  color: #7a8ba0;
+  font-size: 9px;
+}
+
+.hourly-fee-chart {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  align-items: end;
+  gap: 3px;
+  height: 120px;
+  padding: 8px 0 4px;
+}
+
+.hourly-fee-bar-wrap {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.hourly-fee-bar {
+  width: 100%;
+  min-height: 4px;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, #60a5fa 0%, #34d399 100%);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.12);
+}
+
+.hourly-fee-bar.is-empty {
+  background: #273142;
+  box-shadow: none;
+  opacity: 0.65;
+}
+
+.hourly-fee-axis {
+  display: flex;
+  justify-content: space-between;
+  color: #7a8ba0;
+  font-size: 9px;
+  font-family: 'Roboto Mono', monospace;
 }
 
 .pie-chart {
@@ -282,6 +332,18 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
 
   .chart-container {
     gap: 6px;
+  }
+
+
+
+  .hourly-fee-subtitle,
+  .hourly-fee-axis {
+    font-size: 8px;
+  }
+
+  .hourly-fee-chart {
+    height: 92px;
+    gap: 2px;
   }
 
   .pie-chart {

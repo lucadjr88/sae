@@ -70,6 +70,30 @@ function extractOperationName(op: any): string {
   return (op.instructionName || op.instruction || 'Unknown').toString();
 }
 
+export function buildHourlyFeeSeries(points: Array<{ blockTime?: number | null; fee?: number | null }>, nowSec = Math.floor(Date.now() / 1000)): number[] {
+  const buckets = Array.from({ length: 24 }, () => 0);
+  const endSec = Math.floor(nowSec);
+  const startSec = endSec - (24 * 60 * 60);
+
+  points.forEach((point) => {
+    const blockTime = Number(point?.blockTime);
+    const fee = Number(point?.fee);
+
+    if (!Number.isFinite(blockTime) || !Number.isFinite(fee) || fee <= 0) {
+      return;
+    }
+    if (blockTime < startSec || blockTime > endSec) {
+      return;
+    }
+
+    const ageHours = Math.floor((endSec - blockTime) / 3600);
+    const bucketIndex = 23 - Math.min(23, Math.max(0, ageHours));
+    buckets[bucketIndex] += fee;
+  });
+
+  return buckets;
+}
+
 function identifyCraftingPhase(op: any): 'Start' | 'Complete' | null {
   // Analizza le operazioni decoded per identificare la fase di crafting
   if (!Array.isArray(op.decoded) || op.decoded.length === 0) return null;
@@ -131,6 +155,7 @@ export async function buildFeesDetailed(profileId: string) {
   const feesByOperation: Record<string, { count: number; totalFee: number; details?: any[] }> = {};
 
   const rentedFleetKeys = await loadRentedFleetKeys(profileId);
+  const hourlyFeePoints: Array<{ blockTime?: number | null; fee?: number | null }> = [];
 
   // process fleet-breakdowns
   const breakdownFiles = await fs.readdir(breakdownDir).catch(() => []);
@@ -155,6 +180,7 @@ export async function buildFeesDetailed(profileId: string) {
         firstTxTime = blockTime;
       }
       const fee = extractFee(op);
+      hourlyFeePoints.push({ blockTime, fee });
       fleetEntry.totalFee += fee;
       fleetEntry.totalOperations += 1;
       let opName = extractOperationName(op);
@@ -208,6 +234,7 @@ export async function buildFeesDetailed(profileId: string) {
       firstTxTime = blockTime;
     }
     const fee = extractFee(op);
+    hourlyFeePoints.push({ blockTime, fee });
     let opName = extractOperationName(op);
     
     // Check if this is a crafting operation by looking at decoded operations
@@ -255,10 +282,12 @@ export async function buildFeesDetailed(profileId: string) {
     feesByFleet,
     feesByOperation,
     sageFees24h,
+    hourlyFees24h: buildHourlyFeeSeries(hourlyFeePoints),
     totalSignaturesFetched: totalSigs,
     transactionCount24h: totalSigs - unknownOpsCount,
     unknownOperations: unknownOpsCount,
     fromCache: true,
+    timeWindow: '24h',
     firstTxTime: firstTxTime // timestamp in seconds
   };
 

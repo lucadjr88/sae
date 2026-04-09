@@ -6,7 +6,6 @@ import { TICKER_CONFIG } from './footBar';
 
 const atlasIcon = `<img style="width: 25%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/>`;
 
-
 type ResourceOperationStats = {
   in: number;
   out: number;
@@ -83,7 +82,9 @@ const HIDDEN_RESOURCE_MINTS = new Set([
 const RESOURCE_ATLAS_PRICE_SELL_CACHE = new Map<string, number | null>();
 const RESOURCE_ATLAS_PRICE_BUY_CACHE = new Map<string, number | null>();
 const DEFAULT_UNCHECKED_RESOURCE_OPS = new Set<string>([
-  'SB Upgrade'
+  'SB Upgrade',
+  'TraderMarketBuy',
+  'TraderMarketSell',
 ]);
 
 function isResourceOpCheckedByDefault(opName: string): boolean {
@@ -383,7 +384,7 @@ export function resolveMaterialImageCandidates(entry: MaterialEntry): string[] {
   return [imageUrl];
 }
 
-function resolveFirstTxTimeLabel(data: any): string {
+export function resolveFirstTxTimeLabel(data: any): string {
   let firstTxTimeLabel = 'N/A';
 
   try {
@@ -614,7 +615,8 @@ function buildResourceFlowTable(
     const materialImageCandidates = resolveMaterialImageCandidates(entry);
     const materialImage = materialImageCandidates[0] || '';
     const materialSymbol = entry.symbol || entry.mint.slice(0, 8);
-    const materialId = 'material-' + entry.mint.substring(0, 8);
+    const mintId = entry.mint;
+    const materialId = 'material-' + mintId.substring(0, 8);
 
     const hasOps = entry.operations && Object.keys(entry.operations).length > 0;
 
@@ -624,7 +626,7 @@ function buildResourceFlowTable(
     row.innerHTML = `
       <div class="resource-material-cell">
         <div class="resource-material-entry">
-          ${materialImage ? `<img class="resource-material-icon" src="${materialImage}" alt="${materialSymbol}" loading="lazy" decoding="async">` : ''}
+          ${materialImage ? `<img class="resource-material-icon" src="${materialImage}" alt="${materialSymbol}" loading="lazy" decoding="async" onclick="window.open('https://flaresplay.xyz/detail.html?id=${mintId}', '_blank')">` : ''}
           <div class="resource-material-text">
             <div class="resource-material-name">${entry.label}</div>
             <div class="resource-material-symbol">${materialSymbol}</div>
@@ -714,6 +716,8 @@ function buildResourceFlowTable(
   tableWrap.appendChild(table);
   return tableWrap;
 }
+
+
 
 export function displayResourceResults(data: any): void {
   const toggleMaterial = (materialId: string) => {

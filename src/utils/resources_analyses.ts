@@ -2,6 +2,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getCache, setCache } from './cache.js';
 
+const ATLAS_MINT = 'ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx';
+const MATERIAL_MINT_ALIASES: Record<string, string> = {
+  EqXFCQHVoo89UjSUqPbLLt1T6zRKhT3E13AzF3unUs9G: 'ammoK8AkX2wnebQb35cDAZtTkvsXQbi82cGeTnUvvfK',
+  '8pbBwqniQv23ZC6UngxeZMiaAWiv9G2N8ydKJquNRZ8E': 'fueL3hBZjLLLJHiFH9cqZoozTG3XQZ53diwFPwbzNim'
+};
+
 const MATERIAL_REGISTRY: Record<string, MaterialInfo> = {
   foodQJAztMzX1DKpLaiounNe2BDMds5RNuPC6jsNrDG: {
     name: 'Food',
@@ -167,6 +173,105 @@ type ResourceFlowSummary = {
   byOperation: Record<string, OperationResourceFlow>;
 };
 
+function normalizeMaterialMint(mint: string): string {
+  return MATERIAL_MINT_ALIASES[mint] || mint;
+}
+
+function getTraderInfo(op: any): { assetMint?: string; currencyMint?: string } | null {
+  const txTraderInfo = op?.txInfo?.traderInfo;
+  if (txTraderInfo && typeof txTraderInfo === 'object') {
+    return txTraderInfo;
+  }
+
+  if (Array.isArray(op?.decoded)) {
+    for (const entry of op.decoded) {
+      const trader = entry?.data?.trader;
+      if (trader && typeof trader === 'object') {
+        return trader;
+      }
+    }
+  }
+
+  return null;
+}
+
+function collectKnownMaterialHints(op: any): string[] {
+  const pre = Array.isArray(op?.txInfo?.preTokenBalances) ? op.txInfo.preTokenBalances : [];
+  const post = Array.isArray(op?.txInfo?.postTokenBalances) ? op.txInfo.postTokenBalances : [];
+  const hints = new Set<string>();
+
+  for (const balance of [...pre, ...post]) {
+    const mint = typeof balance?.mint === 'string' ? normalizeMaterialMint(balance.mint) : '';
+    if (!mint || mint === ATLAS_MINT) {
+      continue;
+    }
+    if (MATERIAL_REGISTRY[mint]) {
+      hints.add(mint);
+    }
+  }
+
+  return Array.from(hints);
+}
+
+function normalizeTraderOwnedFlows(
+  op: any,
+  operationKey: string,
+  flows: Map<string, { in: number; out: number }>
+): Map<string, { in: number; out: number }> {
+  const traderInfo = getTraderInfo(op);
+  const hintedMaterials = collectKnownMaterialHints(op);
+  const hintedAssetMint = hintedMaterials.length === 1 ? hintedMaterials[0] : null;
+  const traderAssetMint = normalizeMaterialMint(typeof traderInfo?.assetMint === 'string' ? traderInfo.assetMint : '');
+  const traderCurrencyMint = normalizeMaterialMint(typeof traderInfo?.currencyMint === 'string' ? traderInfo.currencyMint : ATLAS_MINT);
+  const canonicalAssetMint = hintedAssetMint || traderAssetMint || null;
+  const isBuy = operationKey.includes('tradermarketbuy');
+  const isSell = operationKey.includes('tradermarketsell');
+  const normalizedFlows = new Map<string, { in: number; out: number }>();
+
+  for (const [rawMint, flow] of flows.entries()) {
+    const normalizedMint = normalizeMaterialMint(rawMint);
+    const isKnownMaterial = Boolean(MATERIAL_REGISTRY[normalizedMint]);
+    let targetMint = normalizedMint;
+    let adjustedIn = flow.in;
+    let adjustedOut = flow.out;
+
+    if (isBuy) {
+      if (normalizedMint === traderCurrencyMint) {
+        adjustedIn = 0;
+        targetMint = traderCurrencyMint;
+      } else if (canonicalAssetMint && (!isKnownMaterial || normalizedMint === traderAssetMint)) {
+        adjustedOut = 0;
+        targetMint = canonicalAssetMint;
+      }
+    } else if (isSell) {
+      if (normalizedMint === traderCurrencyMint) {
+        adjustedOut = 0;
+        targetMint = traderCurrencyMint;
+      } else if (canonicalAssetMint && (!isKnownMaterial || normalizedMint === traderAssetMint)) {
+        adjustedIn = 0;
+        targetMint = canonicalAssetMint;
+      }
+    } else {
+      if (normalizedMint === traderCurrencyMint) {
+        targetMint = traderCurrencyMint;
+      } else if (canonicalAssetMint && (!isKnownMaterial || normalizedMint === traderAssetMint)) {
+        targetMint = canonicalAssetMint;
+      }
+    }
+
+    if (adjustedIn <= 0 && adjustedOut <= 0) {
+      continue;
+    }
+
+    const existing = normalizedFlows.get(targetMint) || { in: 0, out: 0 };
+    existing.in += adjustedIn;
+    existing.out += adjustedOut;
+    normalizedFlows.set(targetMint, existing);
+  }
+
+  return normalizedFlows;
+}
+
 function toUiAmount(amountRaw: unknown, decimalsRaw: unknown): number {
   const amount = Number(amountRaw);
   const decimals = Number(decimalsRaw);
@@ -201,14 +306,14 @@ function extractTokenDeltas(op: any): TokenDeltaResult {
 
     if (preBalance && !postBalance) {
       burned.push({
-        mint: preBalance.mint,
+        mint: normalizeMaterialMint(preBalance.mint),
         amount: toUiAmount(preBalance.uiTokenAmount?.amount, preBalance.uiTokenAmount?.decimals),
         owner: preBalance.owner || '',
         decimals: preBalance.uiTokenAmount.decimals
       });
     } else if (!preBalance && postBalance) {
       minted.push({
-        mint: postBalance.mint,
+        mint: normalizeMaterialMint(postBalance.mint),
         amount: toUiAmount(postBalance.uiTokenAmount?.amount, postBalance.uiTokenAmount?.decimals),
         owner: postBalance.owner || '',
         decimals: postBalance.uiTokenAmount.decimals
@@ -221,7 +326,7 @@ function extractTokenDeltas(op: any): TokenDeltaResult {
       if (delta !== 0) {
         deltas.push({
           accountIndex: idx,
-          mint: preBalance.mint,
+          mint: normalizeMaterialMint(preBalance.mint),
           owner: preBalance.owner,
           preAmount,
           postAmount,
@@ -252,19 +357,21 @@ function classifyTokenFlow(delta: TokenDelta, fleet: FleetInfo | null): TokenFlo
 }
 
 function getMaterialInfo(mint: string): Partial<MaterialInfo> {
-  if (MATERIAL_REGISTRY[mint]) {
-    return MATERIAL_REGISTRY[mint];
+  const normalizedMint = normalizeMaterialMint(mint);
+
+  if (MATERIAL_REGISTRY[normalizedMint]) {
+    return MATERIAL_REGISTRY[normalizedMint];
   }
 
-  const mintLower = mint.toLowerCase();
+  const mintLower = normalizedMint.toLowerCase();
   const byPrefix = MATERIAL_PREFIX_REGISTRY.find((entry) => mintLower.startsWith(entry.prefix));
   if (byPrefix) {
     return byPrefix.info;
   }
 
   return {
-    name: `Token ${mint.substring(0, 8)}...`,
-    symbol: mint.substring(0, 4).toUpperCase(),
+    name: `Token ${normalizedMint.substring(0, 8)}...`,
+    symbol: normalizedMint.substring(0, 4).toUpperCase(),
     category: 'unknown'
   };
 }
@@ -470,11 +577,19 @@ function canOperationClaimResources(operationName: string): boolean {
     return false;
   }
 
-  return key.includes('claimcraftingoutputs') || key.includes('mine') || key.includes('buy') || key.includes('scan');
+  if (key.includes('tradermarket')) {
+    return true;
+  }
+
+  return key.includes('claimcraftingoutputs') || key.includes('mine') || key.includes('buy') || key.includes('sell') || key.includes('exchange') || key.includes('scan');
 }
 
 function canOperationBurnResources(operationName: string): boolean {
   const key = normalizeOperationKey(operationName);
+
+  if (key.includes('tradermarket')) {
+    return true;
+  }
 
   if (key.includes('createstarbaseupgraderesourceprocess')) {
     return false;
@@ -609,6 +724,13 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
       : hasSubmitStarbaseUpgradeResource
         ? 'SubmitStarbaseUpgradeResource'
         : extractedOperationName;
+    const operationKey = normalizeOperationKey(operationName);
+    const isMoveSubwarpOperation = operationKey.includes('fleetstatehandlermovesubwarp');
+    const isTraderMarketOperation =
+      operationKey.includes('tradermarketbuy') ||
+      operationKey.includes('tradermarketsell') ||
+      operationKey.includes('tradermarketexchange');
+    const txSigner = typeof op.txInfo?.staticAccountKeys?.[0] === 'string' ? op.txInfo.staticAccountKeys[0].trim() : '';
     const operationCanClaim = canOperationClaimResources(operationName) || hasCraftingClaimOutputs;
     const operationCanBurn =
       canOperationBurnResources(operationName) ||
@@ -620,6 +742,14 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
     const burnOwners = new Set<string>();
     const claimMints = new Set<string>();
     const opOwnedOwners = new Set<string>(baseOwnedAccountOwners);
+
+    if (txSigner) {
+      opOwnedOwners.add(txSigner);
+      if (isTraderMarketOperation) {
+        claimOwners.add(txSigner);
+        burnOwners.add(txSigner);
+      }
+    }
 
     if (shouldDiscoverClaimOwners) {
       for (const delta of deltas.deltas) {
@@ -683,13 +813,7 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
       opRecord.fleets.push(fleetKey);
     }
 
-    const operationKey = normalizeOperationKey(operationName);
-    const isMoveSubwarpOperation = operationKey.includes('fleetstatehandlermovesubwarp');
-    const isTraderMarketOperation =
-      operationKey.includes('tradermarketbuy') ||
-      operationKey.includes('tradermarketsell') ||
-      operationKey.includes('tradermarketexchange');
-    const mintOwnedFlows = new Map<string, { in: number; out: number }>();
+    let mintOwnedFlows = new Map<string, { in: number; out: number }>();
     const mintGlobalFlows = new Map<string, { in: number; out: number }>();
 
     for (const delta of deltas.deltas) {
@@ -774,6 +898,10 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
         flow.out += burned.amount;
         mintOwnedFlows.set(burned.mint, flow);
       }
+    }
+
+    if (isTraderMarketOperation) {
+      mintOwnedFlows = normalizeTraderOwnedFlows(op, operationKey, mintOwnedFlows);
     }
 
     for (const [mint, flow] of mintOwnedFlows.entries()) {

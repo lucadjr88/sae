@@ -25,6 +25,8 @@ export type DecodedInstruction = {
     postTokenBalances?: any[];
     logMessages?: string[];
     innerInstructions?: any[];
+    accountKeys?: any[];
+    traderInfo?: any;
   };
 };
 
@@ -34,6 +36,91 @@ import * as path from 'path';
 
 const TRADER_PROGRAM_ID = 'traderDnaR5w6Tcoi3NFm53i48FTDNbGjBSZwWXDRrg';
 const ATLAS_MINT = 'ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx';
+const TRADER_PROCESS_EXCHANGE_DISCRIMINATOR = Buffer.from([112, 194, 63, 99, 52, 147, 85, 48]);
+
+function normalizePubkeyLike(value: any): string {
+  if (typeof value === 'string') return value;
+  if (typeof value?.pubkey === 'string') return value.pubkey;
+  if (typeof value?.toBase58 === 'function') return value.toBase58();
+  if (typeof value?.toString === 'function') return value.toString();
+  return '';
+}
+
+function decodeInstructionDataBytes(data: any): Buffer {
+  if (!data) return Buffer.alloc(0);
+  if (Buffer.isBuffer(data)) return data;
+  if (Array.isArray(data)) return Buffer.from(data);
+  if (typeof data === 'string') {
+    try {
+      const bs58 = require('bs58');
+      return Buffer.from(bs58.decode(data));
+    } catch {
+      try {
+        return Buffer.from(data, 'base64');
+      } catch {
+        return Buffer.alloc(0);
+      }
+    }
+  }
+  if (typeof data === 'object' && data.type === 'Buffer' && Array.isArray(data.data)) {
+    return Buffer.from(data.data);
+  }
+  return Buffer.alloc(0);
+}
+
+function getAllAccountKeys(tx: any): string[] {
+  const messageKeys = tx?.transaction?.message?.staticAccountKeys ?? tx?.transaction?.message?.accountKeys;
+  const staticKeys = Array.isArray(messageKeys) ? messageKeys.map((key: any) => normalizePubkeyLike(key)) : [];
+  const loadedWritable = Array.isArray(tx?.meta?.loadedAddresses?.writable)
+    ? tx.meta.loadedAddresses.writable.map((key: any) => normalizePubkeyLike(key))
+    : [];
+  const loadedReadonly = Array.isArray(tx?.meta?.loadedAddresses?.readonly)
+    ? tx.meta.loadedAddresses.readonly.map((key: any) => normalizePubkeyLike(key))
+    : [];
+
+  return [...staticKeys, ...loadedWritable, ...loadedReadonly].filter(Boolean);
+}
+
+function extractTraderInstructionContext(tx: any): Record<string, any> | null {
+  const accountKeys = getAllAccountKeys(tx);
+  const compiled = tx?.transaction?.message?.compiledInstructions;
+  if (!Array.isArray(compiled) || accountKeys.length === 0) {
+    return null;
+  }
+
+  for (const ix of compiled) {
+    if (typeof ix?.programIdIndex !== 'number' || accountKeys[ix.programIdIndex] !== TRADER_PROGRAM_ID) {
+      continue;
+    }
+
+    const bytes = decodeInstructionDataBytes(ix.data);
+    if (bytes.length < 8 || !bytes.subarray(0, 8).equals(TRADER_PROCESS_EXCHANGE_DISCRIMINATOR)) {
+      continue;
+    }
+
+    const accountIndexes = Array.isArray(ix.accountKeyIndexes)
+      ? ix.accountKeyIndexes
+      : Array.isArray(ix.accounts)
+        ? ix.accounts
+        : [];
+    const resolvedAccounts = accountIndexes.map((idx: any) => accountKeys[Number(idx)] || '');
+
+    return {
+      source: 'processExchange',
+      orderTaker: resolvedAccounts[0] || '',
+      orderTakerDepositTokenAccount: resolvedAccounts[1] || '',
+      orderTakerReceiveTokenAccount: resolvedAccounts[2] || '',
+      currencyMint: resolvedAccounts[3] || '',
+      assetMint: resolvedAccounts[4] || '',
+      orderInitializer: resolvedAccounts[5] || '',
+      initializerDepositTokenAccount: resolvedAccounts[6] || '',
+      initializerReceiveTokenAccount: resolvedAccounts[7] || '',
+      resolvedAccounts
+    };
+  }
+
+  return null;
+}
 
 function parseUiAmount(balance: any): number {
   const ui = balance?.uiTokenAmount;
@@ -68,7 +155,9 @@ function inferTraderSemantic(tx: any): { name: string; source: string } | null {
     return null;
   }
 
-  const signer = tx?.transaction?.message?.staticAccountKeys?.[0];
+  const signer = getAllAccountKeys(tx)[0] || normalizePubkeyLike(
+    tx?.transaction?.message?.staticAccountKeys?.[0] ?? tx?.transaction?.message?.accountKeys?.[0]
+  );
   const preTokenBalances = Array.isArray(tx?.meta?.preTokenBalances) ? tx.meta.preTokenBalances : [];
   const postTokenBalances = Array.isArray(tx?.meta?.postTokenBalances) ? tx.meta.postTokenBalances : [];
   const preByIndex = new Map<number, any>(
@@ -139,22 +228,11 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
   const sageTxs = txsRaw
     .map((tx, i) => ({ tx, i }))
     .filter(({ tx }) => {
-      const keys = tx.transaction?.message?.staticAccountKeys;
+      const keys = getAllAccountKeys(tx);
       const compiled = tx.transaction?.message?.compiledInstructions;
-      if (!Array.isArray(keys) || !Array.isArray(compiled)) return false;
+      if (!Array.isArray(compiled) || keys.length === 0) return false;
       return compiled.some((ix: any) => typeof ix.programIdIndex === 'number' && keys[ix.programIdIndex] === SAGE_PROGRAM_ID);
     });
-  if (sageTxs.length === 0) {
-    const result = txsRaw.map((tx, i) => ({
-      index: i,
-      programId: tx.programIds ? tx.programIds[0] : '',
-      instructionName: 'Unknown',
-      error: 'Not SAGE',
-      success: false
-    }));
-    console.log(`[decodeInstructions] SAGE ops decodificate: 0, unknown: ${result.length}`);
-    return result;
-  }
   //const binPath = '/home/luca/sae/dist/backend/decoder/decode_fleets';
   const binPath = path.join(process.cwd(), 'utility', 'bin', 'carbon_decoder');
   const binExists = fs.existsSync(binPath);
@@ -168,9 +246,9 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
     // Estrai tutte le istruzioni SAGE da tutte le tx
     // Conserviamo anche il riferimento al tx index così possiamo rimappare i risultati (1 result per istruzione)
     for (const { tx, i: txIdx } of sageTxs) {
-      const keys = tx.transaction?.message?.staticAccountKeys;
+      const keys = getAllAccountKeys(tx);
       const compiled = tx.transaction?.message?.compiledInstructions;
-      if (!Array.isArray(keys) || !Array.isArray(compiled)) continue;
+      if (!Array.isArray(compiled) || keys.length === 0) continue;
       for (const ix of compiled) {
         if (typeof ix.programIdIndex === 'number' && keys[ix.programIdIndex] === SAGE_PROGRAM_ID) {
           let dataHex = '';
@@ -244,13 +322,17 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
     if (!signature && tx.raw && tx.raw.signature) signature = tx.raw.signature;
     if (!signature && tx.raw && Array.isArray(tx.raw.signatures) && tx.raw.signatures.length > 0) signature = tx.raw.signatures[0];
     // Estrai info chiave dalla tx raw
+    const accountKeys = getAllAccountKeys(tx);
+    const traderInfo = extractTraderInstructionContext(tx);
     const txInfo = {
       blockTime: tx.blockTime,
       fee: tx.meta?.fee,
       status: tx.meta?.err === null ? 'Ok' : tx.meta?.err,
       slot: tx.slot,
       meta: tx.meta,
-      staticAccountKeys: tx.transaction?.message?.staticAccountKeys,
+      staticAccountKeys: accountKeys,
+      accountKeys,
+      traderInfo,
       instructions: tx.transaction?.message?.compiledInstructions,
       addressTableLookups: tx.transaction?.message?.addressTableLookups,
       preBalances: tx.meta?.preBalances,
@@ -269,13 +351,15 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
         if (si && si.txIndex === i) decodedForTx.push(dr);
       }
     }
+
+    const traderSemantic = inferTraderSemantic(tx);
+
     if (decodedForTx.length > 0) {
-      const traderSemantic = inferTraderSemantic(tx);
       if (traderSemantic) {
         const semanticEntry = {
           success: true,
           name: traderSemantic.name,
-          data: { source: traderSemantic.source }
+          data: { source: traderSemantic.source, trader: traderInfo }
         };
 
         if (decodedForTx[0]?.name === 'FleetStateHandler') {
@@ -310,6 +394,20 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
         txInfo
       };
     }
+
+    if (traderSemantic) {
+      return {
+        index: i,
+        programId: TRADER_PROGRAM_ID,
+        instructionName: traderSemantic.name,
+        decoded: [{ success: true, name: traderSemantic.name, data: { source: traderSemantic.source, trader: traderInfo } }],
+        success: true,
+        error: null,
+        signature,
+        txInfo
+      };
+    }
+
     return {
       index: i,
       programId: tx.programIds ? tx.programIds[0] : '',

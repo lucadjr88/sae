@@ -24,6 +24,9 @@ import { createLoadingElement } from '@/ui/elements/loading';
 import { analyzeFees } from '@/services/api';
 import { createManualLoginElement } from '@/ui/elements/manualLogin';
 
+import personaggio2 from '@/assets/personaggio2.png';
+import personaggio3 from '@/assets/personaggio3.png';
+
 export function createHomePage(): void {
   const mainContainer = document.querySelector<HTMLDivElement>('#mainContainer')!;
 
@@ -49,6 +52,18 @@ export function createHomePage(): void {
   const priceTickerBar = document.createElement('div');
   priceTickerBar.id = 'price-ticker-container';
   priceTickerBar.appendChild(createFootBarElement());
+
+  // Aggiungiamo il personaggio in basso a destra
+  const character2 = document.createElement('img');
+  character2.src = personaggio2;
+  character2.className = 'character2';
+  mainContainer.appendChild(character2);
+
+  // Aggiungiamo il personaggio in basso a destra
+  const character3 = document.createElement('img');
+  character3.src = personaggio3;
+  character3.className = 'character3';
+  mainContainer.appendChild(character3);
 
   mainContainer.appendChild(heroDiv);
   mainContainer.appendChild(startDiv);

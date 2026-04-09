@@ -10,9 +10,156 @@ import { createResultPage } from '@/resultpage';
 
 type OpStats = { totalFee: number; count: number };
 type FleetFeeEntry = { totalFee: number; feePercentage?: number; totalOperations?: number; isRented?: boolean; isListed?: boolean; isLoaned?: boolean; operations?: Record<string, OpStats> };
-type TxLite = { blockTime?: number; timestamp?: number };
-type DisplayData = { feesByFleet: Record<string, FleetFeeEntry>; feesByOperation?: Record<string, OpStats>; sageFees24h: number; transactionCount24h: number; unknownOperations: number; transactions?: TxLite[]; allTransactions?: TxLite[]; firstTxTime?: number };
+type TxLite = {
+  blockTime?: number;
+  timestamp?: number;
+  fee?: number;
+  meta?: { fee?: number };
+  txInfo?: { fee?: number; meta?: { fee?: number } };
+};
+type DisplayData = {
+  feesByFleet: Record<string, FleetFeeEntry>;
+  feesByOperation?: Record<string, OpStats>;
+  sageFees24h: number;
+  transactionCount24h: number;
+  unknownOperations: number;
+  transactions?: TxLite[];
+  allTransactions?: TxLite[];
+  firstTxTime?: number;
+  hourlyFees24h?: number[];
+  timeWindow?: string;
+};
 type FleetMeta = { key: string; callsign?: string; isRented?: boolean; isListed?: boolean; isLoaned?: boolean; data?: { fleetShips?: string } };
+
+function lamportsToSol(value: number | undefined | null): number {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue / 1e9 : 0;
+}
+
+function resolveFirstTxTimeLabel(data: DisplayData): string {
+  let firstTxTimeLabel = 'N/A';
+
+  try {
+    const txs = (data?.transactions?.length ? data.transactions : data?.allTransactions) ?? [];
+
+    if (data?.firstTxTime) {
+      const date = new Date(data.firstTxTime * 1000);
+      return date.toLocaleString();
+    }
+
+    if (txs.length) {
+      const times = txs
+        .map((tx) => {
+          if (tx.blockTime) return new Date(tx.blockTime * 1000);
+          if (tx.timestamp) return new Date(tx.timestamp);
+          return null;
+        })
+        .filter(Boolean) as Date[];
+
+      if (times.length) {
+        const earliest = new Date(Math.min(...times.map((date) => date.getTime())));
+        firstTxTimeLabel = earliest.toLocaleString();
+      }
+    }
+  } catch {
+    return firstTxTimeLabel;
+  }
+
+  return firstTxTimeLabel;
+}
+
+function normalizeHourlyFeeSeries(hourlyFees?: number[]): number[] {
+  return Array.from({ length: 24 }, (_, index) => {
+    const sourceIndex = (hourlyFees?.length ?? 0) - 24 + index;
+    const value = sourceIndex >= 0 ? Number(hourlyFees?.[sourceIndex] ?? 0) : 0;
+    return Number.isFinite(value) ? value : 0;
+  });
+}
+
+function buildHourlyFeeSeriesFromTransactions(data: DisplayData): number[] {
+  const txs = (data?.transactions?.length ? data.transactions : data?.allTransactions) ?? [];
+  const nowSec = Math.floor(Date.now() / 1000);
+  const buckets = Array.from({ length: 24 }, () => 0);
+
+  txs.forEach((tx) => {
+    const rawTimestamp = Number(tx?.blockTime ?? (tx?.timestamp ? Math.floor(Number(tx.timestamp) / 1000) : NaN));
+    const rawFee = Number(tx?.fee ?? tx?.meta?.fee ?? tx?.txInfo?.fee ?? tx?.txInfo?.meta?.fee ?? 0);
+
+    if (!Number.isFinite(rawTimestamp) || !Number.isFinite(rawFee) || rawFee <= 0) {
+      return;
+    }
+
+    const ageHours = Math.floor((nowSec - rawTimestamp) / 3600);
+    if (ageHours < 0 || ageHours > 23) {
+      return;
+    }
+
+    buckets[23 - ageHours] += rawFee;
+  });
+
+  return buckets;
+}
+
+function renderHourlyFeeChart(hourlyFeesLamports: number[]): HTMLDivElement {
+  const series = normalizeHourlyFeeSeries(hourlyFeesLamports);
+  const totalLamports = series.reduce((sum, value) => sum + value, 0);
+  const maxLamports = Math.max(...series, 0);
+
+  const card = document.createElement('div');
+  card.className = 'chart-card hourly-fee-card';
+
+  const title = document.createElement('div');
+  title.className = 'chart-title';
+  title.innerHTML = `
+  <span>Hourly Fees (last 24h)</span>
+  <span>peak ${lamportsToSol(maxLamports).toFixed(4)} SOL/h</span>
+  `;
+
+
+
+  const subtitle = document.createElement('div');
+  subtitle.className = 'hourly-fee-subtitle';
+  subtitle.textContent = totalLamports > 0
+    ? 'Each column represents one hour. Hover or tap for the SOL value.'
+    : 'No fee activity detected in the current 24h window.';
+
+  const chart = document.createElement('div');
+  chart.className = 'hourly-fee-chart';
+
+  const now = new Date();
+  series.forEach((feeLamports, index) => {
+    const hoursAgo = 23 - index;
+    const bucketTime = new Date(now.getTime() - (hoursAgo * 60 * 60 * 1000));
+    const barWrap = document.createElement('div');
+    barWrap.className = 'hourly-fee-bar-wrap';
+
+    const bar = document.createElement('div');
+    bar.className = `hourly-fee-bar${feeLamports <= 0 ? ' is-empty' : ''}`;
+    const heightPct = maxLamports > 0 ? Math.max(6, (feeLamports / maxLamports) * 100) : 6;
+    bar.style.height = `${heightPct}%`;
+    bar.title = `${bucketTime.getHours().toString().padStart(2, '0')}:00 · ${lamportsToSol(feeLamports).toFixed(4)} SOL`;
+
+    barWrap.appendChild(bar);
+    chart.appendChild(barWrap);
+  });
+
+  const axis = document.createElement('div');
+  axis.className = 'hourly-fee-axis';
+  axis.innerHTML = `
+    <span>-23h</span>
+    <span>-18h</span>
+    <span>-12h</span>
+    <span>-6h</span>
+    <span>now</span>
+  `;
+
+  card.appendChild(title);
+  card.appendChild(subtitle);
+  card.appendChild(chart);
+  card.appendChild(axis);
+
+  return card;
+}
 
 // Placeholder for displayFeeResults - will be implemented when UI module is complete
 export function displayFeeResults(data: DisplayData, fleetNames: Record<string, string>, _fleetIsRented: Record<string, boolean>, fleets: FleetMeta[] = []): void {
@@ -118,7 +265,6 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   // Prefer breakdown embedded by the server when present (fallback to top-level fields)
   const feesByFleet = (data && data.feesByFleet) ? data.feesByFleet : {};
   const feesByOperation = (data && data.feesByOperation) ? data.feesByOperation : (data && (data as any).breakdown && (data as any).breakdown.feesByOperation ? (data as any).breakdown.feesByOperation : {});
-  const txs = (data.transactions?.length ? data.transactions : data.allTransactions) ?? [];
 
   // Prepare data for charts - Include all fleets, even those with 0 fees
   const completeFeesByFleet: Record<string, FleetFeeEntry> = { ...feesByFleet };
@@ -135,7 +281,6 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
       console.warn('[displayFeeResults] Skipping fleet - no valid key found for aliases:', aliases);
       return;
     }
-    displayFeeResults
     completeFeesByFleet[keyToAdd] = {
       totalFee: 0,
       feePercentage: 0,
@@ -200,34 +345,15 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   //console.log('[displayFeeResults] Top 5 fleets:', sortedFleets.slice(0, 5).map(([name, data]) => ({ name: fleetNames[name] || name, fee: data.totalFee })));
   //console.log('[displayFeeResults] Top 5 operations:', sortedOps.slice(0, 5).map(([name, data]) => ({ name, fee: data.totalFee })));
 
-  // Determine earliest transaction time
-  let firstTxTimeLabel = 'N/A';
-  try {
-    if (data.firstTxTime) {
-      const date = new Date(data.firstTxTime * 1000);
-      firstTxTimeLabel = date.toLocaleString();
-    } else if (txs.length) {
-      const times = txs.map(t => {
-        if (t.blockTime) return new Date(t.blockTime * 1000);
-        if (t.timestamp) return new Date(t.timestamp);
-        return null;
-      }).filter(Boolean) as Date[];
-      if (times.length) {
-        const earliest = new Date(Math.min(...times.map(d => d.getTime())));
-        firstTxTimeLabel = earliest.toLocaleString();
-      }
-    }
-  } catch (e) {
-    console.warn('[displayFeeResults] Could not compute first transaction time:', e);
-  }
-
   // Svuotiamo il contenitore prima di iniziare (equivalente a sovrascrivere innerHTML)
   feeResults.innerHTML = '';
 
   // 1. Analysis Period
   const analysisPeriod = document.createElement('div');
   analysisPeriod.className = 'analysis-period';
-  analysisPeriod.textContent = `Fees for operations in the last 24h from: ${firstTxTimeLabel}`;
+  const feeWindowLabel = data.timeWindow || '24h';
+  const feeFirstTxTimeLabel = resolveFirstTxTimeLabel(data);
+  analysisPeriod.textContent = `Fees for operations in the last ${feeWindowLabel} from: ${feeFirstTxTimeLabel}`;
 
   const timerSpan = document.createElement('span');
   timerSpan.className = 'timer timer-emphasis';
@@ -277,13 +403,13 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   const valueFees = document.createElement('div');
   valueFees.className = 'stat-value highlight';
 
-  const solAmount = (data.sageFees24h / 1e9).toFixed(6);
+  const solAmount = lamportsToSol(data.sageFees24h).toFixed(6);
   valueFees.textContent = `${solAmount} SOL `;
 
   const valueUsd = document.createElement('span');
   valueUsd.className = 'value-usd';
   const usdPrice = (prices?.solana?.usd && typeof prices.solana.usd === 'number')
-    ? ((data.sageFees24h / 1e9) * prices.solana.usd).toFixed(2)
+    ? (lamportsToSol(data.sageFees24h) * prices.solana.usd).toFixed(2)
     : '--';
   valueUsd.textContent = `($${usdPrice})`;
 
@@ -294,6 +420,9 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   statsGrid.appendChild(statCardTrans);
   statsGrid.appendChild(statCardFees);
   feeResults.appendChild(statsGrid);
+
+  const hourlyFeeChart = renderHourlyFeeChart(data.hourlyFees24h || buildHourlyFeeSeriesFromTransactions(data));
+  feeResults.appendChild(hourlyFeeChart);
 
   // 3. Charts Row (Helper rapido per le due chart uguali)
   const chartsRow = document.createElement('div');

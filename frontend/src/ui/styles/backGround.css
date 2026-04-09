@@ -44,6 +44,15 @@ mask-image: linear-gradient(to bottom,
 ) !important;
 }
 
+.loading-character {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  width: 23%;
+  height: auto;
+  z-index: 1000;
+}
+
 .app-version {
   position: fixed;
   top: 16px;

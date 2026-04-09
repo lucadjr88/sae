@@ -1,7 +1,7 @@
 // profileFaction account is resolved server-side; this module only handles UI/icon mapping and local cache reuse.
-import mudWhiteIcon from '@/assets/icons/mud_w.png';
-import oniWhiteIcon from '@/assets/icons/oni_w.png';
-import usturWhiteIcon from '@/assets/icons/ustur_w.png';
+import mudIcon from '@/assets/icons/mud.png';
+import oniIcon from '@/assets/icons/oni.png';
+import usturIcon from '@/assets/icons/ustur.png';
 
 export type ProfileFactionName = 'mud' | 'oni' | 'ustur';
 
@@ -61,9 +61,9 @@ export function getProfileFactionLabel(faction: unknown): string | null {
 
 export function getProfileFactionIconSrc(faction: unknown): string | null {
   const normalized = normalizeProfileFaction(faction);
-  if (normalized === 'mud') return mudWhiteIcon;
-  if (normalized === 'oni') return oniWhiteIcon;
-  if (normalized === 'ustur') return usturWhiteIcon;
+  if (normalized === 'mud') return mudIcon;
+  if (normalized === 'oni') return oniIcon;
+  if (normalized === 'ustur') return usturIcon;
   return null;
 }
 
