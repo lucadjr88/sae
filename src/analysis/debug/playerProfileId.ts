@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PublicKey } from '@solana/web3.js';
 import { findPlayerProfilesForWalletWithRpc } from '../../utils/derivePlayerProfilePDA.js';
 import { getCache } from '../../utils/cache.js';
+import { getProfileFactionUtil } from '../../utils/getProfileFaction.js';
 
 export async function playerProfileIdHandler(req: Request, res: Response) {
   const wallet = req.query.wallet as string;
@@ -21,13 +22,22 @@ export async function playerProfileIdHandler(req: Request, res: Response) {
           const cachedMeta = await getCache('', profileId, profileId);
           const playloadData = cachedPlayload?.data || {};
           const metaData = cachedMeta?.data || cachedMeta || {};
-          const profileFaction = playloadData.profileFaction ?? metaData.profileFaction ?? null;
-          const profileFactionId = playloadData.profileFactionId ?? metaData.profileFactionId ?? null;
+          let profileFaction = playloadData.profileFaction ?? metaData.profileFaction ?? null;
+          let profileFactionId = playloadData.profileFactionId ?? metaData.profileFactionId ?? null;
+          let profileFactionAccount = playloadData.profileFactionAccount ?? metaData.profileFactionAccount ?? null;
+
+          if (profileFaction == null && profileFactionId == null && !profileFactionAccount) {
+            const resolvedFaction = await getProfileFactionUtil(profileId);
+            profileFaction = resolvedFaction.profileFaction ?? profileFaction;
+            profileFactionId = resolvedFaction.profileFactionId ?? profileFactionId;
+            profileFactionAccount = resolvedFaction.profileFactionAccount ?? profileFactionAccount;
+          }
 
           return {
             ...profile,
             profileFaction,
             profileFactionId,
+            profileFactionAccount,
           };
         } catch {
           return profile;

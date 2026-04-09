@@ -17,7 +17,7 @@ import { createPrivacyPolicyStartElement } from '@/ui/elements/privacyPolicy';
 import { createFootBarElement } from '@/ui/elements/footBar';
 import { createBackground } from '@/ui/elements/backGround';
 import { connectedWalletIcon } from '@/utils/state';
-import { applyProfileFactionIcon, getCachedProfileFaction, normalizeProfileFaction, renderProfileFactionIconMarkup } from '@/utils/faction';
+import { applyProfileFactionIcon, getCachedProfileFaction, normalizeProfileFaction, renderProfileFactionIconMarkup, saveProfileFactionToCache } from '@/utils/faction';
 import defaultWalletIcon from '@/assets/icons/seedvault2.png';
 
 import { createLoadingElement } from '@/ui/elements/loading';
@@ -136,9 +136,10 @@ export async function getWalletConnection(wallet: any) {
         html = data.variants
           .filter((v: any) => v.profileId)
           .map((v: any, idx: number, arr: any[]) => {
-            const cachedFaction = v.profileFaction ?? v.profileFactionId ?? getCachedProfileFaction(v.profileId);
-            const normalizedFaction = normalizeProfileFaction(cachedFaction) ?? '';
-            return `<div class=\"profile-list-minimal-item\" data-profileid=\"${v.profileId}\" data-profile-faction=\"${normalizedFaction}\">\n  <span class=\"profile-list-minimal-icon profile-list-minimal-icon-primary\">${renderProfileFactionIconMarkup(cachedFaction)}</span>\n  <span class=\"profile-list-minimal-id\">${v.profileId}</span>\n</div>\n${idx < arr.length - 1 ? '<div class=\\"profile-list-minimal-divider\\"></div>' : ''}`;
+            const resolvedFaction = saveProfileFactionToCache(v.profileId, v.profileFaction ?? v.profileFactionId)
+              ?? getCachedProfileFaction(v.profileId);
+            const normalizedFaction = normalizeProfileFaction(resolvedFaction) ?? '';
+            return `<div class=\"profile-list-minimal-item\" data-profileid=\"${v.profileId}\" data-profile-faction=\"${normalizedFaction}\">\n  <span class=\"profile-list-minimal-icon profile-list-minimal-icon-primary\">${renderProfileFactionIconMarkup(resolvedFaction)}</span>\n  <span class=\"profile-list-minimal-id\">${v.profileId}</span>\n</div>\n${idx < arr.length - 1 ? '<div class=\\"profile-list-minimal-divider\\"></div>' : ''}`;
           }).join('');
         if (titleDiv) {
           titleDiv.textContent = 'CHOOSE PLAYER PROFILE';

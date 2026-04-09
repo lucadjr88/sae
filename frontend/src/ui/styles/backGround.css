@@ -86,4 +86,10 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     right: 12px;
     font-size: 11px;
   }
+
+  .loading-character {
+        bottom: 16vh;
+    left: 0vh;
+    width: 20vh;
+  }
 }

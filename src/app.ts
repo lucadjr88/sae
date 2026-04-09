@@ -1,6 +1,7 @@
 
 import 'dotenv/config.js';
 import express from 'express';
+import { installProcessLogContext } from './utils/log-context.js';
 import analyzeProfileRouter from './analysis/analyzeProfile.js';
 import debugRouter from './analysis/debug/index.js';
 import getFleetsRouter from './backend/routes/get-fleets.js';
@@ -13,6 +14,8 @@ import resourceFlowsRouter from './backend/routes/resource-flows.js';
 import assetsRouter from './backend/routes/assets.js';
 import rentalRouter from './backend/routes/rental.js';
 import { startNonInvasiveMetricsLogger } from './utils/rpc/metrics.js';
+
+installProcessLogContext();
 
 const PORT = 3000;
 

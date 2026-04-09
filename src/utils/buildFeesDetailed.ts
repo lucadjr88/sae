@@ -156,6 +156,7 @@ export async function buildFeesDetailed(profileId: string) {
 
   const rentedFleetKeys = await loadRentedFleetKeys(profileId);
   const hourlyFeePoints: Array<{ blockTime?: number | null; fee?: number | null }> = [];
+  let recognizedFeesTotal = 0;
 
   // process fleet-breakdowns
   const breakdownFiles = await fs.readdir(breakdownDir).catch(() => []);
@@ -181,6 +182,7 @@ export async function buildFeesDetailed(profileId: string) {
       }
       const fee = extractFee(op);
       hourlyFeePoints.push({ blockTime, fee });
+      recognizedFeesTotal += fee;
       fleetEntry.totalFee += fee;
       fleetEntry.totalOperations += 1;
       let opName = extractOperationName(op);
@@ -235,6 +237,7 @@ export async function buildFeesDetailed(profileId: string) {
     }
     const fee = extractFee(op);
     hourlyFeePoints.push({ blockTime, fee });
+    recognizedFeesTotal += fee;
     let opName = extractOperationName(op);
     
     // Check if this is a crafting operation by looking at decoded operations
@@ -275,16 +278,18 @@ export async function buildFeesDetailed(profileId: string) {
     feesByOperation[opName].details.push({ signature: op.signature, fee, fleet: null });
   }
 
-  // Calculate sageFees24h: sum only from feesByFleet (excludes unknown ops)
-  const sageFees24h = Object.values(feesByFleet).reduce((s: number, f: any) => s + (f.totalFee || 0), 0);
+  // Unknown ops stay visible separately, but they must not distort recognized SAGE totals.
+  const sageFees24h = recognizedFeesTotal;
+  const recognizedTransactionCount = totalSigs;
+  const totalSignaturesFetched = recognizedTransactionCount + unknownOpsCount;
 
   const payload = {
     feesByFleet,
     feesByOperation,
     sageFees24h,
     hourlyFees24h: buildHourlyFeeSeries(hourlyFeePoints),
-    totalSignaturesFetched: totalSigs,
-    transactionCount24h: totalSigs - unknownOpsCount,
+    totalSignaturesFetched,
+    transactionCount24h: recognizedTransactionCount,
     unknownOperations: unknownOpsCount,
     fromCache: true,
     timeWindow: '24h',

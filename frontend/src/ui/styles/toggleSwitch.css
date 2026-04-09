@@ -91,6 +91,7 @@ input:checked + .selector-item img {
     height: 240px; /* Aumentato per dare respiro alle 3 icone */
     border-radius: 15px;
     padding: 8px 0;
+            top: -8vh;
   }
 
   /* Il "pallino" mobile (Slider Scuro) */

@@ -143,9 +143,11 @@
 }
 
 .profile-list-minimal-icon .profile-faction-icon {
-  width: 160%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   display: block;
+  flex: 0 0 auto;
 }
 
 .profile-list-minimal-icon-primary {

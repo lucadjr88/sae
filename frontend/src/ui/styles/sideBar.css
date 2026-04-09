@@ -225,8 +225,7 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
   }
 
   .profile-icon .profile-faction-icon {
-    width: 20px;
-    height: 20px;
+    width: 8vh;
   }
 
   .profile-id {

@@ -24,6 +24,14 @@ async function clearNamespaces(profileId: string) {
     }
 }
 
+function isUsableCachedPlayload(payloadData: any) {
+    if (!payloadData || typeof payloadData !== 'object') return false;
+    return !(
+        Object.keys(payloadData.feesByFleet || {}).length === 0
+        && Number(payloadData.transactionCount24h || 0) === 0
+        && Number(payloadData.sageFees24h || 0) === 0
+    );
+}
 
 // Importa i 7 handler debug
 import { getWalletAuthorityHandler } from './debug/getWalletAuthority.js';
@@ -37,6 +45,7 @@ import { resetPoolCache } from '../utils/rpc/rpc-pool-manager.js';
 import { resetHealthMap } from '../utils/rpc/health-manager.js';
 import { resetConcurrencyMap } from '../utils/rpc/concurrency-manager.js';
 import { resetMetricsMap } from '../utils/rpc/metrics.js';
+import { waitForProfileAnalysisLock } from '../utils/profile-analysis-lock.js';
 
 
 router.post('/analyze-profile', async (req: Request, res: Response) => {
@@ -48,20 +57,10 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
       console.log(`[/api/analyze-profile] ❌ Invalid profileId | profileId=${profileId}`);
       return res.status(400).json({ error: 'Missing profileId' });
     }
-    
+
+    let releaseAnalysisLock: (() => Promise<void>) | null = null;
+
     try {
-        // If wipeCache is requested, delete entire profile cache directory
-        if (wipeCache) {
-            try {
-                const profileCacheDir = path.join(process.cwd(), 'cache', profileId);
-                await fs.rm(profileCacheDir, { recursive: true, force: true });
-
-                console.log(`[analyze-profile] Wiped entire cache for profile: ${profileId}`);
-            } catch (wipeErr) {
-                console.log('[analyze-profile] Failed to wipe cache:', wipeErr);
-            }
-        }
-
         // Check if playload already exists in cache (unless wipeCache is requested)
         if (!wipeCache) {
             try {
@@ -122,11 +121,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                         }
                     }
 
-                    const suspiciousZeroPayload = Object.keys(payloadData.feesByFleet || {}).length === 0
-                        && Number(payloadData.transactionCount24h || 0) === 0
-                        && Number(payloadData.sageFees24h || 0) === 0;
-
-                    if (!suspiciousZeroPayload) {
+                    if (isUsableCachedPlayload(payloadData)) {
                         console.log('[analyze-profile] Serving cached playload');
                         if (cachedPlayload.savedAt) {
                             res.set('X-Cache-Hit', 'disk');
@@ -142,12 +137,56 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
             }
         }
 
-        resetPoolCache(profileId);
-        resetHealthMap();
-        resetConcurrencyMap();
-        resetMetricsMap();
+        const lockState = await waitForProfileAnalysisLock(profileId, {
+            timeoutMs: 45_000,
+            pollMs: 250,
+            staleMs: 180_000,
+        });
+        releaseAnalysisLock = lockState.release;
+        const waitedMs = lockState.waitedMs;
 
-        let profileFactionInfo = {
+        if (!releaseAnalysisLock) {
+            const cachedPlayload = await getCache('playload', 'latest', profileId);
+            if (cachedPlayload?.data && isUsableCachedPlayload(cachedPlayload.data)) {
+                console.log('[analyze-profile] Lock wait timed out but a fresh cached playload is available; serving it');
+                if (cachedPlayload.savedAt) {
+                    res.set('X-Cache-Hit', 'disk');
+                    res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
+                }
+                return res.json(cachedPlayload.data);
+            }
+            res.set('Retry-After', '3');
+            return res.status(409).json({ error: 'Analysis already running for this profile, retry shortly' });
+        }
+
+        if (waitedMs > 0) {
+            const cachedPlayload = await getCache('playload', 'latest', profileId);
+            if (cachedPlayload?.data && isUsableCachedPlayload(cachedPlayload.data)) {
+                console.log(`[analyze-profile] Another worker completed analysis while waiting (${waitedMs}ms); serving cached playload`);
+                if (cachedPlayload.savedAt) {
+                    res.set('X-Cache-Hit', 'disk');
+                    res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
+                }
+                return res.json(cachedPlayload.data);
+            }
+        }
+
+            if (wipeCache) {
+                try {
+                    const profileCacheDir = path.join(process.cwd(), 'cache', profileId);
+                    await fs.rm(profileCacheDir, { recursive: true, force: true });
+                    console.log(`[analyze-profile] Wiped entire cache for profile: ${profileId}`);
+                } catch (wipeErr) {
+                    console.log('[analyze-profile] Failed to wipe cache:', wipeErr);
+                }
+            }
+
+            resetPoolCache(profileId);
+            resetHealthMap();
+            resetConcurrencyMap();
+            resetMetricsMap();
+
+            let profileFactionInfo = {
             profileFaction: null as string | null,
             profileFactionId: null as number | null,
             profileFactionAccount: null as string | null,
@@ -336,6 +375,10 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         const duration = Date.now() - startTime;
         console.log(`[/api/analyze-profile] ❌ ERROR | profileId=${profileId} | error=${e?.message || e} | duration=${duration}ms`);
         return res.status(500).json({ error: e?.message || 'analyze-profile failed' });
+    } finally {
+        if (releaseAnalysisLock) {
+            await releaseAnalysisLock();
+        }
     }
 });
 
