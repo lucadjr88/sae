@@ -234,7 +234,7 @@ export function decodeInstructions(transactions: any[]): DecodedInstruction[] {
       if (!Array.isArray(compiled) || keys.length === 0) return false;
       return compiled.some((ix: any) => typeof ix.programIdIndex === 'number' && keys[ix.programIdIndex] === SAGE_PROGRAM_ID);
     });
-  //const binPath = '/home/luca/sae/dist/backend/decoder/decode_fleets';
+  // Resolve the native decoder from the runtime environment instead of any repo-specific path.
   const binPath = resolveNativeBinary('carbon_decoder');
   const binExists = !!binPath;
   if (!binExists) {
