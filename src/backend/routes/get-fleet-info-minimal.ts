@@ -55,7 +55,7 @@ router.get('/getFleetInfoMinimal', async (req, res) => {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     let pick: any = null;
     try {
-      pick = await RpcPoolManager.pickRpcConnection('fleet-info-minimal', {
+      pick = await RpcPoolManager.pickRpcConnection((req.query.profileId as string) || 'default', {
         waitForMs: 750,
         allowStale: attempt > 1,
       });

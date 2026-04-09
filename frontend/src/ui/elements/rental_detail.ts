@@ -126,7 +126,7 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
     (async () => {
       try {
         const fleetId = contractDetails.fleet;
-        const res = await fetch(`/api/getFleetInfoMinimal?fleetId=${encodeURIComponent(fleetId)}`);
+        const res = await fetch(`/api/getFleetInfoMinimal?fleetId=${encodeURIComponent(fleetId)}&profileId=${encodeURIComponent(currentProfileId || '')}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         // Mostra la risposta in modo semplice

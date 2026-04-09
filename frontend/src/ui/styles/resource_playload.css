@@ -2,6 +2,39 @@
   width: 100%;
 }
 
+.resource-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 2.5vh;
+}
+
+.flareplay-info {
+  color: #9aa6b2;
+  font-size: 0.95em;
+  white-space: nowrap;
+}
+
+.flareplay-link {
+  color: #7dd3fc;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  font-weight: 600;
+  transition: color 0.18s ease, border-color 0.18s ease, text-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.flareplay-link:hover {
+  color: #d7f3ff;
+  border-bottom-color: rgba(125, 211, 252, 0.75);
+  text-shadow: 0 0 10px rgba(125, 211, 252, 0.35);
+}
+
+.flareplay-link:visited {
+  color: #93c5fd;
+}
+
 .resource-flow-table-wrap {
   background: #13151f;
   border: 1px solid #1e222e;
@@ -80,8 +113,8 @@
   background: #0f1119;
   margin-top: 2px;
   border-radius: 8px;
-  grid-column: 1 / -1; 
-  width: 100%; 
+  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .resource-flow-row.expanded .resource-flow-details {
@@ -201,12 +234,12 @@
 }
 
 .resource-flow-value-inline {
-  color: #ffffff;
-  font-size: 0.85rem;
-  font-weight: 700;
+  color: #fff;
+  font-weight: 900;
   padding: 0 8px;
-  white-space: nowrap;
-  align-content: center;
+  display: inline-flex;
+  align-items: anchor-center;
+  gap: 5%;
 }
 
 .resource-ops-layout {
@@ -218,10 +251,21 @@
 
 .resource-stat-burned {
   color: #ce4f4f;
+  display: flex;
+  background: #6b422f5c;
+  border-radius: 15px;
+  align-items: center;
+  justify-content: center;
 }
+
 
 .resource-stat-claimed {
   color: #49c89a;
+  display: flex;
+  background: #556b2f5c;
+  border-radius: 15px;
+  align-items: center;
+  justify-content: center;
 }
 
 .resource-summary {
@@ -230,7 +274,7 @@
 
 .resource-ops-table {
   border-collapse: collapse;
-      width: 100%;
+  width: 100%;
 }
 
 .summary-ops-table {
@@ -320,10 +364,19 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     padding: 0 6px;
   }
 
-  .resource-flow-table-wrap{
+  .resource-header {
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .flareplay-info {
+    white-space: normal;
+  }
+
+  .resource-flow-table-wrap {
     background: #13151f;
     border: 1px solid #1e222e;
     margin: auto;
   }
 }
-

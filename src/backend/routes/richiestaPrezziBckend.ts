@@ -1,11 +1,12 @@
 import express, { Request, Response, Router } from 'express';
 import { PublicKey } from '@solana/web3.js';
-import { backOff } from 'exponential-backoff';
 
 const router: Router = express.Router();
 const PREZZI_BATCH_URL = process.env.FLARES_PREZZI_BATCH_URL || 'https://flaresplay.xyz/api/prezzi-batch';
 const MAX_MINTS = 50;
-const REQUEST_TIMEOUT_MS = 12_000;
+const REQUEST_TIMEOUT_MS = 5_000;
+const PREZZI_BATCH_RETRY_ATTEMPTS = 5;
+const PREZZI_BATCH_TOTAL_TIMEOUT_MS = 25_000;
 const MINT_FORMAT = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const KNOWN_MINT_ALIASES: Record<string, string> = {
   foodQJAztMzX1DKpLaiounNe2BDMds5RNuPC6jsNrDG9: 'foodQJAztMzX1DKpLaiounNe2BDMds5RNuPC6jsNrDG',
@@ -87,12 +88,30 @@ function buildNullPricesPayload(mints: string[]) {
   };
 }
 
-async function fetchPrezziBatch(mints: string[]) {
-  return await backOff(async () => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+function isRetryablePrezziError(error: unknown) {
+  const status = typeof (error as { status?: unknown })?.status === 'number'
+    ? Number((error as { status?: number }).status)
+    : null;
+  const message = String((error as { message?: unknown })?.message || '');
 
-    try {
+  return status === 429 || (status !== null && status >= 500) || /timeout|aborted|fetch failed|network/i.test(message);
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function computeBackoffDelayMs(attemptNumber: number) {
+  const maxDelay = 400 * Math.pow(2, Math.max(0, attemptNumber - 1));
+  return Math.floor(Math.random() * maxDelay);
+}
+
+async function fetchPrezziBatchOnce(mints: string[], timeoutMs: number) {
+  const controller = new AbortController();
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    const upstreamCall = (async () => {
       const upstream = await fetch(PREZZI_BATCH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -117,17 +136,72 @@ async function fetchPrezziBatch(mints: string[]) {
       }
 
       return normalizePrezziPayload(payload);
-    } catch (error: any) {
-      if (error?.name === 'AbortError') {
-        const timeoutError = new Error('Prices upstream timeout') as Error & { status?: number };
-        timeoutError.status = 504;
-        throw timeoutError;
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
+    })();
+
+    const attemptTimeout = new Promise<never>((_, reject) => {
+      const timeoutError = new Error('Prices upstream timeout') as Error & { status?: number };
+      timeoutError.status = 504;
+      timeoutHandle = setTimeout(() => {
+        controller.abort();
+        reject(timeoutError);
+      }, timeoutMs);
+    });
+
+    return await Promise.race([upstreamCall, attemptTimeout]);
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      const timeoutError = new Error('Prices upstream timeout') as Error & { status?: number };
+      timeoutError.status = 504;
+      throw timeoutError;
     }
-  }, { numOfAttempts: 3, startingDelay: 300, timeMultiple: 2 });
+    throw error;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+async function fetchPrezziBatch(mints: string[]) {
+  const startedAt = Date.now();
+
+  for (let attempt = 1; attempt <= PREZZI_BATCH_RETRY_ATTEMPTS; attempt += 1) {
+    const elapsedMs = Date.now() - startedAt;
+    const remainingBudgetMs = PREZZI_BATCH_TOTAL_TIMEOUT_MS - elapsedMs;
+    if (remainingBudgetMs <= 0) {
+      const totalTimeoutError = new Error(`Prices upstream total timeout (${PREZZI_BATCH_TOTAL_TIMEOUT_MS}ms)`) as Error & { status?: number };
+      totalTimeoutError.status = 504;
+      throw totalTimeoutError;
+    }
+
+    const attemptTimeoutMs = Math.min(REQUEST_TIMEOUT_MS, remainingBudgetMs);
+    console.info(`[prezzi-batch] Upstream attempt ${attempt}/${PREZZI_BATCH_RETRY_ATTEMPTS} (timeout=${attemptTimeoutMs}ms)`);
+
+    try {
+      const payload = await fetchPrezziBatchOnce(mints, attemptTimeoutMs);
+      const totalMs = Date.now() - startedAt;
+      console.info(`[prezzi-batch] Success at attempt ${attempt}/${PREZZI_BATCH_RETRY_ATTEMPTS} after ${totalMs}ms`);
+      return payload;
+    } catch (error: any) {
+      const shouldRetry = attempt < PREZZI_BATCH_RETRY_ATTEMPTS && isRetryablePrezziError(error);
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      const delayMs = Math.min(computeBackoffDelayMs(attempt), Math.max(0, PREZZI_BATCH_TOTAL_TIMEOUT_MS - (Date.now() - startedAt)));
+      console.warn(
+        `[prezzi-batch] Retry ${attempt}/${PREZZI_BATCH_RETRY_ATTEMPTS - 1} after upstream error: ${String(error?.message || error)} (next_delay=${delayMs}ms)`
+      );
+
+      if (delayMs > 0) {
+        await wait(delayMs);
+      }
+    }
+  }
+
+  const exhaustedError = new Error('Prices upstream retries exhausted') as Error & { status?: number };
+  exhaustedError.status = 504;
+  throw exhaustedError;
 }
 
 router.post('/prezzi-batch', async (req: Request<{}, {}, PrezziBatchBody>, res: Response) => {

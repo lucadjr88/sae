@@ -8,7 +8,6 @@
 .analysis-period {
   margin-bottom: 12px;
   color: #9aa6b2;
-  font-size: 14px;
 }
 
 .timer-emphasis {
@@ -68,6 +67,8 @@
   margin: 10px;
   position: relative;
   z-index: 1;
+  justify-items: anchor-center;
+  padding: 1%;
 }
 
 .stat-label {
