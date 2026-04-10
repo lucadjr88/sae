@@ -508,8 +508,7 @@ export function rentalState_playload(data: any,) {
             <td>${fleetRentalEnd}</td>
             
             <td style="color:#7f2713; display: flex; flex-direction: row; align-items: center;">
-            <div>${total_amount !== null ? total_amount : "-"}</div>
-            ${total_amount !== null ? atlasIcon : ""}
+            <div>${total_amount !== null ? total_amount : "-"} ${total_amount !== null ? atlasIcon : ""}</div>
             <button
                 class="cancel-rental-button"
                 data-fleet-id="${fleet.fleet_id || fleet.fleet || ""}"

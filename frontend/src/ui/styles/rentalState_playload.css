@@ -92,34 +92,26 @@
   transition: background-color 0.2s ease;
 }
 
+.loaned, .borrowed {
+  margin-block: auto;
+  block-size: auto;
+  border-radius: 8px;
+  margin: 10px;
+  padding: 1%;
+  flex: 1 1 420px;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: grid;
+}
 .loaned {
-  margin-block: auto;
-  block-size: auto;
   border: 6px solid #6ccebcb8;
-  border-radius: 8px;
-  margin: 10px;
-  padding: 1%;
-  flex: 1 1 420px;
-  min-width: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.borrowed {
-  margin-block: auto;
-  block-size: auto;
+  }
+.borrowed {    
   border: 6px solid #f9a602b8;
-  border-radius: 8px;
-  margin: 10px;
-  padding: 1%;
-  flex: 1 1 420px;
-  min-width: 0;
-  box-sizing: border-box;
-  overflow: hidden;
 }
 
-@media screen and (max-width: 1200px),
-screen and (max-width: 2670px) and (max-height: 1200px) {
+@media screen and (max-width: 1200px) {
   body {
     font-size: 14px;
     line-height: 1.45;
@@ -148,6 +140,7 @@ screen and (max-width: 2670px) and (max-height: 1200px) {
   .borrowed {
     margin: 0;
     padding: 10px;
+    flex: 1 1;
   }
 
   .rentalState-table {

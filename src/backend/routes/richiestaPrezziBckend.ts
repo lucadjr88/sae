@@ -4,9 +4,9 @@ import { PublicKey } from '@solana/web3.js';
 const router: Router = express.Router();
 const PREZZI_BATCH_URL = process.env.FLARES_PREZZI_BATCH_URL || 'https://flaresplay.xyz/api/prezzi-batch';
 const MAX_MINTS = 50;
-const REQUEST_TIMEOUT_MS = 5_000;
+const REQUEST_TIMEOUT_MS = 10_000;
 const PREZZI_BATCH_RETRY_ATTEMPTS = 5;
-const PREZZI_BATCH_TOTAL_TIMEOUT_MS = 25_000;
+const PREZZI_BATCH_TOTAL_TIMEOUT_MS = 50_000;
 const MINT_FORMAT = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const KNOWN_MINT_ALIASES: Record<string, string> = {
   foodQJAztMzX1DKpLaiounNe2BDMds5RNuPC6jsNrDG9: 'foodQJAztMzX1DKpLaiounNe2BDMds5RNuPC6jsNrDG',
@@ -15,12 +15,59 @@ const KNOWN_MINT_ALIASES: Record<string, string> = {
   '8pbBwqniQv23ZC6UngxeZMiaAWiv9G2N8ydKJquNRZ8E': 'fueL3hBZjLLLJHiFH9cqZoozTG3XQZ53diwFPwbzNim'
 };
 
+type PriceSide = {
+  prezzo_buy: number | null;
+  prezzo_sell: number | null;
+};
+
+type MintPrices = {
+  atlas: PriceSide | null;
+  usdc: PriceSide | null;
+};
+
+type PrezziPayload = {
+  prezzi: Record<string, MintPrices>;
+  [key: string]: unknown;
+};
+
 type PrezziBatchBody = {
-  ricchiesta_prezzi?: unknown;
   richiesta_prezzi?: unknown;
+  ricchiesta_prezzi?: unknown;
   mints?: unknown;
   mintList?: unknown;
 };
+
+type HttpError = Error & { status?: number };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getRequestedMintList(body: PrezziBatchBody): unknown {
+  return body?.richiesta_prezzi ?? body?.ricchiesta_prezzi ?? body?.mints ?? body?.mintList;
+}
+
+function buildPrezziBatchRequestBody(mints: string[]) {
+  return {
+    richiesta_prezzi: mints,
+    ricchiesta_prezzi: mints
+  };
+}
+
+function createHttpError(message: string, status: number): HttpError {
+  const error = new Error(message) as HttpError;
+  error.status = status;
+  return error;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getErrorStatus(error: unknown) {
+  const status = (error as { status?: unknown })?.status;
+  return typeof status === 'number' ? status : null;
+}
 
 function normalizeMintCandidate(rawMint: string): string | null {
   const mint = rawMint.trim();
@@ -44,7 +91,7 @@ function normalizeMintCandidate(rawMint: string): string | null {
 }
 
 function extractMintList(body: PrezziBatchBody): string[] {
-  const rawList = body?.ricchiesta_prezzi ?? body?.richiesta_prezzi ?? body?.mints ?? body?.mintList;
+  const rawList = getRequestedMintList(body);
   if (!Array.isArray(rawList)) return [];
 
   const seen = new Set<string>();
@@ -61,22 +108,43 @@ function extractMintList(body: PrezziBatchBody): string[] {
   return validMints;
 }
 
-function normalizePrezziPayload(payload: any) {
-  if (!payload?.prezzi || typeof payload.prezzi !== 'object' || Array.isArray(payload.prezzi)) {
-    return payload;
+function normalizePriceSide(value: unknown): PriceSide | null {
+  if (!isRecord(value)) return null;
+
+  return {
+    prezzo_buy: typeof value.prezzo_buy === 'number' ? value.prezzo_buy : null,
+    prezzo_sell: typeof value.prezzo_sell === 'number' ? value.prezzo_sell : null
+  };
+}
+
+function normalizeMintPrices(value: unknown): MintPrices {
+  if (!isRecord(value)) {
+    return { atlas: null, usdc: null };
   }
 
+  return {
+    atlas: normalizePriceSide(value.atlas),
+    usdc: normalizePriceSide(value.usdc)
+  };
+}
+
+function normalizePrezziPayload(payload: unknown): PrezziPayload {
+  if (!isRecord(payload)) {
+    return { prezzi: {} };
+  }
+
+  const rawPrezzi = isRecord(payload.prezzi) ? payload.prezzi : {};
   const normalizedPrezzi = Object.fromEntries(
-    Object.entries(payload.prezzi).map(([mint, value]) => {
-      const normalizedMint = typeof mint === 'string' ? (normalizeMintCandidate(mint) || mint) : String(mint);
-      return [normalizedMint, value];
+    Object.entries(rawPrezzi).map(([mint, value]) => {
+      const normalizedMint = normalizeMintCandidate(mint) || mint;
+      return [normalizedMint, normalizeMintPrices(value)];
     })
-  );
+  ) as Record<string, MintPrices>;
 
   return { ...payload, prezzi: normalizedPrezzi };
 }
 
-function buildNullPricesPayload(mints: string[]) {
+function buildNullPricesPayload(mints: string[]): PrezziPayload {
   return {
     prezzi: Object.fromEntries(
       mints.map((mint) => [
@@ -91,10 +159,8 @@ function buildNullPricesPayload(mints: string[]) {
 }
 
 function isRetryablePrezziError(error: unknown) {
-  const status = typeof (error as { status?: unknown })?.status === 'number'
-    ? Number((error as { status?: number }).status)
-    : null;
-  const message = String((error as { message?: unknown })?.message || '');
+  const status = getErrorStatus(error);
+  const message = getErrorMessage(error);
 
   return status === 429 || (status !== null && status >= 500) || /timeout|aborted|fetch failed|network/i.test(message);
 }
@@ -108,7 +174,7 @@ function computeBackoffDelayMs(attemptNumber: number) {
   return Math.floor(Math.random() * maxDelay);
 }
 
-async function fetchPrezziBatchOnce(mints: string[], timeoutMs: number) {
+async function fetchPrezziBatchOnce(mints: string[], timeoutMs: number): Promise<PrezziPayload> {
   const controller = new AbortController();
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -117,32 +183,32 @@ async function fetchPrezziBatchOnce(mints: string[], timeoutMs: number) {
       const upstream = await fetch(PREZZI_BATCH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ricchiesta_prezzi: mints }),
+        body: JSON.stringify(buildPrezziBatchRequestBody(mints)),
         signal: controller.signal
       });
 
       const text = await upstream.text();
-      let payload: any = {};
+      let payload: unknown = {};
       if (text) {
         try {
-          payload = JSON.parse(text);
+          payload = JSON.parse(text) as unknown;
         } catch {
           payload = { error: text };
         }
       }
 
       if (!upstream.ok) {
-        const err = new Error(payload?.error || `Upstream error ${upstream.status}`) as Error & { status?: number };
-        err.status = upstream.status;
-        throw err;
+        const upstreamMessage = isRecord(payload) && typeof payload.error === 'string'
+          ? payload.error
+          : `Upstream error ${upstream.status}`;
+        throw createHttpError(upstreamMessage, upstream.status);
       }
 
       return normalizePrezziPayload(payload);
     })();
 
     const attemptTimeout = new Promise<never>((_, reject) => {
-      const timeoutError = new Error('Prices upstream timeout') as Error & { status?: number };
-      timeoutError.status = 504;
+      const timeoutError = createHttpError('Prices upstream timeout', 504);
       timeoutHandle = setTimeout(() => {
         controller.abort();
         reject(timeoutError);
@@ -150,11 +216,9 @@ async function fetchPrezziBatchOnce(mints: string[], timeoutMs: number) {
     });
 
     return await Promise.race([upstreamCall, attemptTimeout]);
-  } catch (error: any) {
-    if (error?.name === 'AbortError') {
-      const timeoutError = new Error('Prices upstream timeout') as Error & { status?: number };
-      timeoutError.status = 504;
-      throw timeoutError;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw createHttpError('Prices upstream timeout', 504);
     }
     throw error;
   } finally {
@@ -164,16 +228,15 @@ async function fetchPrezziBatchOnce(mints: string[], timeoutMs: number) {
   }
 }
 
-async function fetchPrezziBatch(mints: string[]) {
+async function fetchPrezziBatch(mints: string[]): Promise<PrezziPayload> {
   const startedAt = Date.now();
+  console.info(`[prezzi-batch] Fetching prices for ${mints.length} mints with up to ${PREZZI_BATCH_RETRY_ATTEMPTS} attempts and total timeout of ${PREZZI_BATCH_TOTAL_TIMEOUT_MS}ms`);
 
   for (let attempt = 1; attempt <= PREZZI_BATCH_RETRY_ATTEMPTS; attempt += 1) {
     const elapsedMs = Date.now() - startedAt;
     const remainingBudgetMs = PREZZI_BATCH_TOTAL_TIMEOUT_MS - elapsedMs;
     if (remainingBudgetMs <= 0) {
-      const totalTimeoutError = new Error(`Prices upstream total timeout (${PREZZI_BATCH_TOTAL_TIMEOUT_MS}ms)`) as Error & { status?: number };
-      totalTimeoutError.status = 504;
-      throw totalTimeoutError;
+      throw createHttpError(`Prices upstream total timeout (${PREZZI_BATCH_TOTAL_TIMEOUT_MS}ms)`, 504);
     }
 
     const attemptTimeoutMs = Math.min(REQUEST_TIMEOUT_MS, remainingBudgetMs);
@@ -182,9 +245,26 @@ async function fetchPrezziBatch(mints: string[]) {
     try {
       const payload = await fetchPrezziBatchOnce(mints, attemptTimeoutMs);
       const totalMs = Date.now() - startedAt;
-      console.info(`[prezzi-batch] Success at attempt ${attempt}/${PREZZI_BATCH_RETRY_ATTEMPTS} after ${totalMs}ms`);
+      console.info(`[prezzi-batch] Success at attempt ${attempt}/${PREZZI_BATCH_RETRY_ATTEMPTS} after ${totalMs}ms, payload: ${JSON.stringify(payload)}`);
+
+      const mintWithNullAtlas = Object.entries(payload.prezzi).filter(([, value]) => value.atlas?.prezzo_buy == null);
+      if (mintWithNullAtlas.length > 0) {
+        console.info(`[prezzi-batch] Found ${mintWithNullAtlas.length} mints with null atlas price, retrying those mints: ${mintWithNullAtlas.map(([mint]) => mint).join(', ')}`);
+        const retryMints = mintWithNullAtlas.map(([mint]) => mint);
+        const retryPayload = await fetchPrezziBatchOnce(retryMints, attemptTimeoutMs);
+
+        for (const [mint, value] of Object.entries(retryPayload.prezzi)) {
+          const currentPrices = payload.prezzi[mint] ?? (payload.prezzi[mint] = { atlas: null, usdc: null });
+          if (currentPrices.atlas?.prezzo_buy == null && value.atlas?.prezzo_buy != null) {
+            currentPrices.atlas = value.atlas;
+            console.info(`[prezzi-batch] Updated atlas price for mint ${mint} from second attempt: ${JSON.stringify(value.atlas)}`);
+          }
+        }
+        console.info(`[prezzi-batch] Null atlas prices remaining after follow-up: ${Object.values(payload.prezzi).filter((value) => value.atlas?.prezzo_buy == null).length}`);
+      }
+
       return payload;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const shouldRetry = attempt < PREZZI_BATCH_RETRY_ATTEMPTS && isRetryablePrezziError(error);
       if (!shouldRetry) {
         throw error;
@@ -192,7 +272,7 @@ async function fetchPrezziBatch(mints: string[]) {
 
       const delayMs = Math.min(computeBackoffDelayMs(attempt), Math.max(0, PREZZI_BATCH_TOTAL_TIMEOUT_MS - (Date.now() - startedAt)));
       console.warn(
-        `[prezzi-batch] Retry ${attempt}/${PREZZI_BATCH_RETRY_ATTEMPTS - 1} after upstream error: ${String(error?.message || error)} (next_delay=${delayMs}ms)`
+        `[prezzi-batch] Retry ${attempt}/${PREZZI_BATCH_RETRY_ATTEMPTS - 1} after upstream error: ${getErrorMessage(error)} (next_delay=${delayMs}ms)`
       );
 
       if (delayMs > 0) {
@@ -201,15 +281,13 @@ async function fetchPrezziBatch(mints: string[]) {
     }
   }
 
-  const exhaustedError = new Error('Prices upstream retries exhausted') as Error & { status?: number };
-  exhaustedError.status = 504;
-  throw exhaustedError;
+  throw createHttpError('Prices upstream retries exhausted', 504);
 }
 
 router.post('/prezzi-batch', async (req: Request<{}, {}, PrezziBatchBody>, res: Response) => {
-  const providedList = req.body?.ricchiesta_prezzi ?? req.body?.richiesta_prezzi ?? req.body?.mints ?? req.body?.mintList;
+  const providedList = getRequestedMintList(req.body || {});
   if (!Array.isArray(providedList) || providedList.length === 0) {
-    return res.status(400).json({ error: 'Serve un array "ricchiesta_prezzi" con almeno un mint' });
+    return res.status(400).json({ error: 'Serve un array "richiesta_prezzi" con almeno un mint' });
   }
 
   const mints = extractMintList(req.body || {});
@@ -220,16 +298,16 @@ router.post('/prezzi-batch', async (req: Request<{}, {}, PrezziBatchBody>, res: 
   try {
     const payload = await fetchPrezziBatch(mints);
     return res.json(payload);
-  } catch (e: any) {
-    console.error('[prezzi-batch] Error:', e?.message || e);
-    const status = typeof e?.status === 'number' ? e.status : 500;
-    const transientUpstreamFailure = status >= 500 || status === 429 || /timeout|aborted|fetch failed/i.test(String(e?.message || ''));
+  } catch (error: unknown) {
+    console.error('[prezzi-batch] Error:', getErrorMessage(error));
+    const status = getErrorStatus(error) ?? 500;
+    const transientUpstreamFailure = status >= 500 || status === 429 || /timeout|aborted|fetch failed/i.test(getErrorMessage(error));
 
     if (transientUpstreamFailure) {
       return res.json(buildNullPricesPayload(mints));
     }
 
-    return res.status(status).json({ error: e?.message || 'Errore interno' });
+    return res.status(status).json({ error: getErrorMessage(error) || 'Errore interno' });
   }
 });
 

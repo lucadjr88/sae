@@ -745,7 +745,7 @@ export function displayResourceResults(data: any): void {
   }
 
   const byMaterial = resourceFlows.byMaterial || {};
-  const materialMints = Object.keys(byMaterial);
+  const materialMints = Object.keys(byMaterial).filter((mint) => !HIDDEN_RESOURCE_MINTS.has(mint));
 
   void loadAtlasPricesForMints(materialMints).then((changed) => {
     if (!changed) return;
