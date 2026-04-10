@@ -30,6 +30,7 @@ type MaybeAccount = AccountInfo<Buffer> | null;
 let MAX_LIMIT = 10000;
 const SRSLY_PROGRAM_ID = 'SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT';
 const CACHE_TTL_MS = 30_000;
+const RPC_CALL_TIMEOUT_MS = 12_000;
 
 function chunk<T>(input: T[], size: number): T[][] {
 	const out: T[][] = [];
@@ -45,15 +46,81 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function summarizeRpcError(error: unknown): string {
+	const name = typeof (error as { name?: unknown })?.name === 'string'
+		? String((error as { name?: string }).name)
+		: 'Error';
+	const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+	const rpcCode = typeof (error as { value?: { error?: { code?: unknown } } })?.value?.error?.code === 'number'
+		? Number((error as { value?: { error?: { code?: number } } }).value?.error?.code)
+		: undefined;
+	const rpcMessage = typeof (error as { value?: { error?: { message?: unknown } } })?.value?.error?.message === 'string'
+		? String((error as { value?: { error?: { message?: string } } }).value?.error?.message)
+		: '';
+	const compactMessage = message.split('\n')[0]?.trim() || message;
+
+	if (rpcCode !== undefined) {
+		return `${name}: rpcCode=${rpcCode}${rpcMessage ? ` ${rpcMessage}` : ''}`;
+	}
+	return `${name}: ${compactMessage}`;
+}
+
 function getRpcErrorType(error: unknown): '429' | '503' | 'error' {
 	const status = typeof (error as { status?: unknown })?.status === 'number'
 		? Number((error as { status?: number }).status)
 		: undefined;
 	const message = error instanceof Error ? error.message : String(error ?? '');
+	const rpcCode = typeof (error as { value?: { error?: { code?: unknown } } })?.value?.error?.code === 'number'
+		? Number((error as { value?: { error?: { code?: number } } }).value?.error?.code)
+		: undefined;
+	const rpcMessage = typeof (error as { value?: { error?: { message?: unknown } } })?.value?.error?.message === 'string'
+		? String((error as { value?: { error?: { message?: string } } }).value?.error?.message)
+		: '';
+	const haystack = `${message} ${rpcMessage}`;
 
-	if (status === 429 || /429|Too Many Requests/i.test(message)) return '429';
-	if (status === 503 || /503|Service Unavailable/i.test(message)) return '503';
+	if (status === 429 || /429|Too Many Requests/i.test(haystack)) return '429';
+	if (
+		status === 408 ||
+		status === 500 ||
+		status === 502 ||
+		status === 503 ||
+		status === 504 ||
+		rpcCode === -32603 ||
+		/500|502|503|504|Service Unavailable|Internal JSON-RPC error|StructError|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|socket hang up/i.test(haystack)
+	) {
+		return '503';
+	}
 	return 'error';
+}
+
+function getRpcRetryDelayMs(errorType: '429' | '503' | 'error', attempt: number): number {
+	if (errorType === '429') {
+		const base = Math.min(4_000, 400 * Math.pow(2, Math.max(0, attempt - 1)));
+		return base + Math.floor(Math.random() * 250);
+	}
+	if (errorType === '503') {
+		return 150 + Math.floor(Math.random() * 200);
+	}
+	return 50;
+}
+
+async function withRpcTimeout<T>(operation: Promise<T>, label: string, timeoutMs = RPC_CALL_TIMEOUT_MS): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			operation,
+			new Promise<T>((_, reject) => {
+				timer = setTimeout(() => {
+					const error = new Error(`RPC timeout after ${timeoutMs}ms (${label})`) as Error & { status?: number };
+					error.name = 'RpcTimeoutError';
+					error.status = 504;
+					reject(error);
+				}, timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
 }
 
 export class RentalService {
@@ -178,34 +245,58 @@ export class RentalService {
 	): Promise<Map<string, MaybeAccount>> {
 		const out = new Map<string, MaybeAccount>();
 		for (const currentChunk of chunk(addresses, 100)) {
-			const pubkeys: PublicKey[] = [];
-			const validAddresses: string[] = [];
-			for (const address of currentChunk) {
-				try {
-					pubkeys.push(new PublicKey(address));
-					validAddresses.push(address);
-				} catch {
-					out.set(address, null);
-				}
-			}
-			if (pubkeys.length === 0) continue;
-			//console.log(`[rentalService] Fetching ${pubkeys.length} accounts`);
-			try {
-				const results = await this.executeRpc(profileId, (connection) =>
-					connection.getMultipleAccountsInfo(pubkeys, 'confirmed'),
-				);
-				console.log(`[rentalService] Fetched ${results.length} accounts for chunk.`);
-				results.forEach((account, index) => {
-					const address = validAddresses[index];
-					if (!address) return;
-					out.set(address, account);
-				});
-			} catch (err) {
-				console.error(`[rentalService] Error fetching accounts for addresses:`, validAddresses, err);
-				throw err;
-			}
+			await this.fetchAccountsChunk(currentChunk, profileId, out);
 		}
 		return out;
+	}
+
+	private async fetchAccountsChunk(
+		addresses: string[],
+		profileId: string,
+		out: Map<string, MaybeAccount>,
+	): Promise<void> {
+		const pubkeys: PublicKey[] = [];
+		const validAddresses: string[] = [];
+		for (const address of addresses) {
+			try {
+				pubkeys.push(new PublicKey(address));
+				validAddresses.push(address);
+			} catch {
+				out.set(address, null);
+			}
+		}
+		if (pubkeys.length === 0) return;
+
+		try {
+			const results = await this.executeRpc(profileId, (connection) =>
+				withRpcTimeout(
+					connection.getMultipleAccountsInfo(pubkeys, 'confirmed'),
+					`getMultipleAccountsInfo(${pubkeys.length})`,
+				),
+			);
+			console.log(`[rentalService] Fetched ${results.length} accounts for chunk.`);
+			results.forEach((account, index) => {
+				const address = validAddresses[index];
+				if (!address) return;
+				out.set(address, account);
+			});
+		} catch (err) {
+			if (validAddresses.length > 1) {
+				const nextChunkSize = Math.max(1, Math.floor(validAddresses.length / 2));
+				console.warn(
+					`[rentalService] Retrying ${validAddresses.length} accounts in smaller batches after RPC failure: ${summarizeRpcError(err)}`,
+				);
+				for (const smallerChunk of chunk(validAddresses, nextChunkSize)) {
+					await this.fetchAccountsChunk(smallerChunk, profileId, out);
+				}
+				return;
+			}
+			const address = validAddresses[0];
+			if (address) out.set(address, null);
+			console.warn(
+				`[rentalService] Skipping account ${address ?? 'unknown'} after repeated RPC failure: ${summarizeRpcError(err)}`,
+			);
+		}
 	}
 
 	// Recupera metadati delle flotte associate ai contratti (chiamata RPC per fleet)
@@ -339,7 +430,7 @@ export class RentalService {
 		operation: (connection: Connection) => Promise<T>,
 	): Promise<T> {
 		const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
-		const maxAttempts = Math.max(3, Math.round(pool.length * 1.5));
+		const maxAttempts = Math.min(6, Math.max(3, Math.round(pool.length * 1.5)));
 		let lastError: unknown = null;
 
 		for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -352,21 +443,28 @@ export class RentalService {
 					allowStale: attempt > 2,
 				});
 				const endpointUrl = pick?.endpoint?.url ?? 'unknown-rpc';
-				//console.log(`[rentalService] [executeRpc] Attempt ${attempt + 1}/${maxAttempts} for profileId=${profileId} rpc=${endpointUrl}`);
-				const result = await operation(pick.connection as Connection);
+				const result = await withRpcTimeout(
+					operation(pick.connection as Connection),
+					`rentalService.executeRpc ${endpointUrl}`,
+				);
 				pick.release({ success: true, latencyMs: Date.now() - startedAt });
-				//console.log(`[rentalService] [executeRpc] Success for profileId=${profileId} rpc=${endpointUrl} in ${Date.now() - startedAt}ms`);
 				return result;
 			} catch (error) {
+				const errorType = getRpcErrorType(error);
 				if (pick) {
 					pick.release({
 						success: false,
 						latencyMs: Date.now() - startedAt,
-						errorType: getRpcErrorType(error),
+						errorType,
 					});
 				}
 				lastError = error;
-				console.error(`[rentalService] [executeRpc] Error on attempt ${attempt + 1} for profileId=${profileId} rpc=${pick?.endpoint?.url ?? 'unknown-rpc'}:`, error);
+				console.warn(
+					`[rentalService] [executeRpc] Attempt ${attempt + 1}/${maxAttempts} failed for profileId=${profileId} rpc=${pick?.endpoint?.url ?? 'unknown-rpc'} type=${errorType}: ${summarizeRpcError(error)}`,
+				);
+				if (attempt + 1 < maxAttempts) {
+					await sleep(getRpcRetryDelayMs(errorType, attempt + 1));
+				}
 			}
 		}
 

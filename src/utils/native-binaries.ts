@@ -3,22 +3,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-
-function toEnvKey(binaryName: string) {
-  return `SAE_${binaryName.replace(/[^a-zA-Z0-9]+/g, '_').toUpperCase()}_PATH`;
-}
+const repoRoot = path.resolve(moduleDir, '../..');
 
 function dedupe(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0)));
 }
 
 export function getNativeBinaryCandidates(binaryName: string): string[] {
-  const envPath = process.env[toEnvKey(binaryName)];
-  const envDir = process.env.SAE_NATIVE_BIN_DIR;
-
   return dedupe([
-    envPath,
-    envDir ? path.join(envDir, binaryName) : null,
+    path.join(repoRoot, 'utility', 'bin', binaryName),
+    path.join(repoRoot, 'dist', 'utility', 'bin', binaryName),
     path.join(process.cwd(), 'utility', 'bin', binaryName),
     path.join(process.cwd(), 'dist', 'utility', 'bin', binaryName),
     path.resolve(moduleDir, '../utility/bin', binaryName),

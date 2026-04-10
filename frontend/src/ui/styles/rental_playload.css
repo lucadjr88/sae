@@ -202,7 +202,7 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     word-break: break-word;
   }
 
-  #rentalResults .rentalState-header > div {
+  #rentalResults .rentalState-header>div {
     width: 100%;
     flex-wrap: wrap;
     justify-content: flex-start;
@@ -218,13 +218,32 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     box-sizing: border-box;
   }
 
-  .state-filter,
-  .starbase-filter,
-  .fleet-filter,
+  .state-filter {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+  }
+
+  .starbase-filter {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+  }
+
+  .fleet-filter {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+  }
+
   .rate-filter {
     width: 100%;
     padding: 8px;
     box-sizing: border-box;
+    flex-flow: row;
+    display: flex;
+    align-items: anchor-center;
+    justify-content: space-around;
   }
 
   .state-filter label,
@@ -235,10 +254,15 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     margin: 4px;
   }
 
-  .fleet-filter .input-group,
-  .fleet-filter .logic-selector {
+  .fleet-filter .input-group {
     display: flex;
     flex-direction: column;
+    gap: 8px;
+  }
+
+  .fleet-filter .logic-selector {
+    display: flex;
+    flex-direction: row;
     gap: 8px;
   }
 

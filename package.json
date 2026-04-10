@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "main": "dist/app.js",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.4 <21 || >=22.12.0"
+  },
   "scripts": {
     "build": "tsc && node scripts/add-js-extensions.cjs && cd frontend && npm run build && cd ..",
     "postbuild": "mkdir -p dist/backend/idl dist/utility/bin && cp src/backend/idl/sage_idl.json dist/backend/idl/sage_idl.json && cp src/backend/idl/srsly_idl.json dist/backend/idl/srsly_idl.json && if [ -d utility/bin ]; then cp utility/bin/* dist/utility/bin/ && chmod +x dist/utility/bin/*; fi",

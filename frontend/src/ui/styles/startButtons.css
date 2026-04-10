@@ -218,5 +218,8 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
   }
 
   .profile-list-minimal-icon .profile-faction-icon {
-    width: 4vh;}
+        width: 4vh;
+        height: auto;
+        object-fit: unset;
+  }
 }
