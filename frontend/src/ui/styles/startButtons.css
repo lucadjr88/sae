@@ -216,4 +216,7 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
   .profile-list-minimal-item {
     font-size: 13px;
   }
+
+  .profile-list-minimal-icon .profile-faction-icon {
+    width: 4vh;}
 }

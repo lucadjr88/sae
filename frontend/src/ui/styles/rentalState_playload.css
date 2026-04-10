@@ -26,7 +26,7 @@
   font-size: 0.9rem;
   color: var(--text-main);
   background-color: var(--table-bg);
-box-shadow: 0 4px 6px #000000cf;
+  box-shadow: 0 4px 6px #000000cf;
   border-radius: 8px;
   overflow: hidden;
   background-color: #b05bff4f;
@@ -82,18 +82,18 @@ box-shadow: 0 4px 6px #000000cf;
   margin-block: auto;
   block-size: auto;
   border: 6px solid #6ccebcb8;
-    border-radius: 8px;
-    margin: 10px;
-    padding: 1%;
+  border-radius: 8px;
+  margin: 10px;
+  padding: 1%;
 }
 
 .borrowed {
   margin-block: auto;
   block-size: auto;
   border: 6px solid #f9a602b8;
-    border-radius: 8px;
-    margin: 10px;
-    padding: 1%;
+  border-radius: 8px;
+  margin: 10px;
+  padding: 1%;
 }
 
 @media screen and (hover: none) and (pointer: coarse) and (max-width: 1200px) and (max-height: 2670px),
@@ -102,5 +102,38 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     font-size: 14px;
     line-height: 1.45;
     overflow-x: hidden;
+  }
+
+  .rentalState {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .rentalState-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .rentalState-table-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    gap: 12px;
+  }
+
+  .loaned,
+  .borrowed {
+    margin: 0;
+    padding: 10px;
+  }
+
+  .rentalState-table {
+    font-size: 0.72rem;
+  }
+
+  .rentalState-table th,
+  .rentalState-table td {
+    padding: 8px 6px;
   }
 }

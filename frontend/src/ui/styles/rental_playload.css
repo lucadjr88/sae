@@ -181,3 +181,95 @@
   border-color: blueviolet;
 }
 
+@media screen and (hover: none) and (pointer: coarse) and (max-width: 1200px) and (max-height: 2670px),
+screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-height: 1200px) {
+  #rentalResults {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  #rentalResults .rentalState-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  #rentalResults .rentalState-header h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    line-height: 1.2;
+    word-break: break-word;
+  }
+
+  #rentalResults .rentalState-header > div {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .rental-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 10px;
+    border-width: 6px;
+    box-sizing: border-box;
+  }
+
+  .state-filter,
+  .starbase-filter,
+  .fleet-filter,
+  .rate-filter {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+  }
+
+  .state-filter label,
+  .starbase-filter label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px;
+  }
+
+  .fleet-filter .input-group,
+  .fleet-filter .logic-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .fleet-filter input[type="text"],
+  .rate-filter input[type="number"] {
+    width: 100% !important;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .rate-filter .rate-inputs {
+    flex-direction: column !important;
+    gap: 8px;
+  }
+
+  .rental-table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 0.74rem;
+  }
+
+  .rental-table th,
+  .rental-table td {
+    padding: 8px 6px;
+    white-space: nowrap;
+  }
+
+  .rental-table td.composition-cell {
+    max-width: 140px;
+  }
+}

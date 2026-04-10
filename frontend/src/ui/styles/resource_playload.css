@@ -222,7 +222,8 @@
   min-height: 20px;
   border-radius: 999px;
   transition: width 0.3s ease;
-  overflow: hidden;
+  white-space: nowrap; /* Impedisce al testo di andare a capo */
+    overflow: visible;
 }
 
 .resource-flow-bar-in {
