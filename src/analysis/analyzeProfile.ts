@@ -86,7 +86,9 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                     const feeSnapshotMissing = !Array.isArray(payloadData.hourlyFees24h)
                         || payloadData.hourlyFees24h.length !== 24
                         || typeof payloadData.sageFees24h !== 'number'
-                        || typeof payloadData.transactionCount24h !== 'number';
+                        || typeof payloadData.transactionCount24h !== 'number'
+                        || !Object.prototype.hasOwnProperty.call(payloadData, 'firstTxTime')
+                        || !Object.prototype.hasOwnProperty.call(payloadData, 'lastTxTime');
 
                     if (feeSnapshotMissing) {
                         try {
@@ -103,6 +105,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                                 fromCache: fees.fromCache,
                                 timeWindow: fees.timeWindow,
                                 firstTxTime: fees.firstTxTime,
+                                lastTxTime: fees.lastTxTime,
                             });
                             await setCache('playload', 'latest', payloadData, profileId as string);
                         } catch (feesCacheHitErr) {
@@ -263,7 +266,8 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                 transactionCount24h: fees.transactionCount24h,
                 fromCache: fees.fromCache,
                 timeWindow: fees.timeWindow,
-                firstTxTime: fees.firstTxTime
+                firstTxTime: fees.firstTxTime,
+                lastTxTime: fees.lastTxTime,
                 //breakdown: { feesByFleet: fees.feesByFleet }
             });
 

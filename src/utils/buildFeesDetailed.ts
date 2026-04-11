@@ -163,6 +163,7 @@ export async function buildFeesDetailed(profileId: string) {
   //console.log(`[buildFeesDetailed] Found ${breakdownFiles.length} breakdown files`);
   let totalSigs = 0;
   let firstTxTime: number | null = null;
+  let lastTxTime: number | null = null;
   for (const bf of breakdownFiles) {
     const bpath = path.join(breakdownDir, bf);
     const raw = await readJson(bpath);
@@ -179,6 +180,9 @@ export async function buildFeesDetailed(profileId: string) {
       const blockTime = op.blockTime || op.txInfo?.blockTime;
       if (blockTime && (!firstTxTime || blockTime < firstTxTime)) {
         firstTxTime = blockTime;
+      }
+      if (blockTime && (!lastTxTime || blockTime > lastTxTime)) {
+        lastTxTime = blockTime;
       }
       const fee = extractFee(op);
       hourlyFeePoints.push({ blockTime, fee });
@@ -234,6 +238,9 @@ export async function buildFeesDetailed(profileId: string) {
     const blockTime = op.blockTime || op.txInfo?.blockTime;
     if (blockTime && (!firstTxTime || blockTime < firstTxTime)) {
       firstTxTime = blockTime;
+    }
+    if (blockTime && (!lastTxTime || blockTime > lastTxTime)) {
+      lastTxTime = blockTime;
     }
     const fee = extractFee(op);
     hourlyFeePoints.push({ blockTime, fee });
@@ -293,7 +300,8 @@ export async function buildFeesDetailed(profileId: string) {
     unknownOperations: unknownOpsCount,
     fromCache: true,
     timeWindow: '24h',
-    firstTxTime: firstTxTime // timestamp in seconds
+    firstTxTime: firstTxTime,
+    lastTxTime: lastTxTime
   };
 
   // persist payload in cache reports

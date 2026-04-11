@@ -13,6 +13,8 @@ interface FleetNamesMap {
   [fleetAccount: string]: string;
 }
 
+import solIcon from '@/assets/icons/sol.svg';
+
 export function createFleetList(
   data: OperationListData,
   fleetNames: FleetNamesMap,
@@ -89,7 +91,7 @@ sortedFleets.forEach(([fleetAccount, fleetData]) => {
       <div class="fleet-pct">${((fleetData.totalFee / (data.sageFees24h || 1)) * 100).toFixed(1)}%</div>
       
       <div class="fleet-sol">
-        <span class="fleet-sol-value">${(fleetData.totalFee / 1e9).toFixed(6)} SOL</span>
+        <span class="fleet-sol-value">${(fleetData.totalFee / 1e9).toFixed(6)} <img src="${solIcon}" style="width: 1.8vh;height: auto;vertical-align: middle;" alt="SOL"/></span>
         <span class="value-usd">($${window.prices && window.prices.solana ? ((fleetData.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
         
         <div class="fleet-arrow-wrap">
@@ -141,7 +143,7 @@ sortedFleets.forEach(([fleetAccount, fleetData]) => {
             <td>${op}</td>
             <td>${stats.count}x</td>
             <td>${stats.percentageOfFleet.toFixed(1)}%</td>
-            <td>${(stats.totalFee / 1e9).toFixed(6)} SOL</td>
+            <td>${(stats.totalFee / 1e9).toFixed(6)} <img src="${solIcon}" style="width: 1.8vh;height: auto;vertical-align: middle;" alt="SOL"/></td>
             <td class="value-usd">$${window.prices && window.prices.solana ? ((stats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'}</td>
           </tr>
         `;
@@ -301,7 +303,7 @@ export function createOperationList(
       <div class="fleet-pct">${opPercentage.toFixed(1)}%</div>
       
       <div class="fleet-sol">
-        <span class="fleet-sol-value">${(opStats.totalFee / 1e9).toFixed(6)} SOL</span>
+        <span class="fleet-sol-value">${(opStats.totalFee / 1e9).toFixed(6)} <img src="${solIcon}" style="width: 1.8vh;height: auto;vertical-align: middle;" alt="SOL"/></span>
         <span class="value-usd">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
         
         <div class="arrow-container fleet-arrow-wrap-end">
@@ -328,7 +330,7 @@ export function createOperationList(
             <td>${fleetNameHtml}</td>
             <td>${fleet.count}x</td>
             <td>${fleetOpPercentage.toFixed(1)}%</td>
-            <td>${(fleet.totalFee / 1e9).toFixed(6)} SOL</td>
+            <td>${(fleet.totalFee / 1e9).toFixed(6)} <img src="${solIcon}" style="width: 1.8vh;height: auto;vertical-align: middle;" alt="SOL"/></td>
             <td class="value-usd">$${window.prices && window.prices.solana ? ((fleet.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'}</td>
           </tr>
         `;
@@ -351,7 +353,7 @@ export function createOperationList(
                       <th>Tx</th>
                       <th>Burned</th>
                       <th>Claimed</th>
-                      <th class="text-right">Fee (SOL)</th>
+                      <th class="text-right">Fee <img src="${solIcon}" style="width: 1.8vh;height: auto;vertical-align: middle;" alt="SOL"/></th>
                       <th class="text-right">Fee (USD)</th>
                     </tr>
                   </thead>
@@ -505,7 +507,7 @@ export function createOtherOperationsList(
       <div class="fleet-pct">${opPercentage.toFixed(1)}%</div>
       
       <div class="fleet-sol">
-        <span class="fleet-sol-value">${(opStats.totalFee / 1e9).toFixed(6)} SOL</span>
+        <span class="fleet-sol-value">${(opStats.totalFee / 1e9).toFixed(6)} <img src="${solIcon}" style="width: 1.8vh;height: auto;vertical-align: middle;" alt="SOL"/></span>
         <span class="value-usd">($${window.prices && window.prices.solana ? ((opStats.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'})</span>
         
         <div class="fleet-arrow-wrap fleet-arrow-wrap-offset">
@@ -530,7 +532,7 @@ export function createOtherOperationsList(
               <td>${fleetNameHtml}</td>
               <td>${fleet.count}x</td>
               <td>${fleet.percentageOfFleet.toFixed(1)}%</td>
-              <td>${(fleet.totalFee / 1e9).toFixed(6)} SOL</td>
+              <td>${(fleet.totalFee / 1e9).toFixed(6)} <img src="${solIcon}" style="width: 1.8vh;height: auto;vertical-align: middle;" alt="SOL"/></td>
               <td class="value-usd">$${window.prices && window.prices.solana ? ((fleet.totalFee / 1e9) * (window.prices.solana.usd as number)).toFixed(2) : '--'}</td>
             </tr>
           `;

@@ -2,11 +2,16 @@ import { currentProfileId } from '@/utils/state';
 import { createLoadingElement, updateProgress, setLoadingBackgroundState } from './loading';
 import { rentalStateBackup } from './rentalState_playload';
 import refresh_icon from '@/assets/icons/refresh_button.png';
-import mudWhiteIcon from '@/assets/icons/mud_w.png';
-import oniWhiteIcon from '@/assets/icons/oni_w.png';
-import usturWhiteIcon from '@/assets/icons/ustur_w.png';
+import mudWhiteIcon from '@/assets/icons/mud.png';
+import oniWhiteIcon from '@/assets/icons/oni.png';
+import usturWhiteIcon from '@/assets/icons/ustur.png';
 import { createRentalContractWindow } from './rental_detail';
+import { getCachedProfileFaction } from '@/utils/faction';
+import { TICKER_CONFIG } from './footBar';
 
+
+
+const atlasIcon = `<div><img style="width: 50%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/></div>`;
 // creiamo un dom da esportare come copia backup
 //export let rentalContractsBackup: HTMLElement | null = null;
 
@@ -53,7 +58,7 @@ function createFilterBar(onFilterChange: (
   let currentFaction = 'all';
   let currentFleetTerm = '';
   let currentLogic: 'OR' | 'AND' = 'OR'; // Default a OR
-  let currentState = 'all';
+  let currentState = 'available';
   let minRate = 0;
   let maxRate = Infinity;
   let rateEnabled = false;
@@ -72,9 +77,9 @@ function createFilterBar(onFilterChange: (
   const stateFilter = document.createElement('div');
   stateFilter.className = 'state-filter';
   stateFilter.innerHTML = `
-    <label><input type="radio" name="state" value="all" checked> All</label>
+    <label><input type="radio" name="state" value="all"> All</label>
     <label><input type="radio" name="state" value="active"> Active</label>
-    <label><input type="radio" name="state" value="available"> Available</label>
+    <label><input type="radio" name="state" value="available" checked> Available</label>
   `;
   stateFilter.addEventListener('change', (e) => {
     const target = e.target as HTMLInputElement;
@@ -109,6 +114,15 @@ function createFilterBar(onFilterChange: (
       update(); // Invio entrambi i valori
     }
   });
+  // ricaviamo la faction del profilo corrente dal cache locale per pre-selezionare il filtro
+  const userFaction = getCachedProfileFaction(currentProfileId);
+  if (userFaction === 'mud' || userFaction === 'oni' || userFaction === 'ustur') {
+    const radioToSelect = sbFilter.querySelector(`input[name="starbase"][value="${userFaction}"]`) as HTMLInputElement | null;
+    if (radioToSelect) {
+      radioToSelect.checked = true;
+      currentFaction = userFaction;
+    }
+  }
 
   // 3. FILTRO FLEET (TEXT)
   const fleetFilter = document.createElement('div');
@@ -178,6 +192,7 @@ function createFilterBar(onFilterChange: (
   filterBar.appendChild(sbFilter);
   filterBar.appendChild(fleetFilter);
   filterBar.appendChild(rateFilter);
+  update();
   return filterBar;
 }
 // Variabili di stato per il sorting
@@ -226,9 +241,11 @@ function buildTable(contracts: RentalContract[]) {
       const stateClass = c.current_rental_state ? 'state-active' : 'state-available';
 
       tr.innerHTML = `
-        <td id="fleet_${c.fleet}" title="${c.fleet}">${c.fleet_name ?? c.fleet.slice(0, 8) + '…'}</td>
+        <td class="fleet-cell" id="fleet_${c.fleet}" title="${c.fleet}">${c.fleet_name ?? c.fleet.slice(0, 8) + '…'} </td>
         <td class="starbase-cell" title="${c.starbase?.toUpperCase() ?? '-'}">${renderFactionIcon(c.starbase)}</td>
-        <td style="font-weight:bold">${c.rate}</td>
+        <td style= "display: flex; flex-direction: row; align-items: center; justify-content: end;">
+            <div style="display: flex; flex-direction: row; align-items: center;">${c.rate} ${atlasIcon}</div>
+            </td>
         <td class="composition-cell" title="${c.fleet_composition ?? '-'}">${c.fleet_composition ?? '-'}</td>
         <td><span class="state-pill ${stateClass}">${state}</span></td>
       `;
@@ -412,12 +429,11 @@ export async function fetchAndDisplayRentals(wipecache: boolean = false): Promis
       empty.textContent = 'No contracts found.';
       container.appendChild(empty);
     } else {
+      const table = buildTable(contractsData.contracts);
       const filterBar = createFilterBar((faction, fleet, logic, state, minRate, maxRate, rateEnabled) => {
         table.applyFilter(faction, fleet, logic, state, minRate, maxRate, rateEnabled);
       });
       container.appendChild(filterBar);
-
-      const table = buildTable(contractsData.contracts);
       container.appendChild(table.tableElement);
     }
 

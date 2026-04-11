@@ -98,7 +98,12 @@
 .rental-table td.composition-cell:hover {
   color: var(--accent-color);
 }
-
+.rental-table td.fleet-cell {
+  font-size: 2vh;
+    font-family: emoji;
+    color: aquamarine;
+    display: table-cell;
+}
 .rental-table td.starbase-cell {
   text-align: center;
 }

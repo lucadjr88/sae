@@ -28,6 +28,12 @@
   font-weight: 500;
 }
 
+.sol-icon {
+  width: 12px;
+  height: 12px;
+  vertical-align: middle;
+}
+
 .chart-container {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,5 @@
 import { getActiveViewPreference, setCachedResourceView, showCachedView } from '@/ui/elements/toggleSwitch';
-import { normalizeOpName } from '@/utils/utils';
+import { normalizeOpName, resolveTxTimeRange } from '@/utils/utils';
 import resourceMintImageCsvRaw from '@/assets/staratlas_resource_mint_image.csv?raw';
 import { TICKER_CONFIG } from './footBar';
 
@@ -61,11 +61,6 @@ type ResourceCatalogEntry = {
 type ResourceCatalog = {
   byMint: Map<string, ResourceCatalogEntry>;
   bySymbol: Map<string, ResourceCatalogEntry>;
-};
-
-type TxLite = {
-  blockTime?: number;
-  timestamp?: number;
 };
 
 type ResourceSummaryMetrics = NonNullable<ResourceFlows['summary']>;
@@ -382,39 +377,6 @@ export function resolveMaterialImageCandidates(entry: MaterialEntry): string[] {
   const imageUrl = entry.imageUrl?.trim() || '';
   if (!imageUrl) return [];
   return [imageUrl];
-}
-
-export function resolveFirstTxTimeLabel(data: any): string {
-  let firstTxTimeLabel = 'N/A';
-
-  try {
-    const txs = (data?.transactions?.length ? data.transactions : data?.allTransactions) ?? [];
-
-    if (data?.firstTxTime) {
-      const date = new Date(data.firstTxTime * 1000);
-      firstTxTimeLabel = date.toLocaleString();
-      return firstTxTimeLabel;
-    }
-
-    if (txs.length) {
-      const times = (txs as TxLite[])
-        .map((tx) => {
-          if (tx.blockTime) return new Date(tx.blockTime * 1000);
-          if (tx.timestamp) return new Date(tx.timestamp);
-          return null;
-        })
-        .filter(Boolean) as Date[];
-
-      if (times.length) {
-        const earliest = new Date(Math.min(...times.map((date) => date.getTime())));
-        firstTxTimeLabel = earliest.toLocaleString();
-      }
-    }
-  } catch {
-    return firstTxTimeLabel;
-  }
-
-  return firstTxTimeLabel;
 }
 
 function renderResourceOpsTable(
@@ -793,12 +755,12 @@ export function displayResourceResults(data: any): void {
   const hasAtlasPricing = materialEntries.some(
     (entry) => toNumber(entry.totalAtlasIn) > 0 || toNumber(entry.totalAtlasOut) > 0
   );
-  const firstTxTimeLabel = resolveFirstTxTimeLabel(data);
+  const { timeFirstTx, timeLastTx, ageLastTx } = resolveTxTimeRange(data);
 
   const analysisPeriod = document.createElement('div');
   analysisPeriod.className = 'analysis-period';
   const windowLabel = resourceFlows.timeWindow || '24h';
-  analysisPeriod.textContent = `Resource flows in the last ${windowLabel} from: ${firstTxTimeLabel}`;
+  analysisPeriod.textContent = `Resource flows in the last ${windowLabel}: ${timeFirstTx} → ${timeLastTx} , Age: (${ageLastTx})`;
   const timerSpan = document.createElement('span');
   timerSpan.className = 'timer timer-emphasis';
   analysisPeriod.appendChild(timerSpan);

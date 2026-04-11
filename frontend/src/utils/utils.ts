@@ -118,6 +118,62 @@ export function normalizeOpName(opName: string): string {
 	return mapping[lower] || opName;
 }
 
+type TxTimeEntry = {
+	blockTime?: number | null;
+	timestamp?: number | null;
+};
+
+type TxTimeRangeSource = {
+	firstTxTime?: number | null;
+	lastTxTime?: number | null;
+	transactions?: TxTimeEntry[];
+	allTransactions?: TxTimeEntry[];
+};
+
+function normalizeTimestampMs(value: number | null | undefined, assumeSeconds = false): number | null {
+	const numericValue = Number(value);
+	if (!Number.isFinite(numericValue) || numericValue <= 0) return null;
+	return assumeSeconds || numericValue < 1e12 ? numericValue * 1000 : numericValue;
+}
+
+export function formatDayMonthHourMinute(value: number | Date | null | undefined): string {
+	if (value == null) return 'N/A';
+	const date = value instanceof Date ? value : new Date(Number(value));
+	if (Number.isNaN(date.getTime())) return 'N/A';
+	const day = String(date.getDate()).padStart(2, '0');
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const hours = String(date.getHours()).padStart(2, '0');
+	const minutes = String(date.getMinutes()).padStart(2, '0');
+	return `${day}/${month} - ${hours}:${minutes}`;
+}
+
+export function formatAgeMinutesSeconds(lastTxMs: number | null | undefined): string {
+	if (lastTxMs == null || !Number.isFinite(Number(lastTxMs)) || Number(lastTxMs) <= 0) return 'N/A';
+	const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(lastTxMs)) / 1000));
+	const minutes = Math.floor(elapsedSeconds / 60);
+	const seconds = elapsedSeconds % 60;
+	return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+export function resolveTxTimeRange(data: TxTimeRangeSource | null | undefined): { timeFirstTx: string; timeLastTx: string; ageLastTx: string } {
+	const txs = (data?.transactions?.length ? data.transactions : data?.allTransactions) ?? [];
+	const timestamps = txs
+		.map((tx) => normalizeTimestampMs(tx?.blockTime ?? tx?.timestamp, tx?.blockTime != null))
+		.filter((value): value is number => value !== null);
+
+	const derivedFirstTxMs = normalizeTimestampMs(data?.firstTxTime, true) ?? (timestamps.length ? Math.min(...timestamps) : null);
+	const derivedLastTxMs = normalizeTimestampMs(data?.lastTxTime, true) ?? (timestamps.length ? Math.max(...timestamps) : null);
+	const firstTxMs = derivedFirstTxMs ?? derivedLastTxMs;
+	const lastTxMs = derivedLastTxMs ?? derivedFirstTxMs;
+
+	return {
+		timeFirstTx: formatDayMonthHourMinute(firstTxMs),
+		timeLastTx: formatDayMonthHourMinute(lastTxMs),
+		// ritorniamo anche age (tempo trascorso dall'ultimo tx) in formato m:ss
+		ageLastTx: formatAgeMinutesSeconds(lastTxMs)
+	};
+}
+
 // Type guard functions
 //function isDecodedInstruction(obj: any): obj is DecodedInstruction {
  // return obj && typeof obj === 'object' && ('recipeName' in obj || 'actions' in obj);

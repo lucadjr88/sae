@@ -5,10 +5,13 @@ import { cancelRentTx, delistFleetTx, listFleetTx } from "./rental_tx";
 import { computeDisplayedRentalTotal } from "../../utils/rentalDisplay";
 import { isLikelyTransactionSignature } from "@/utils/txFlow";
 import { createBaseDialog, removeDialogById, renderErrorCard, renderLoadingCard } from "./modal_base";
+import { resolveTxTimeRange } from "@/utils/utils";
 
 // creiamo un dom da esportare come copia backup
 export let rentalStateBackup: HTMLElement | null = null;
 const MIN_CANCEL_NOTICE_SECONDS = 24 * 60 * 60;
+
+const atlasIcon = `<div><img style="width: 50%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/></div>`;
 
 function normalizeFleetOption(fleet: any): { value: string; label: string } | null {
     const value = String(fleet?.key || fleet?.fleet || fleet?.pubkey || fleet?.data?.fleetShips || "").trim();
@@ -217,11 +220,6 @@ function openListingDialog(options: ListingDialogOptions = {}) {
 
     removeDialogById("listingDetailWindow", ".listingDetailOverlay");
 
-    const atlasIconUrl = TICKER_CONFIG.find((c) => c.id === "star-atlas")?.img || "";
-    const atlasIcon = atlasIconUrl
-        ? `<img style="width: 30%" src="${atlasIconUrl}" alt="ATLAS"/>`
-        : "ATLAS";
-
     const { windowEl: listingWindow, contentEl, close } = createBaseDialog({
         id: "listingDetailWindow",
         title,
@@ -377,7 +375,8 @@ export function rentalState_playload(data: any,) {
     headerRow.classList.add("rentalState-header");
     rentalState.appendChild(headerRow);
     const title = document.createElement("h2");
-    title.textContent = "Your Rentals";
+    const { timeFirstTx, timeLastTx, ageLastTx } = resolveTxTimeRange(data);
+    title.textContent = "Your Rentals from " + timeFirstTx + " to " + timeLastTx + " (Age: " + ageLastTx + ")";
     headerRow.appendChild(title);
 
     const rentalProgramButton = document.createElement("button");
@@ -464,7 +463,7 @@ export function rentalState_playload(data: any,) {
     loanedContainer.appendChild(listButton);
 
 
-    const atlasIcon = `<div><img style="width: 50%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/></div>`;
+    
 
     for (const fleet of data.rentedFleets || []) {
         console.log("[rentalState_playload] Processing rented fleet row:", {
@@ -501,14 +500,13 @@ export function rentalState_playload(data: any,) {
             row.innerHTML = `
             <td>${fleetName}</td>
             <td style= "display: flex; flex-direction: row; align-items: center;">
-            <div>${fleetRate} </div>
-            ${atlasIcon}
+            <div style="display: flex; flex-direction: row; align-items: center;">${fleetRate} ${atlasIcon}</div>
             </td>
             <td>${fleetRentalStart}</td>
             <td>${fleetRentalEnd}</td>
             
             <td style="color:#7f2713; display: flex; flex-direction: row; align-items: center;">
-            <div>${total_amount !== null ? total_amount : "-"} ${total_amount !== null ? atlasIcon : ""}</div>
+            <div style="display: flex; flex-direction: row; align-items: center;">${total_amount} ${atlasIcon}</div>
             <button
                 class="cancel-rental-button"
                 data-fleet-id="${fleet.fleet_id || fleet.fleet || ""}"

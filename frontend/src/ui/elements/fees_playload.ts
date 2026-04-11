@@ -1,12 +1,14 @@
 import { currentProfileId, connectedWalletPublicKey, connectedWalletIcon } from '@/utils/state';
 import { applyProfileFactionIcon, getCachedProfileFaction } from '@/utils/faction';
-import { normalizeOpName } from '@/utils/utils';
+import { normalizeOpName, resolveTxTimeRange } from '@/utils/utils';
 import { drawPieChart } from '@/services/charts';
 import { createFleetList, createOperationList, createOtherOperationsList } from '@/services/fleet-operations';
 import { toggleFleet } from '@/utils/ui';
 import { showSidebar, hideSidebar, canHideSidebarFromScroll } from '@/ui/elements/sideBar';
 import { setCachedFeeView} from '@/ui/elements/toggleSwitch';
 import { createResultPage } from '@/resultpage';
+
+import solIcon from '@/assets/icons/sol.svg';
 
 type OpStats = { totalFee: number; count: number };
 type FleetFeeEntry = { totalFee: number; feePercentage?: number; totalOperations?: number; isRented?: boolean; isListed?: boolean; isLoaned?: boolean; operations?: Record<string, OpStats> };
@@ -26,6 +28,7 @@ type DisplayData = {
   transactions?: TxLite[];
   allTransactions?: TxLite[];
   firstTxTime?: number;
+  lastTxTime?: number;
   hourlyFees24h?: number[];
   timeWindow?: string;
 };
@@ -34,38 +37,6 @@ type FleetMeta = { key: string; callsign?: string; isRented?: boolean; isListed?
 function lamportsToSol(value: number | undefined | null): number {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue / 1e9 : 0;
-}
-
-function resolveFirstTxTimeLabel(data: DisplayData): string {
-  let firstTxTimeLabel = 'N/A';
-
-  try {
-    const txs = (data?.transactions?.length ? data.transactions : data?.allTransactions) ?? [];
-
-    if (data?.firstTxTime) {
-      const date = new Date(data.firstTxTime * 1000);
-      return date.toLocaleString();
-    }
-
-    if (txs.length) {
-      const times = txs
-        .map((tx) => {
-          if (tx.blockTime) return new Date(tx.blockTime * 1000);
-          if (tx.timestamp) return new Date(tx.timestamp);
-          return null;
-        })
-        .filter(Boolean) as Date[];
-
-      if (times.length) {
-        const earliest = new Date(Math.min(...times.map((date) => date.getTime())));
-        firstTxTimeLabel = earliest.toLocaleString();
-      }
-    }
-  } catch {
-    return firstTxTimeLabel;
-  }
-
-  return firstTxTimeLabel;
 }
 
 function normalizeHourlyFeeSeries(hourlyFees?: number[]): number[] {
@@ -112,7 +83,7 @@ function renderHourlyFeeChart(hourlyFeesLamports: number[]): HTMLDivElement {
   title.className = 'chart-title';
   title.innerHTML = `
   <span>Hourly Fees (last 24h)</span>
-  <span>peak ${lamportsToSol(maxLamports).toFixed(4)} SOL/h</span>
+  <span>peak ${lamportsToSol(maxLamports).toFixed(4)} <img src="${solIcon}" style="width: 1.8vh;height: auto;vertical-align: middle;" alt="SOL"/>/h</span>
   `;
 
 
@@ -137,7 +108,7 @@ function renderHourlyFeeChart(hourlyFeesLamports: number[]): HTMLDivElement {
     bar.className = `hourly-fee-bar${feeLamports <= 0 ? ' is-empty' : ''}`;
     const heightPct = maxLamports > 0 ? Math.max(6, (feeLamports / maxLamports) * 100) : 6;
     bar.style.height = `${heightPct}%`;
-    bar.title = `${bucketTime.getHours().toString().padStart(2, '0')}:00 · ${lamportsToSol(feeLamports).toFixed(4)} SOL`;
+    bar.title = `${bucketTime.getHours().toString().padStart(2, '0')}:00 · ${lamportsToSol(feeLamports).toFixed(4)} {solIcon}`;
 
     barWrap.appendChild(bar);
     chart.appendChild(barWrap);
@@ -352,8 +323,8 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   const analysisPeriod = document.createElement('div');
   analysisPeriod.className = 'analysis-period';
   const feeWindowLabel = data.timeWindow || '24h';
-  const feeFirstTxTimeLabel = resolveFirstTxTimeLabel(data);
-  analysisPeriod.textContent = `Fees for operations in the last ${feeWindowLabel} from: ${feeFirstTxTimeLabel}`;
+  const { timeFirstTx, timeLastTx, ageLastTx } = resolveTxTimeRange(data);
+  analysisPeriod.textContent = `Fees for operations in the last ${feeWindowLabel}: ${timeFirstTx} → ${timeLastTx} , Age: (${ageLastTx})`;
 
   const timerSpan = document.createElement('span');
   timerSpan.className = 'timer timer-emphasis';
@@ -379,7 +350,7 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   if (data.unknownOperations > 0) {
     valueTrans.classList.add('stat-value-error');
   }
-  valueTrans.textContent = data.transactionCount24h + ' ';
+  valueTrans.innerHTML = `<span>${data.transactionCount24h}</span>`;
 
   // Logica condizionale per il sottotesto degli unknown
   if (data.unknownOperations > 0) {
@@ -404,7 +375,7 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   valueFees.className = 'stat-value highlight';
 
   const solAmount = lamportsToSol(data.sageFees24h).toFixed(6);
-  valueFees.textContent = `${solAmount} SOL `;
+  valueFees.innerHTML = `<span>${solAmount} <img src="${solIcon}" style="width: 2.5vh; height: auto; vertical-align: middle;" alt="SOL"/></span>`;
 
   const valueUsd = document.createElement('span');
   valueUsd.className = 'value-usd';

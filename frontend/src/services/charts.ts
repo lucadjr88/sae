@@ -2,6 +2,8 @@
 
 import type { ChartDataItem, PriceData } from '@/types/charts';
 
+import solIcon from '@/assets/icons/sol.svg';
+
 // Use Chart from global window (loaded via CDN in HTML)
 declare const Chart: any;
 
@@ -89,7 +91,7 @@ export function drawPieChart(
         <td style="color: ${item.color}; font-weight: 500;">${item.label}</td>
         <td>${item.count} ops</td>
         <td>${percentage}%</td>
-        <td>${solValue} SOL <span class="value-usd">($${usdValue})</span></td>
+        <td>${solValue} <img src="${solIcon}" style="width: 1.8vh;height: auto;vertical-align: middle;" alt="SOL"/> <span class="value-usd">($${usdValue})</span></td>
       </tr>
     `;
   });
