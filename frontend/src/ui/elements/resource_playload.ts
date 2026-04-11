@@ -3,8 +3,14 @@ import { normalizeOpName, resolveTxTimeRange } from '@/utils/utils';
 import resourceMintImageCsvRaw from '@/assets/staratlas_resource_mint_image.csv?raw';
 import { TICKER_CONFIG } from './footBar';
 
-
 const atlasIcon = `<img style="width: 25%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/>`;
+
+function getAtlasUsdPrice(): number | null {
+  if (typeof window === 'undefined') return null;
+  const livePrices = (window as any).prices;
+  const atlasUsd = livePrices?.['star-atlas']?.usd ?? livePrices?.atlas?.usd;
+  return typeof atlasUsd === 'number' && atlasUsd > 0 ? atlasUsd : null;
+}
 
 type ResourceOperationStats = {
   in: number;
@@ -209,11 +215,7 @@ function buildSelectedSummaryMetrics(
 }
 
 function formatAmount(value: number): string {
-  if (!Number.isFinite(value)) return '0';
-  if (Math.abs(value) >= 1000) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  }
-  return value.toLocaleString(undefined, { maximumFractionDigits: 1});
+  if (!Number.isFinite(value)) return '0';return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
 function formatAtlasValue(amount: number, atlasUnitPrice?: number | null): string {
@@ -540,11 +542,11 @@ function updateResourceFlowRowDisplay(
 
   if (inBar) {
     const inPct = rowMax > 0 ? (selectedIn / rowMax) * 100 : 0;
-    inBar.style.width = `${inPct.toFixed(2)}%`;
+    inBar.style.width = `${inPct.toFixed(0)}%`;
   }
   if (outBar) {
     const outPct = rowMax > 0 ? (selectedOut / rowMax) * 100 : 0;
-    outBar.style.width = `${outPct.toFixed(2)}%`;
+    outBar.style.width = `${outPct.toFixed(0)}%`;
   }
 
   if (inValue) {
@@ -609,12 +611,12 @@ function buildResourceFlowTable(
         <div class="resource-flow-dual">
           <div class="resource-flow-bar-dual-track">
             <div class="resource-flow-bar-row">
-              <div class="resource-flow-bar resource-flow-bar-in" style="width:${inPct.toFixed(2)}%">
+              <div class="resource-flow-bar resource-flow-bar-in" style="width:${inPct.toFixed(0)}%">
                 <span class="resource-flow-value-inline">${formatAmount(entry.totalIn)}${formatAtlasValue(entry.totalIn, entry.atlasUnitMedianPrice)}</span>
               </div>
             </div>
             <div class="resource-flow-bar-row">
-              <div class="resource-flow-bar resource-flow-bar-out" style="width:${outPct.toFixed(2)}%">
+              <div class="resource-flow-bar resource-flow-bar-out" style="width:${outPct.toFixed(0)}%">
                 <span class="resource-flow-value-inline">${formatAmount(entry.totalOut)}${formatAtlasValue(entry.totalOut, entry.atlasUnitMedianPrice)}</span>
               </div>
             </div>
@@ -821,8 +823,19 @@ export function displayResourceResults(data: any): void {
     });
 
 if (hasAtlasPricing) {
-      totalOutValue.innerHTML = formatAmount(totalAtlasOutValue) + atlasIcon;
-      totalInValue.innerHTML = formatAmount(totalAtlasInValue) + atlasIcon;
+      // calcoliamo il valore in dollari usando il ticker ATLAS live del footbar
+      const atlasPrice = getAtlasUsdPrice();
+
+      if (atlasPrice !== null) {
+        const totalAtlasInDollars = totalAtlasInValue * atlasPrice;
+        const totalAtlasOutDollars = totalAtlasOutValue * atlasPrice;
+        totalOutValue.innerHTML = formatAmount(totalAtlasOutValue) + atlasIcon + `<span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatAmount(totalAtlasOutDollars)} $)</span>`;
+        totalInValue.innerHTML = formatAmount(totalAtlasInValue) + atlasIcon + `<span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatAmount(totalAtlasInDollars)} $)</span>`;
+        return;
+      }
+
+      totalOutValue.innerHTML = `${formatAmount(totalAtlasOutValue)}${atlasIcon}`;
+      totalInValue.innerHTML = `${formatAmount(totalAtlasInValue)}${atlasIcon}`;
       return;
     }
 
@@ -831,6 +844,10 @@ if (hasAtlasPricing) {
   };
   
   updateHeaderTotals();
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('prices-updated', updateHeaderTotals, { once: true });
+  }
 
   statsGrid.appendChild(totalOutCard);
   statsGrid.appendChild(totalInCard);

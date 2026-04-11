@@ -29,7 +29,8 @@ import {
   isMobileSessionValid,
   disconnectMobileWallet,
   getMobileIcon,
-  onMobileConnect
+  onMobileConnect,
+  mobileWalletAdapter
 } from '@/services/mobile_wallet';
 
 declare global {
@@ -79,6 +80,7 @@ if (isMobile()) {
       get isConnected() { return isMobileSessionValid(); },
       disconnect: disconnectMobileWallet,
       get icon() { return getMobileIcon(); },
+      adapter: mobileWalletAdapter,
       name: "mobile"
     };
     onMobileConnect(() => {

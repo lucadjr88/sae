@@ -93,6 +93,7 @@ export function createFootBarElement(): HTMLDivElement {
   fetchPrices().then(pricesData => {
     if (pricesData) {
       (window as any).prices = pricesData;
+      window.dispatchEvent(new CustomEvent('prices-updated'));
     }
     updatePricesInDOM(pricesData);
   });
@@ -100,6 +101,7 @@ export function createFootBarElement(): HTMLDivElement {
     const pricesData = await fetchPrices();
     if (pricesData) {
       (window as any).prices = pricesData;
+      window.dispatchEvent(new CustomEvent('prices-updated'));
     }
     updatePricesInDOM(pricesData);
   }, PRICE_UPDATE_INTERVAL);

@@ -1,5 +1,6 @@
 
 import { transact, Web3MobileWallet } from "@solana-mobile/mobile-wallet-adapter-protocol-web3js";
+import { PublicKey, Transaction } from "@solana/web3.js";
 import bs58 from "bs58";
 import { APP_IDENTITY } from "./wallet-adapter";
 
@@ -93,6 +94,37 @@ export function getMobileIcon(): string | undefined {
     console.log('[MOBILE WALLET] getMobileIcon called, current icon:', icon);
     return icon;
   }
+
+export async function signMobileTransaction(tx: Transaction): Promise<Transaction> {
+  if (!session?.auth_token) {
+    throw new Error('Mobile wallet not connected or session expired.');
+  }
+
+  const [signedTx] = await transact(async (wallet: Web3MobileWallet) => {
+    const nextSession = await wallet.reauthorize({
+      auth_token: session.auth_token,
+      identity: APP_IDENTITY,
+    });
+    if (nextSession) {
+      session = { ...session, ...nextSession };
+    }
+    return await wallet.signTransactions({ transactions: [tx] });
+  });
+
+  return signedTx;
+}
+
+export const mobileWalletAdapter = {
+  get connected() {
+    return isMobileSessionValid();
+  },
+  get publicKey() {
+    return publicKey ? new PublicKey(publicKey) : null;
+  },
+  async signTransaction(tx: Transaction) {
+    return await signMobileTransaction(tx);
+  },
+};
 // VECCHIO CODICE (src/services/wallet.ts) - NON USARE, SOLO PER CONFRONTO
 /*
         // MOBILE: Solana Mobile Wallet Adapter pattern fedele agli esempi ufficiali

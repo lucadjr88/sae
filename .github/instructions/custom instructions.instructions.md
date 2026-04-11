@@ -1,9 +1,17 @@
 ---
-description: "Use when working on Star Atlas SAGE decoding/orchestration tasks in this repository. Enforces Solana/Anchor/Borsh/Rust/TypeScript standards and readonly usage of external knowledge repositories."
+description: "Use when working on Star Atlas SAGE decoding/orchestration tasks in this repository. Enforces minimal diffs, terse output, no build/test without user approval, and readonly usage of external knowledge repositories."
 applyTo: "**"
 ---
 
 # Copilot Instructions: SAGE, Rental, and Decoders
+
+## 0) Default Execution Style
+- Minimalism first: prefer the smallest correct diff and the fewest touched files.
+- Change only what is required for the request; avoid speculative cleanup/refactors.
+- Keep code, comments, and explanations as short as possible.
+- Never run `build`, `test`, or other verification commands unless the user explicitly asks for them.
+- If verification could help, ask the user first.
+- Use as few tokens as practical in every response.
 
 ## 1) Project Domain and SSOT
 - Domain: Star Atlas SAGE and related rental/crafting decoding and orchestration.
@@ -51,11 +59,13 @@ applyTo: "**"
 
 ## 7) Operational Rules
 - Use patch-style, minimal diffs by default.
+- Never execute `build`, `test`, or validation commands proactively; ask the user first.
 - Keep terminals separated for long-running services vs one-off scripts.
 - When restarting the backend is explicitly requested, use the exact command provided by the user/project conventions.
 - Do not chain commands that could unintentionally kill unrelated running processes.
 
 ## 8) Communication Style
 - Assume expert audience (Solana, SAGE, Anchor, Rust, Borsh).
-- Be direct, technical, concise.
-- Prioritize concrete findings, risks, and exact file-level changes over generic explanations.
+- Be direct, technical, and minimal.
+- Prefer terse answers: concrete findings, risks, and exact file-level changes only.
+- Avoid long explanations when a short answer is sufficient.
