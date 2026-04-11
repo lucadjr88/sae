@@ -8,8 +8,9 @@ const atlasIcon = `<img style="width: 25%" src="${TICKER_CONFIG.find(c => c.id =
 function getAtlasUsdPrice(): number | null {
   if (typeof window === 'undefined') return null;
   const livePrices = (window as any).prices;
-  const atlasUsd = livePrices?.['star-atlas']?.usd ?? livePrices?.atlas?.usd;
-  return typeof atlasUsd === 'number' && atlasUsd > 0 ? atlasUsd : null;
+  const atlasUsdRaw = livePrices?.['star-atlas']?.usd ?? livePrices?.atlas?.usd;
+  const atlasUsd = Number(atlasUsdRaw);
+  return Number.isFinite(atlasUsd) && atlasUsd > 0 ? atlasUsd : null;
 }
 
 type ResourceOperationStats = {
@@ -216,6 +217,14 @@ function buildSelectedSummaryMetrics(
 
 function formatAmount(value: number): string {
   if (!Number.isFinite(value)) return '0';return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function formatUsdAmount(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 function formatAtlasValue(amount: number, atlasUnitPrice?: number | null): string {
@@ -770,7 +779,7 @@ export function displayResourceResults(data: any): void {
   const analysisPeriod = document.createElement('div');
   analysisPeriod.className = 'analysis-period';
   const windowLabel = resourceFlows.timeWindow || '24h';
-  analysisPeriod.textContent = `Resource flows in the last ${windowLabel}: ${timeFirstTx} → ${timeLastTx} , Age: (${ageLastTx})`;
+  analysisPeriod.textContent = `Resource flows in the last ${windowLabel}: ${timeFirstTx} → ${timeLastTx} , Age: ${ageLastTx}`;
   const timerSpan = document.createElement('span');
   timerSpan.className = 'timer timer-emphasis';
   analysisPeriod.appendChild(timerSpan);
@@ -829,8 +838,8 @@ if (hasAtlasPricing) {
       if (atlasPrice !== null) {
         const totalAtlasInDollars = totalAtlasInValue * atlasPrice;
         const totalAtlasOutDollars = totalAtlasOutValue * atlasPrice;
-        totalOutValue.innerHTML = formatAmount(totalAtlasOutValue) + atlasIcon + `<span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatAmount(totalAtlasOutDollars)} $)</span>`;
-        totalInValue.innerHTML = formatAmount(totalAtlasInValue) + atlasIcon + `<span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatAmount(totalAtlasInDollars)} $)</span>`;
+        totalOutValue.innerHTML = formatAmount(totalAtlasOutValue) + atlasIcon + `<span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatUsdAmount(totalAtlasOutDollars)} $)</span>`;
+        totalInValue.innerHTML = formatAmount(totalAtlasInValue) + atlasIcon + `<span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatUsdAmount(totalAtlasInDollars)} $)</span>`;
         return;
       }
 

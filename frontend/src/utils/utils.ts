@@ -156,22 +156,43 @@ export function formatAgeMinutesSeconds(lastTxMs: number | null | undefined): st
 }
 
 export function resolveTxTimeRange(data: TxTimeRangeSource | null | undefined): { timeFirstTx: string; timeLastTx: string; ageLastTx: string } {
-	const txs = (data?.transactions?.length ? data.transactions : data?.allTransactions) ?? [];
-	const timestamps = txs
-		.map((tx) => normalizeTimestampMs(tx?.blockTime ?? tx?.timestamp, tx?.blockTime != null))
-		.filter((value): value is number => value !== null);
+    const txs = (data?.transactions?.length ? data.transactions : data?.allTransactions) ?? [];
+    const timestamps = txs
+        .map((tx) => normalizeTimestampMs(tx?.blockTime ?? tx?.timestamp, tx?.blockTime != null))
+        .filter((value): value is number => value !== null);
 
-	const derivedFirstTxMs = normalizeTimestampMs(data?.firstTxTime, true) ?? (timestamps.length ? Math.min(...timestamps) : null);
-	const derivedLastTxMs = normalizeTimestampMs(data?.lastTxTime, true) ?? (timestamps.length ? Math.max(...timestamps) : null);
-	const firstTxMs = derivedFirstTxMs ?? derivedLastTxMs;
-	const lastTxMs = derivedLastTxMs ?? derivedFirstTxMs;
+    const derivedFirstTxMs = normalizeTimestampMs(data?.firstTxTime, true) ?? (timestamps.length ? Math.min(...timestamps) : null);
+    const derivedLastTxMs = normalizeTimestampMs(data?.lastTxTime, true) ?? (timestamps.length ? Math.max(...timestamps) : null);
+    
+    const firstTxMs = derivedFirstTxMs ?? derivedLastTxMs;
+    const lastTxMs = derivedLastTxMs ?? derivedFirstTxMs;
 
-	return {
-		timeFirstTx: formatDayMonthHourMinute(firstTxMs),
-		timeLastTx: formatDayMonthHourMinute(lastTxMs),
-		// ritorniamo anche age (tempo trascorso dall'ultimo tx) in formato m:ss
-		ageLastTx: formatAgeMinutesSeconds(lastTxMs)
-	};
+    return {
+        timeFirstTx: formatDayMonthHourMinute(firstTxMs),
+        timeLastTx: formatDayMonthHourMinute(lastTxMs),
+        // Sostituiamo la vecchia funzione con la nuova logica di formattazione
+        ageLastTx: formatRelativeAge(lastTxMs)
+    };
+}
+
+/**
+ * Formatta la differenza di tempo tra "ora" e il timestamp fornito.
+ * Output previsto: "25m" oppure "2h 15m"
+ */
+function formatRelativeAge(timestampMs: number | null): string {
+    if (!timestampMs) return "-";
+
+    const now = Date.now();
+    const diffMs = Math.max(0, now - timestampMs);
+    const totalMinutes = Math.floor(diffMs / (1000 * 60));
+    
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
 }
 
 // Type guard functions

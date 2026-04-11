@@ -376,7 +376,7 @@ export function rentalState_playload(data: any,) {
     rentalState.appendChild(headerRow);
     const title = document.createElement("h2");
     const { timeFirstTx, timeLastTx, ageLastTx } = resolveTxTimeRange(data);
-    title.textContent = "Your Rentals from " + timeFirstTx + " to " + timeLastTx + " (Age: " + ageLastTx + ")";
+    title.textContent = "Your Rentals from " + timeFirstTx + " to " + timeLastTx + " Age: " + ageLastTx;
     headerRow.appendChild(title);
 
     const rentalProgramButton = document.createElement("button");

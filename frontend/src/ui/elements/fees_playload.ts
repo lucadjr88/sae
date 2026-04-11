@@ -324,7 +324,7 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   analysisPeriod.className = 'analysis-period';
   const feeWindowLabel = data.timeWindow || '24h';
   const { timeFirstTx, timeLastTx, ageLastTx } = resolveTxTimeRange(data);
-  analysisPeriod.textContent = `Fees for operations in the last ${feeWindowLabel}: ${timeFirstTx} → ${timeLastTx} , Age: (${ageLastTx})`;
+  analysisPeriod.textContent = `Fees for operations in the last ${feeWindowLabel}: ${timeFirstTx} → ${timeLastTx} , Age: ${ageLastTx}`;
 
   const timerSpan = document.createElement('span');
   timerSpan.className = 'timer timer-emphasis';
