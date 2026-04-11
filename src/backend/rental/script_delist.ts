@@ -10,6 +10,7 @@ import {
 
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
 import { getRpcConnection } from "../../utils/rpc/connection.js";
+import { prepareTxForWalletSignature } from "../security/txSigningMiddleware.js";
 
 const router = express.Router();
 
@@ -373,14 +374,23 @@ async function handleDelistFleet(req: express.Request, res: express.Response) {
 		const latestBlockhash = await connection.getLatestBlockhash();
 		tx.recentBlockhash = latestBlockhash.blockhash;
 
-		const serialized = tx.serialize({ requireAllSignatures: false }).toString("base64");
-		console.log("[DELIST] TX serializzata (base64):", serialized.slice(0, 80) + "...");
+		const signingPayload = prepareTxForWalletSignature({
+			tx,
+			signer: ownerPk,
+			operation: 'delist-fleet',
+			meta: {
+				contract: derivedAccounts.contract ?? null,
+				rentalState: derivedAccounts.rentalState ?? null,
+				fleet: derivedAccounts.fleet ?? fleetInput ?? null,
+			},
+		});
+		console.log("[DELIST] TX serializzata (base64):", signingPayload.transaction.slice(0, 80) + "...");
 		console.log("[DELIST][COPY-UNSIGNED-TX-START]");
-		console.log(serialized);
+		console.log(signingPayload.transaction);
 		console.log("[DELIST][COPY-UNSIGNED-TX-END]");
 
 		res.json({
-			transaction: serialized,
+			...signingPayload,
 			derivedAccounts,
 		});
 	} catch (err) {

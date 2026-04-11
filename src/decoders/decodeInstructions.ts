@@ -144,6 +144,42 @@ function parseUiAmount(balance: any): number {
   return rawAmount / Math.pow(10, decimals);
 }
 
+function resolveTraderMarketSideFromContext(tx: any): 'TraderMarketBuy' | 'TraderMarketSell' | null {
+  const traderInfo = extractTraderInstructionContext(tx);
+  if (!traderInfo) {
+    return null;
+  }
+
+  const accountKeys = getAllAccountKeys(tx);
+  const preTokenBalances = Array.isArray(tx?.meta?.preTokenBalances) ? tx.meta.preTokenBalances : [];
+  const postTokenBalances = Array.isArray(tx?.meta?.postTokenBalances) ? tx.meta.postTokenBalances : [];
+  const mintByAccount = new Map<string, string>();
+
+  for (const balance of [...preTokenBalances, ...postTokenBalances]) {
+    const index = Number(balance?.accountIndex);
+    const account = accountKeys[index] || '';
+    const mint = typeof balance?.mint === 'string' ? balance.mint : '';
+    if (account && mint && !mintByAccount.has(account)) {
+      mintByAccount.set(account, mint);
+    }
+  }
+
+  const initializerDepositMint = mintByAccount.get(traderInfo.initializerDepositTokenAccount || '') || '';
+  const orderTakerDepositMint = mintByAccount.get(traderInfo.orderTakerDepositTokenAccount || '') || '';
+  const assetMint = traderInfo.assetMint || '';
+  const currencyMint = traderInfo.currencyMint || ATLAS_MINT;
+
+  if ((assetMint && initializerDepositMint === assetMint) || (currencyMint && orderTakerDepositMint === currencyMint)) {
+    return 'TraderMarketSell';
+  }
+
+  if ((currencyMint && initializerDepositMint === currencyMint) || (assetMint && orderTakerDepositMint === assetMint)) {
+    return 'TraderMarketBuy';
+  }
+
+  return null;
+}
+
 function inferTraderSemantic(tx: any): { name: string; source: string } | null {
   const logs = Array.isArray(tx?.meta?.logMessages) ? tx.meta.logMessages : [];
   const hasTraderProgramLog = logs.some((line: any) => typeof line === 'string' && line.includes(TRADER_PROGRAM_ID));
@@ -200,6 +236,11 @@ function inferTraderSemantic(tx: any): { name: string; source: string } | null {
   }
 
   if (hasExchangeLog) {
+    const marketSideFromContext = resolveTraderMarketSideFromContext(tx);
+    if (marketSideFromContext) {
+      return { name: marketSideFromContext, source: 'trader_process_exchange' };
+    }
+
     if (signerAtlasDelta < 0 && nonAtlasPositive > 0) {
       return { name: 'TraderMarketBuy', source: 'trader_process_exchange' };
     }

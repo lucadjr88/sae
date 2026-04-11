@@ -80,7 +80,7 @@ const DEFAULT_UNCHECKED_RESOURCE_OPS = new Set<string>([
   'SB Upgrade',
   'TraderMarketBuy',
   'TraderMarketSell',
-]);
+].map((value) => normalizeOpName(value)));
 
 function isResourceOpCheckedByDefault(opName: string): boolean {
   return !DEFAULT_UNCHECKED_RESOURCE_OPS.has(normalizeOpName(opName));
@@ -185,8 +185,7 @@ function buildResourceSummaryMetrics(totalIn: number, totalOut: number, atlasUni
 function buildSelectedSummaryMetrics(
   operations: Map<string, ResourceOperationStats>,
   atlasUnitMedianPrice?: number | null,
-  selectedOps?: Set<string>,
-  baseSummary?: ResourceSummaryMetrics
+  selectedOps?: Set<string>
 ): ResourceSummaryMetrics {
   let selectedIn = 0;
   let selectedOut = 0;
@@ -202,8 +201,8 @@ function buildSelectedSummaryMetrics(
 
   const selectedAtlasSummary = buildResourceSummaryMetrics(selectedIn, selectedOut, atlasUnitMedianPrice);
   return {
-    totalMaterialsIn: baseSummary ? toNumber(baseSummary.totalMaterialsIn) : selectedAtlasSummary.totalMaterialsIn,
-    totalMaterialsOut: baseSummary ? toNumber(baseSummary.totalMaterialsOut) : selectedAtlasSummary.totalMaterialsOut,
+    totalMaterialsIn: selectedIn,
+    totalMaterialsOut: selectedOut,
     totalAtlasIn: selectedAtlasSummary.totalAtlasIn,
     totalAtlasOut: selectedAtlasSummary.totalAtlasOut,
   };
@@ -382,8 +381,7 @@ export function resolveMaterialImageCandidates(entry: MaterialEntry): string[] {
 function renderResourceOpsTable(
   operations: Record<string, ResourceOperationStats>,
   atlasUnitMedianPrice?: number | null,
-  onSelectionChange?: (summary?: ResourceSummaryMetrics) => void,
-  baseSummary?: ResourceSummaryMetrics
+  onSelectionChange?: (summary?: ResourceSummaryMetrics) => void
 ): HTMLTableElement {
   const table = document.createElement('table');
   table.className = 'resource-ops-table';
@@ -416,7 +414,7 @@ function renderResourceOpsTable(
       }
     });
 
-    onSelectionChange(buildSelectedSummaryMetrics(normalizedOperations, atlasUnitMedianPrice, selectedOps, baseSummary));
+    onSelectionChange(buildSelectedSummaryMetrics(normalizedOperations, atlasUnitMedianPrice, selectedOps));
   };
 
   normalizedOperations.forEach((stats, opName) => {
@@ -530,19 +528,30 @@ function renderResourceSummary(summary: ResourceSummaryMetrics | undefined): Res
 
 function updateResourceFlowRowDisplay(
   row: HTMLDivElement,
-  entry: MaterialEntry,
   summary: ResourceSummaryMetrics
 ): void {
   const inBar = row.querySelector<HTMLDivElement>('.resource-flow-bar-in');
   const outBar = row.querySelector<HTMLDivElement>('.resource-flow-bar-out');
   const inValue = inBar?.querySelector<HTMLSpanElement>('.resource-flow-value-inline');
   const outValue = outBar?.querySelector<HTMLSpanElement>('.resource-flow-value-inline');
+  const selectedIn = toNumber(summary.totalMaterialsIn);
+  const selectedOut = toNumber(summary.totalMaterialsOut);
+  const rowMax = Math.max(selectedIn, selectedOut);
+
+  if (inBar) {
+    const inPct = rowMax > 0 ? (selectedIn / rowMax) * 100 : 0;
+    inBar.style.width = `${inPct.toFixed(2)}%`;
+  }
+  if (outBar) {
+    const outPct = rowMax > 0 ? (selectedOut / rowMax) * 100 : 0;
+    outBar.style.width = `${outPct.toFixed(2)}%`;
+  }
 
   if (inValue) {
-    inValue.innerHTML = `${formatAmount(entry.totalIn)}${formatAtlasValue(toNumber(summary.totalAtlasIn), 1)}`;
+    inValue.innerHTML = `${formatAmount(selectedIn)}${formatAtlasValue(toNumber(summary.totalAtlasIn), 1)}`;
   }
   if (outValue) {
-    outValue.innerHTML = `${formatAmount(entry.totalOut)}${formatAtlasValue(toNumber(summary.totalAtlasOut), 1)}`;
+    outValue.innerHTML = `${formatAmount(selectedOut)}${formatAtlasValue(toNumber(summary.totalAtlasOut), 1)}`;
   }
 }
 
@@ -643,15 +652,14 @@ function buildResourceFlowTable(
       const applySelection = (nextSummary?: ResourceSummaryMetrics) => {
         const activeSummary = nextSummary ?? defaultSummary;
         summaryTable.update(activeSummary);
-        updateResourceFlowRowDisplay(row, entry, activeSummary);
+        updateResourceFlowRowDisplay(row, activeSummary);
         onEntrySummaryChange?.(entry.mint, activeSummary);
       };
 
       const opsTable = renderResourceOpsTable(
         entry.operations,
         entry.atlasUnitMedianPrice,
-        applySelection,
-        defaultSummary
+        applySelection
       );
 
       tablesLayout.appendChild(opsTable);

@@ -4,6 +4,7 @@ import express from "express";
 
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
 import { getRpcConnection } from "../../utils/rpc/connection.js";
+import { prepareTxForWalletSignature } from "../security/txSigningMiddleware.js";
 
 const router = express.Router();
 
@@ -309,14 +310,23 @@ router.post("/cancel-rent", async (req, res) => {
 		tx.recentBlockhash = latestBlockhash.blockhash;
 		console.log("[CANCEL-RENT] recentBlockhash set:", latestBlockhash.blockhash);
 
-		const serialized = tx.serialize({ requireAllSignatures: false }).toString("base64");
-		console.log("[CANCEL-RENT] TX serializzata (base64):", serialized.slice(0, 80) + "...");
+		const signingPayload = prepareTxForWalletSignature({
+			tx,
+			signer: borrowerPk,
+			operation: 'cancel-rent',
+			meta: {
+				contract: contractPk.toBase58(),
+				rentalState: rentalStatePk.toBase58(),
+				rentalThread: rentalThreadPk.toBase58(),
+			},
+		});
+		console.log("[CANCEL-RENT] TX serializzata (base64):", signingPayload.transaction.slice(0, 80) + "...");
 		console.log("[CANCEL-RENT][COPY-UNSIGNED-TX-START]");
-		console.log(serialized);
+		console.log(signingPayload.transaction);
 		console.log("[CANCEL-RENT][COPY-UNSIGNED-TX-END]");
 		console.log("[CANCEL-RENT] Returning unsigned transaction payload to frontend");
 		res.json({
-			transaction: serialized,
+			...signingPayload,
 			derivedAccounts: {
 				contract: contractPk.toBase58(),
 				rentalState: rentalStatePk.toBase58(),

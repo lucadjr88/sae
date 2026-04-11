@@ -158,7 +158,8 @@ test('extracts official marketplace asset and currency mints from ProcessExchang
   const [decoded] = decodeInstructions([tx]);
 
   assert.equal(decoded.success, true);
-  assert.equal(decoded.instructionName, 'TraderMarketBuy');
+  assert.equal(decoded.instructionName, 'TraderMarketSell');
+  assert.equal(decoded.decoded?.[0]?.name, 'TraderMarketSell');
   assert.equal(decoded.decoded?.[0]?.data?.trader?.currencyMint, ATLAS_MINT);
   assert.equal(decoded.decoded?.[0]?.data?.trader?.assetMint, AMMO_MINT);
 });

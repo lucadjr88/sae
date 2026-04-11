@@ -222,7 +222,7 @@ function buildTable(contracts: RentalContract[]) {
   const thead = document.createElement('thead');
   thead.innerHTML = `<tr>
     <th data-key="fleet_name">Fleet</th>
-    <th data-key="starbase">Starbase</th>
+    <th data-key="starbase">Faction</th>
     <th data-key="rate">Rate</th>
     <th>Composition</th>
     <th data-key="current_rental_state">State</th>

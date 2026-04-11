@@ -72,6 +72,7 @@ export async function rentTx({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transaction: base64Tx,
+          signingRequestId: data.signingRequestId,
           contractAddress,
           rentalState: data.rentalState,
           rentalCacheSeed: data.rentalCacheSeed,
@@ -212,7 +213,7 @@ export async function cancelRentTx({
       const sendResp = await fetch("/api/send-tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transaction: base64Tx, txMeta: cancelTxMeta }),
+        body: JSON.stringify({ transaction: base64Tx, signingRequestId: data.signingRequestId, txMeta: cancelTxMeta }),
       });
       const sendData = await sendResp.json();
       console.log("[DEBUG][cancel-rent] /api/send-tx response:", sendData);
@@ -340,7 +341,7 @@ export async function delistFleetTx({
       const sendResp = await fetch("/api/send-tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transaction: base64Tx, txMeta: delistTxMeta }),
+        body: JSON.stringify({ transaction: base64Tx, signingRequestId: data.signingRequestId, txMeta: delistTxMeta }),
       });
       const sendData = await sendResp.json();
       console.log("[DEBUG][delist] /api/send-tx response:", sendData);
@@ -481,7 +482,7 @@ export async function listFleetTx({
     const sendResp = await fetch("/api/send-tx", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ transaction: base64Tx, txMeta: listTxMeta }),
+      body: JSON.stringify({ transaction: base64Tx, signingRequestId: data.signingRequestId, txMeta: listTxMeta }),
     });
     const sendData = await sendResp.json();
     console.log("[DEBUG][list] /api/send-tx response:", sendData);

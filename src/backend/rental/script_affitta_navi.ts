@@ -7,6 +7,7 @@ import { RentalService } from "./rentalService.js";
 import { decodeRentalState } from "./decode.js";
 import { pickOptimisticRentalRate } from "./rentalCacheUtils.js";
 import { RpcPoolManager } from "../../utils/rpc/rpc-pool-manager.js";
+import { getVerifiedSignedTxFromLocals, prepareTxForWalletSignature, requireVerifiedTxSignature } from "../security/txSigningMiddleware.js";
 
 // PATCH: Express endpoint minimale per orchestrare la rental tx
 import express from "express";
@@ -613,8 +614,18 @@ router.post("/rent-fleet", async (req, res) => {
       tx.recentBlockhash = latestBlockhash.blockhash;
       // Log oggetto tx DOPO l'assegnazione
       console.log("[RENT-FLEET] TX oggetto dopo feePayer/recentBlockhash:", tx);
-      const serialized = tx.serialize({ requireAllSignatures: false }).toString('base64');
-      console.log("[RENT-FLEET] TX serializzata (base64):", serialized.slice(0, 80) + '...');
+      const signingPayload = prepareTxForWalletSignature({
+        tx,
+        signer: borrowerPk,
+        operation: 'rent-fleet',
+        profileId: rpcProfileId,
+        meta: {
+          contractAddress,
+          rentalState: rentalState.toBase58(),
+          borrower: borrowerPk.toBase58(),
+        },
+      });
+      console.log("[RENT-FLEET] TX serializzata (base64):", signingPayload.transaction.slice(0, 80) + '...');
       const rentalCacheSeed = {
         profileId: borrowerProfile,
         fleet: contract?.fleet || null,
@@ -637,7 +648,12 @@ router.post("/rent-fleet", async (req, res) => {
         rental_state_pubkey: rentalState.toBase58(),
         rental_cancelled: false
       };
-      res.json({ transaction: serialized, contractAddress, rentalState: rentalState.toBase58(), rentalCacheSeed });
+      res.json({
+        ...signingPayload,
+        contractAddress,
+        rentalState: rentalState.toBase58(),
+        rentalCacheSeed,
+      });
     } catch (err) {
       console.error("[RENT-FLEET] Errore durante la creazione/serializzazione della tx:", err);
       res.status(500).json({ error: err.message || String(err) });
@@ -648,37 +664,53 @@ router.post("/rent-fleet", async (req, res) => {
 });
 
 // Broadcast tx firmata usando il pool RPC del backend
-router.post('/send-tx', async (req, res) => {
-  const { transaction, contractAddress, rentalState, rentalCacheSeed, txMeta } = req.body;
-  if (!transaction || typeof transaction !== 'string') {
-    return res.status(400).json({ error: 'Missing or invalid transaction field' });
-  }
+router.post('/send-tx', requireVerifiedTxSignature(), async (req, res) => {
+  const { transaction, signingRequestId, contractAddress, rentalState, rentalCacheSeed, txMeta } = req.body;
   try {
     if (txMeta && typeof txMeta === 'object') {
       console.log('[SEND-TX] txMeta:', txMeta);
     }
-    const isCancelRent = txMeta?.operation === 'cancel-rent';
-    const isDelistFleet = txMeta?.operation === 'delist-fleet';
-    const isListFleet = txMeta?.operation === 'list-fleet';
+    const { rawTx, expectedSigner, operation: verifiedOperation, record: signingRecord } = getVerifiedSignedTxFromLocals(res);
+    const trustedMeta = signingRecord.meta && typeof signingRecord.meta === 'object' ? signingRecord.meta : {};
+    const effectiveOperation = verifiedOperation || (typeof txMeta?.operation === 'string' ? txMeta.operation : 'unknown');
+    if (typeof txMeta?.operation === 'string' && txMeta.operation !== effectiveOperation) {
+      console.warn('[SEND-TX] client txMeta.operation differs from verified signing record', {
+        clientOperation: txMeta.operation,
+        verifiedOperation: effectiveOperation,
+        signingRequestId,
+      });
+    }
+    const isCancelRent = effectiveOperation === 'cancel-rent';
+    const isDelistFleet = effectiveOperation === 'delist-fleet';
+    const isListFleet = effectiveOperation === 'list-fleet';
     const isRemovalOp = isCancelRent || isDelistFleet;
-    const effectiveContractAddress = typeof contractAddress === 'string'
-      ? contractAddress
-      : typeof txMeta?.contract === 'string'
-        ? txMeta.contract
-        : null;
-    const effectiveRentalState = typeof rentalState === 'string'
-      ? rentalState
-      : typeof txMeta?.rentalState === 'string'
-        ? txMeta.rentalState
-        : null;
-    const rawTx = Buffer.from(transaction, 'base64');
+    const effectiveContractAddress = typeof trustedMeta.contractAddress === 'string'
+      ? trustedMeta.contractAddress
+      : typeof trustedMeta.contract === 'string'
+        ? trustedMeta.contract
+        : typeof contractAddress === 'string'
+          ? contractAddress
+          : typeof txMeta?.contract === 'string'
+            ? txMeta.contract
+            : null;
+    const effectiveRentalState = typeof trustedMeta.rentalState === 'string'
+      ? trustedMeta.rentalState
+      : typeof rentalState === 'string'
+        ? rentalState
+        : typeof txMeta?.rentalState === 'string'
+          ? txMeta.rentalState
+          : null;
     const rpcProfileId = normalizeRpcProfileId(
-      (typeof rentalCacheSeed?.profileId === 'string' && rentalCacheSeed.profileId)
+      signingRecord.profileId
+      || (typeof rentalCacheSeed?.profileId === 'string' && rentalCacheSeed.profileId)
       || (typeof txMeta?.profileId === 'string' && txMeta.profileId)
       || undefined,
     );
     console.log('[SEND-TX] Effective tx context:', {
-      operation: txMeta?.operation || 'unknown',
+      operation: effectiveOperation,
+      expectedSigner,
+      signingRequestId,
+      signingMessageHash: signingRecord.messageHash,
       isCancelRent,
       isDelistFleet,
       isListFleet,

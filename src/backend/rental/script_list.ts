@@ -12,6 +12,7 @@ import {
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
 import { getRpcConnection } from "../../utils/rpc/connection.js";
 import { deriveWalletAuthority } from "../../utils/deriveWalletAuthority.js";
+import { prepareTxForWalletSignature } from "../security/txSigningMiddleware.js";
 import { fetchProfileFleets } from "../../utils/fetchProfileFleets.js";
 import { getWalletAuthorityUtil } from "../../utils/getWalletAuthority.js";
 
@@ -616,14 +617,23 @@ async function handleListFleet(req: express.Request, res: express.Response) {
 		const latestBlockhash = await connection.getLatestBlockhash();
 		tx.recentBlockhash = latestBlockhash.blockhash;
 
-		const serialized = tx.serialize({ requireAllSignatures: false }).toString("base64");
-		console.log("[LIST] TX serializzata (base64):", serialized.slice(0, 80) + "...");
+		const signingPayload = prepareTxForWalletSignature({
+			tx,
+			signer: ownerPk,
+			operation: 'list-fleet',
+			profileId: pickString(profileId, ownerProfileInput),
+			meta: {
+				contract: derivedAccounts.contract ?? null,
+				fleet: fleetPk.toBase58(),
+			},
+		});
+		console.log("[LIST] TX serializzata (base64):", signingPayload.transaction.slice(0, 80) + "...");
 		console.log("[LIST][COPY-UNSIGNED-TX-START]");
-		console.log(serialized);
+		console.log(signingPayload.transaction);
 		console.log("[LIST][COPY-UNSIGNED-TX-END]");
 
 		res.json({
-			transaction: serialized,
+			...signingPayload,
 			derivedAccounts,
 			normalizedArgs,
 		});
