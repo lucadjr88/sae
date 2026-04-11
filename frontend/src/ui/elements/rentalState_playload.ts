@@ -476,7 +476,7 @@ export function rentalState_playload(data: any,) {
         });
         const fleetName = fleet.fleet_label || fleet.fleet || "Unknown";
         const fleetRate = fleet.rate != null
-            ? `${fleet.rate}`
+            ? `${parseInt(fleet.rate, 10)}`
             : "Unknown";
         const fleetRentalStart = fleet.rental_start_time
             ? new Date(fleet.rental_start_time * 1000).toLocaleString()
@@ -493,7 +493,7 @@ export function rentalState_playload(data: any,) {
 
         // Creiamo la riga
         const row = document.createElement("tr");
-        const total_amount = computeDisplayedRentalTotal(fleet);
+        const total_amount = parseInt(computeDisplayedRentalTotal(fleet), 10);
 
         if (fleet.isRented) {
             row.classList.add("fleet-item-rented");

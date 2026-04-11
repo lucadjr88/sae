@@ -33,6 +33,10 @@ function isUsableCachedPlayload(payloadData: any) {
     );
 }
 
+export function shouldServeCachedPlayloadAfterLockWait(wipeCache: unknown, payloadData: any) {
+    return !Boolean(wipeCache) && isUsableCachedPlayload(payloadData);
+}
+
 // Importa i 7 handler debug
 import { getWalletAuthorityHandler } from './debug/getWalletAuthority.js';
 import { getWalletTxsHandler } from './debug/getWalletTxs.js';
@@ -150,13 +154,16 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
 
         if (!releaseAnalysisLock) {
             const cachedPlayload = await getCache('playload', 'latest', profileId);
-            if (cachedPlayload?.data && isUsableCachedPlayload(cachedPlayload.data)) {
+            if (shouldServeCachedPlayloadAfterLockWait(wipeCache, cachedPlayload?.data)) {
                 console.log('[analyze-profile] Lock wait timed out but a fresh cached playload is available; serving it');
-                if (cachedPlayload.savedAt) {
+                if (cachedPlayload?.savedAt) {
                     res.set('X-Cache-Hit', 'disk');
                     res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
                 }
-                return res.json(cachedPlayload.data);
+                return res.json(cachedPlayload?.data);
+            }
+            if (wipeCache) {
+                console.log('[analyze-profile] Lock wait timed out during wipeCache request; refusing cached fallback');
             }
             res.set('Retry-After', '3');
             return res.status(409).json({ error: 'Analysis already running for this profile, retry shortly' });
@@ -164,13 +171,16 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
 
         if (waitedMs > 0) {
             const cachedPlayload = await getCache('playload', 'latest', profileId);
-            if (cachedPlayload?.data && isUsableCachedPlayload(cachedPlayload.data)) {
+            if (shouldServeCachedPlayloadAfterLockWait(wipeCache, cachedPlayload?.data)) {
                 console.log(`[analyze-profile] Another worker completed analysis while waiting (${waitedMs}ms); serving cached playload`);
-                if (cachedPlayload.savedAt) {
+                if (cachedPlayload?.savedAt) {
                     res.set('X-Cache-Hit', 'disk');
                     res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
                 }
-                return res.json(cachedPlayload.data);
+                return res.json(cachedPlayload?.data);
+            }
+            if (wipeCache) {
+                console.log(`[analyze-profile] wipeCache requested after waiting ${waitedMs}ms; recomputing instead of serving cached playload`);
             }
         }
 
