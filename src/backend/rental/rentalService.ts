@@ -29,8 +29,8 @@ type MaybeAccount = AccountInfo<Buffer> | null;
 
 let MAX_LIMIT = 10000;
 const SRSLY_PROGRAM_ID = 'SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT';
-const CACHE_TTL_MS = 30_000;
-const RPC_CALL_TIMEOUT_MS = 12_000;
+const CACHE_TTL_MS = 10_000; //30_000;
+const RPC_CALL_TIMEOUT_MS = 5_000; //12_000;
 
 function chunk<T>(input: T[], size: number): T[][] {
 	const out: T[][] = [];

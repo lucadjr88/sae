@@ -251,6 +251,7 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
         const INITIAL_CHECK = 3;
         const MAX_CHECK = 7;
         const THRESHOLD_RATIO = 0.90; // se intersection/union < threshold, amplia il controllo
+        const UNION_FALLBACK_RATIO = 0.8; // sotto questa soglia, forziamo union
         const CROSSCHECK_MAX_MS = 5000; // don't spend more than 5s in cross-check retries
 
         let checkCount = INITIAL_CHECK;
@@ -258,11 +259,11 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
         let cross = await crossCheckSignatures(profileId, pubkey, sinceMs, checkCount, 20);
         let intersectionSet = new Set(cross.intersection);
         let unionSize = cross.union.length;
-        console.log(`[fetchWalletTransactions] cross-check: endpoints=${Object.keys(cross.perEndpoint).length} union=${unionSize} intersection=${intersectionSet.size}`);
+        const endpointList = Object.keys(cross.perEndpoint);
+        console.log(`[fetchWalletTransactions] cross-check: endpoints=${endpointList.length} union=${unionSize} intersection=${intersectionSet.size} endpointList=[${endpointList.join(',')}]`);
 
         // if intersection small relative to union, retry with more endpoints (paginated per-endpoint)
         while (unionSize > 0 && (intersectionSet.size / unionSize) < THRESHOLD_RATIO && checkCount < MAX_CHECK) {
-          // break if we've spent too long trying to cross-check
           if (Date.now() - crossCheckStart > CROSSCHECK_MAX_MS) {
             console.warn(`[fetchWalletTransactions] cross-check time budget exceeded (${CROSSCHECK_MAX_MS}ms); aborting further retries`);
             break;
@@ -277,21 +278,25 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
           }
           intersectionSet = new Set(cross.intersection);
           unionSize = cross.union.length;
-          console.log(`[fetchWalletTransactions] cross-check(retry): endpoints=${Object.keys(cross.perEndpoint).length} union=${unionSize} intersection=${intersectionSet.size}`);
-          // very small delay between retries to avoid hitting same rate limits
+          const endpointList2 = Object.keys(cross.perEndpoint);
+          console.log(`[fetchWalletTransactions] cross-check(retry): endpoints=${endpointList2.length} union=${unionSize} intersection=${intersectionSet.size} endpointList=[${endpointList2.join(',')}]`);
           await new Promise(r => setTimeout(r, 100 + Math.floor(Math.random() * 200)));
         }
 
         if (intersectionSet.size === 0) {
           console.warn(`[fetchWalletTransactions] cross-check intersection empty for wallet=${pubkey}; proceeding with local fetch result`);
-          // keep local filtered as-is
         } else {
           const beforeCount = filtered.length;
           const ratio = intersectionSet.size / Math.max(1, unionSize);
-          // If intersection is too small, prefer union to maximize saved txs
-          if (ratio < THRESHOLD_RATIO) {
+          // Fallback: se intersection troppo piccola, usa union
+          if (ratio < UNION_FALLBACK_RATIO) {
             const unionSet = new Set(cross.union);
-            // build filtered array from union: preserve blockTime when available
+            const existingMap = new Map(filtered.map(f => [f.signature, f]));
+            const unionArr = Array.from(unionSet).map(sig => existingMap.get(sig) || { signature: sig });
+            filtered = unionArr;
+            console.warn(`[fetchWalletTransactions] intersection ratio ${ratio.toFixed(2)} < ${UNION_FALLBACK_RATIO}; FORCING UNION fallback, size=${filtered.length} for wallet=${pubkey}`);
+          } else if (ratio < THRESHOLD_RATIO) {
+            const unionSet = new Set(cross.union);
             const existingMap = new Map(filtered.map(f => [f.signature, f]));
             const unionArr = Array.from(unionSet).map(sig => existingMap.get(sig) || { signature: sig });
             filtered = unionArr;
