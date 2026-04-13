@@ -1,5 +1,8 @@
+
+
 import { defineConfig } from 'vite';
 import path from 'path';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 export default defineConfig({
   root: '.',
@@ -24,4 +27,7 @@ export default defineConfig({
       },
     },
   },
+  plugins: [
+    // viteStaticCopy può essere lasciato vuoto o rimosso se non serve per altri asset
+  ]
 });

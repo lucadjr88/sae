@@ -77,7 +77,7 @@ homeIcon.addEventListener('click', () => {
 sidebar.appendChild(homeIcon);
 
 const homeIconImg = document.createElement('img');
-homeIconImg.src = homeIcona; // Assicurati di avere questa icona nella cartella assets
+homeIconImg.src = homeIcona;
 homeIconImg.className = 'home-icon-img';
 homeIconImg.alt = 'Home';
 homeIcon.appendChild(homeIconImg);
