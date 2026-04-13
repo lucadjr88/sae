@@ -258,9 +258,29 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
         const crossCheckStart = Date.now();
         let cross = await crossCheckSignatures(profileId, pubkey, sinceMs, checkCount, 20);
         let intersectionSet = new Set(cross.intersection);
-        let unionSize = cross.union.length;
-        const endpointList = Object.keys(cross.perEndpoint);
-        console.log(`[fetchWalletTransactions] cross-check: endpoints=${endpointList.length} union=${unionSize} intersection=${intersectionSet.size} endpointList=[${endpointList.join(',')}]`);
+        // Individua endpoint archival (max signature)
+        let maxCount = 0;
+        for (const info of Object.values(cross.perEndpoint)) {
+          if (info.count > maxCount) maxCount = info.count;
+        }
+        // Log dettagliato e costruisci union solo degli archival
+        const archivalEndpoints = [];
+        for (const [url, info] of Object.entries(cross.perEndpoint)) {
+          const isArchival = info.count === maxCount && maxCount > 0;
+          const archivalTag = isArchival ? '[ARCHIVAL]' : '';
+          if (isArchival) archivalEndpoints.push(url);
+          console.log(`[fetchWalletTransactions] endpoint=${url} signatures=${info.count} ${archivalTag}`);
+        }
+        // Costruisci union solo tra gli endpoint archival
+        let archivalUnion = new Set<string>();
+        for (const url of archivalEndpoints) {
+          for (const sig of cross.perEndpoint[url].signatures) {
+            archivalUnion.add(sig);
+          }
+        }
+        let unionSize = archivalUnion.size;
+        const endpointList = archivalEndpoints;
+        console.log(`[fetchWalletTransactions] cross-check: archival_endpoints=${endpointList.length} union=${unionSize} intersection=${intersectionSet.size} endpointList=[${endpointList.join(',')}]`);
 
         // if intersection small relative to union, retry with more endpoints (paginated per-endpoint)
         while (unionSize > 0 && (intersectionSet.size / unionSize) < THRESHOLD_RATIO && checkCount < MAX_CHECK) {
