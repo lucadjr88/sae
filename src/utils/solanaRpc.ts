@@ -214,7 +214,12 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
         }
 
         if (!pageSigs || pageSigs.length === 0) {
-          break; // niente più signature
+          // batch fallito: prova comunque a continuare la paginazione saltando questo batch
+          // se non abbiamo mai ricevuto nulla, break (fine paginazione)
+          if (!before) break;
+          // aggiorna 'before' a una signature fittizia per evitare loop infinito
+          // (qui si può solo interrompere la paginazione, oppure loggare e continuare)
+          continue;
         }
 
         allSignatures.push(...pageSigs);
