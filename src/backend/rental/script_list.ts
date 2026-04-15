@@ -1,5 +1,5 @@
 import { PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
-import * as anchor from "@project-serum/anchor";
+import * as anchor from "@coral-xyz/anchor";
 import BN from "bn.js";
 import express from "express";
 import {

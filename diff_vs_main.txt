@@ -25314,7 +25314,7 @@ index 0000000..e1f6ea6
 +++ b/src/backend/rental/script_affitta_navi.ts
 @@ -0,0 +1,285 @@
 +import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
-+import * as anchor from "@project-serum/anchor";
++import * as anchor from "@coral-xyz/anchor";
 +import BN from "bn.js";
 +import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 +import srslyIdl from "../idl/srsly_idl.json" assert { type: "json" };
@@ -25713,7 +25713,7 @@ index 0000000..92f65f5
 +import express from 'express';
 +import { spawn } from 'child_process';
 +import { Connection } from '@solana/web3.js';
-+import { Program } from '@project-serum/anchor';
++import { Program } from '@coral-xyz/anchor';
 +import { getSingleHealthyRpc } from '../../utils/rpc/singleRpcManager';
 +import bs58 from 'bs58';
 +import fs from 'fs';

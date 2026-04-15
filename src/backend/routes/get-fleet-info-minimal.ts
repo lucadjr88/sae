@@ -2,7 +2,7 @@
 
 import express from 'express';
 import { spawn } from 'child_process';
-import { Program } from '@project-serum/anchor';
+import { Program } from '@coral-xyz/anchor';
 import { getRpcConnection } from '../../utils/rpc/connection.js';
 import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager.js';
 import { describeNativeBinaryLookup, resolveNativeBinary } from '../../utils/native-binaries.js';

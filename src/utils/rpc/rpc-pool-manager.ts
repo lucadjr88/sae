@@ -11,6 +11,7 @@ import * as concurrency from './concurrency-manager.js';
 import * as metrics from './metrics.js';
 import { pickNext } from './selector.js';
 import * as prune from './prune.js';
+import { getRpcConnectionWithUrl } from './connection.js';
 
 const RPC_POOL_NAMESPACE = 'rpc-pool';
 const RPC_POOL_FILENAME = 'rpc-pool.json';
@@ -38,7 +39,7 @@ export function resetPoolCache(profileId?: string) {
 // Carica pool da cache (in memoria -> disco), se non esiste crea con prune
 export async function loadOrCreateRpcPool(profileId: string): Promise<any[]> {
   if (poolCache[profileId]) {
-   return poolCache[profileId];
+    return poolCache[profileId];
   }
   const dir = path.join(process.cwd(), 'cache', profileId);
   const file = path.join(dir, RPC_POOL_FILENAME);
@@ -79,12 +80,12 @@ export async function pruneRpcPool(profileId?: string, force?: boolean): Promise
 
 
 // Acquisisce una connessione dal pool con logica health-aware, fallback e adaptive concurrency
-export async function pickRpcConnection(profileId: string, opts?: { allowStale?: boolean; waitForMs?: number }): Promise<{connection: any, endpoint: any, release: (opts?: { success?: boolean, latencyMs?: number, errorType?: string }) => void}> {
+export async function pickRpcConnection(profileId: string, opts?: { allowStale?: boolean; waitForMs?: number }): Promise<{ connection: any, endpoint: any, release: (opts?: { success?: boolean, latencyMs?: number, errorType?: string }) => void }> {
   const pool = await loadOrCreateRpcPool(profileId);
   // Ordina endpoint: healthy e non in backoff prima
   const healthy = pool.filter(ep => health.isHealthy(ep.url) && !health.isInBackoff(ep.url));
-    const filteredHealthy = healthy.filter(ep => !metrics.shouldExcludeEndpoint(ep.url));
-    let candidates = filteredHealthy.length > 0 ? filteredHealthy : healthy.length > 0 ? healthy : pool;
+  const filteredHealthy = healthy.filter(ep => !metrics.shouldExcludeEndpoint(ep.url));
+  let candidates = filteredHealthy.length > 0 ? filteredHealthy : healthy.length > 0 ? healthy : pool;
 
   const startTime = Date.now();
   const waitForMs = opts?.waitForMs ?? 0;
@@ -99,13 +100,12 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
       // if not healthy but allowStale is true we still try to use it
       if (!allowStale && health.isInBackoff(ep.url)) continue;
       // Try acquire (returns boolean)
-    const acquired = concurrency.acquire(ep.url, ep.maxConcurrent || 2);
+      const acquired = concurrency.acquire(ep.url, ep.maxConcurrent || 2);
       if (!acquired) continue;
       rrCursorByProfile[profileId] = (i + 1) % candidates.length;
-      const connection = new Connection(ep.url, {
-        commitment: 'confirmed',
-        // Retry policy is handled by rentalService.executeRpc; avoid nested 429 retries.
-        disableRetryOnRateLimit: true,
+      const { connection } = await getRpcConnectionWithUrl({
+        rpcUrl: ep.url,
+        commitment: 'confirmed'
       });
       const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string }) => {
         concurrency.release(ep.url);
@@ -141,17 +141,16 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
         }
       };
       return { connection, endpoint: ep, release };
-      }
+    }
     // none acquired: decide cosa fare
     if (allowStale && candidates.length > 0) {
       // try to force-acquire the first candidate skipping concurrency
       const startIndex = rrCursorByProfile[profileId] ?? 0;
       const ep = candidates[startIndex % candidates.length];
       rrCursorByProfile[profileId] = (startIndex + 1) % candidates.length;
-      const connection = new Connection(ep.url, {
-        commitment: 'confirmed',
-        // Retry policy is handled by rentalService.executeRpc; avoid nested 429 retries.
-        disableRetryOnRateLimit: true,
+      const { connection } = await getRpcConnectionWithUrl({
+        rpcUrl: ep.url,
+        commitment: 'confirmed'
       });
       const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string }) => {
         // ensure release doesn't call release twice since we didn't acquire

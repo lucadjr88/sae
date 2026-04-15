@@ -1,5 +1,5 @@
 import { PublicKey, Transaction } from "@solana/web3.js";
-import * as anchor from "@project-serum/anchor";
+import * as anchor from "@coral-xyz/anchor";
 import express from "express";
 import {
 	ASSOCIATED_TOKEN_PROGRAM_ID,

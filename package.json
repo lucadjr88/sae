@@ -27,7 +27,7 @@
     "vite-plugin-static-copy": "^4.0.1"
   },
   "dependencies": {
-    "@project-serum/anchor": "^0.26.0",
+    "@coral-xyz/anchor": "^0.26.0",
     "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-phantom": "^0.9.28",
     "@solana/wallet-adapter-react": "^0.15.39",

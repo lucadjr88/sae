@@ -187,7 +187,7 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
             const start = Date.now();
             try {
               pageSigs = await withRpcTimeout(
-                connection.getSignaturesForAddress(address, { limit: 1000, before }),
+                connection.getSignaturesForAddress(address, { before }),
                 10000,
                 `getSignaturesForAddress ${endpoint.url}`,
               );
@@ -476,7 +476,7 @@ export async function crossCheckSignatures(profileId: string, pubkey: string, si
         break;
       }
       try {
-        const pageSigs = await conn.getSignaturesForAddress(address, { limit: 1000, before });
+        const pageSigs = await conn.getSignaturesForAddress(address, { before });
         if (!pageSigs || pageSigs.length === 0) break;
         // aggiungi solo quelle >= sinceMs
         for (const s of pageSigs) {

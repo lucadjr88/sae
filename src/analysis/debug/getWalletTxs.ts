@@ -21,7 +21,7 @@ export async function getWalletTxsHandler(req: Request, res: Response) {
           const { connection, release } = pick;
           const { PublicKey } = await import("@solana/web3.js");
           const address = new PublicKey(wallet);
-          const signatures = await connection.getSignaturesForAddress(address, { limit: 1000 });
+          const signatures = await connection.getSignaturesForAddress(address);
           const filtered = signatures.filter(sig => sig.blockTime && sig.blockTime * 1000 >= sinceMs);
           const missing: string[] = [];
           for (const sig of filtered) {

@@ -1,5 +1,5 @@
 import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
-import * as anchor from "@project-serum/anchor";
+import * as anchor from "@coral-xyz/anchor";
 import BN from "bn.js";
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
@@ -1029,6 +1029,7 @@ export async function acceptRentalTx(params: any) {
     );
     const provider = new anchor.AnchorProvider(pick.connection as Connection, dummyWallet as any, anchor.AnchorProvider.defaultOptions());
     const program = new anchor.Program(srslyLegacyIdl, SRSLY_PROGRAM_ID, provider);
+
     const tx = await program.methods.acceptRental(new BN(amount), new BN(duration)).accountsStrict({
       mint: toPk(mint),
       borrower: toPk(borrower),

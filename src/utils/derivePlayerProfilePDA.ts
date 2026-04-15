@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { updatePlayerProfileRpcStats } from './rpc/prune.js';
-
+import { getRpcConnectionWithUrl } from './rpc/connection.js';
 
 const PLAYER_PROFILE_PROGRAM_ID = 'pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9';
 const RPC_POOL_COMPLETE = path.join(process.cwd(), 'utility', 'rpc-pool-complete.json');
@@ -56,10 +56,10 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const index = (startIndex + attempt) % candidates.length;
       const selectedUrl = candidates[index];
-      const connection = new Connection(selectedUrl, {
-        commitment: 'confirmed',
-        disableRetryOnRateLimit: true,
-      });
+      const { connection } = await getRpcConnectionWithUrl({
+  rpcUrl: selectedUrl,
+  commitment: 'confirmed'
+});
       try {
         console.log('[findPlayerProfilesForWalletWithRpc] Selected RPC:', selectedUrl);
         console.log('[findPlayerProfilesForWalletWithRpc] Calling getProgramAccounts with filter:', {
