@@ -5,7 +5,6 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const RPC_POOL_COMPLETE = path.join(process.cwd(), 'utility', 'rpc-pool-complete.json');
-const LEGACY_PRUNED_RPC_STATS = path.join(process.cwd(), 'interna_cache', 'pruned_rpc.json');
 
 type RpcEndpoint = {
   name?: string;
@@ -17,63 +16,97 @@ type RpcEndpoint = {
 
 type PrunedRpcStats = Record<string, string>;
 async function postGetSlot(url: string, timeout: number) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "getSlot"
-        }),
-        signal: controller.signal
-      });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getSlot"
+      }),
+      signal: controller.signal
+    });
 
-      clearTimeout(id);
+    clearTimeout(id);
 
-      return {
-        httpCode: response.status,
-        data: await response.json().catch(() => ({}))
-      };
-    } catch (e) {
-      return { httpCode: 0, error: e };
-    }
+    return {
+      httpCode: response.status,
+      data: await response.json().catch(() => ({}))
+    };
+  } catch (e) {
+    return { httpCode: 0, error: e };
   }
-
-async function postGetLatestBlockhash(url: string, timeout: number) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'getLatestBlockhash',
-          params: [{ commitment: 'confirmed' }]
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(id);
-
-      return {
-        httpCode: response.status,
-        data: await response.json().catch(() => ({}))
-      };
-    } catch (e) {
-      return { httpCode: 0, error: e };
-    }
 }
 
-async function readLegacyPrunedRpcStats(): Promise<PrunedRpcStats> {
+async function postGetLatestBlockhash(url: string, timeout: number) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
   try {
-    const raw = await fs.readFile(LEGACY_PRUNED_RPC_STATS, 'utf8');
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getLatestBlockhash',
+        params: [{ commitment: 'confirmed' }]
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(id);
+
+    return {
+      httpCode: response.status,
+      data: await response.json().catch(() => ({}))
+    };
+  } catch (e) {
+    return { httpCode: 0, error: e };
+  }
+}
+
+export async function updatePlayerProfileRpcStats(rpcUrl: string, success: boolean) {
+  try {
+    const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
+    let stats = JSON.parse(raw);
+
+    // Se stats è un array, converti in oggetto con chiavi url
+    if (Array.isArray(stats)) {
+      const obj: Record<string, any> = {};
+      for (const ep of stats) {
+        if (ep && typeof ep.url === 'string' && ep.url.length > 0) {
+          obj[ep.url] = {
+            pruned: ep.pruned ?? 0,
+            total: ep.total ?? 0,
+            plrProfile_total: 0,
+            plrProfile_success: 0,
+            ...ep
+          };
+        }
+      }
+      stats = obj;
+    }
+
+    if (!stats[rpcUrl]) stats[rpcUrl] = { plrProfile_total: 0, plrProfile_success: 0 };
+    if (typeof stats[rpcUrl].plrProfile_total !== 'number') stats[rpcUrl].plrProfile_total = 0;
+    if (typeof stats[rpcUrl].plrProfile_success !== 'number') stats[rpcUrl].plrProfile_success = 0;
+    stats[rpcUrl].plrProfile_total += 1;
+    if (success) stats[rpcUrl].plrProfile_success += 1;
+    // scriviamo sul file i parametri aggiornati
+    await fs.writeFile(RPC_POOL_COMPLETE, JSON.stringify(stats, null, 2), 'utf8');
+  } catch (e) {
+    console.error(`Error updating player profile RPC stats for ${rpcUrl}:`, (e as any)?.message || e);
+  }
+}
+
+export async function readLegacyPrunedRpcStats(): Promise<PrunedRpcStats> {
+  try {
+    const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? parsed as PrunedRpcStats : {};
   } catch {
@@ -146,7 +179,7 @@ export async function getSingleHealthyRpc(): Promise<string | null> {
       ]);
 
       // Verifichiamo che TUTTE abbiano avuto successo (HTTP 200 e nessun errore JSON-RPC)
-      const isRockSolid = stressTest.every(res => 
+      const isRockSolid = stressTest.every(res =>
         res.httpCode === 200 && !res.data?.error
       );
 
@@ -168,7 +201,13 @@ export async function getSingleHealthyRpc(): Promise<string | null> {
 
 export async function pruneEndpoints(criteria: { unhealthy?: boolean, minFailures?: number } = {}): Promise<any[]> {
   const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
-  const endpoints = JSON.parse(raw);
+  let endpointsRaw = JSON.parse(raw);
+  let endpoints: any[] = [];
+  if (Array.isArray(endpointsRaw)) {
+    endpoints = endpointsRaw;
+  } else if (endpointsRaw && typeof endpointsRaw === 'object') {
+    endpoints = Object.values(endpointsRaw);
+  }
   console.log(`[prune] Testing ${endpoints.length} endpoints...`);
   // Chiamate parallele HTTP POST getLatestBlockhash
   const probes = await Promise.allSettled(endpoints.map(async (ep: any) => {

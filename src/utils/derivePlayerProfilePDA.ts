@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { Connection, PublicKey } from '@solana/web3.js';
+import { updatePlayerProfileRpcStats } from './rpc/prune.js';
 
 
 const PLAYER_PROFILE_PROGRAM_ID = 'pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9';
@@ -26,10 +27,23 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
   try {
     console.log('[findPlayerProfilesForWalletWithRpc] Start for wallet:', wallet.toBase58());
     const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
-    const endpoints = JSON.parse(raw)
-      .map((ep: any) => ep?.url)
-      .filter((url: unknown): url is string => typeof url === 'string' && url.length > 0);
-    const uniqueEndpoints: string[] = Array.from(new Set(endpoints));
+    let endpointsRaw = JSON.parse(raw);
+    // Ordina per rapporto plrProfile_success/plrProfile_total decrescente
+    let endpointObjs: any[] = [];
+    if (Array.isArray(endpointsRaw)) {
+      endpointObjs = endpointsRaw.filter((ep: any) => ep && typeof ep.url === 'string');
+    } else if (endpointsRaw && typeof endpointsRaw === 'object') {
+      endpointObjs = Object.values(endpointsRaw).filter((ep: any) => ep && typeof ep.url === 'string');
+    }
+    endpointObjs.sort((a, b) => {
+      const aTotal = a.plrProfile_total || 0;
+      const bTotal = b.plrProfile_total || 0;
+      const aRatio = aTotal > 0 ? (a.plrProfile_success || 0) / aTotal : -1;
+      const bRatio = bTotal > 0 ? (b.plrProfile_success || 0) / bTotal : -1;
+      return bRatio - aRatio;
+    });
+    const orderedEndpoints: string[] = endpointObjs.map((ep: any) => ep.url);
+    const uniqueEndpoints: string[] = Array.from(new Set(orderedEndpoints));
     const candidates: string[] = rpcUrl ? [rpcUrl, ...uniqueEndpoints.filter((url) => url !== rpcUrl)] : uniqueEndpoints;
     const maxAttempts = Math.max(1, candidates.length);
     const programPubkey = new PublicKey(PLAYER_PROFILE_PROGRAM_ID);
@@ -53,41 +67,51 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
           offset: 30,
           wallet: wallet.toBase58()
         });
-        const accountsWithWallet = await connection.getProgramAccounts(programPubkey, {
-          filters: [
-            {
-              memcmp: {
-                offset: 30, // ProfileKey array starts at offset 30
-                bytes: wallet.toBase58()
-              }
-            }
-          ],
-          commitment: 'confirmed'
-        });
+        let accountsWithWallet: Awaited<ReturnType<typeof connection.getProgramAccounts>> = [];
+        let respondedInTime = true;
+        try {
+          accountsWithWallet = await Promise.race([
+            connection.getProgramAccounts(programPubkey, {
+              filters: [
+                {
+                  memcmp: {
+                    offset: 30, // ProfileKey array starts at offset 30
+                    bytes: wallet.toBase58()
+                  }
+                }
+              ],
+              commitment: 'confirmed'
+            }),
+            new Promise((_, reject) => setTimeout(() => {
+              respondedInTime = false;
+              reject(new Error('getProgramAccounts timeout'));
+            }, 5000))
+          ]) as Awaited<ReturnType<typeof connection.getProgramAccounts>>;
+        } catch (timeoutErr) {
+          respondedInTime = false;
+          accountsWithWallet = [];
+        }
         rawPoolCursor = (index + 1) % candidates.length;
-        console.log('[findPlayerProfilesForWalletWithRpc] getProgramAccounts result count:', accountsWithWallet.length);
-        if (accountsWithWallet.length > 0) {
-          accountsWithWallet.forEach((acc, idx) => {
-            console.log(`[findPlayerProfilesForWalletWithRpc] Found profile ${idx + 1}:`, acc.pubkey.toBase58());
-            variants.push({
-              label: `profile_found_${idx + 1}`,
-              description: `Profile account found containing wallet ${wallet.toBase58()} in data`,
-              profileId: acc.pubkey.toBase58(),
-              source: 'on-chain search at offset 30'
+        // Aggiorna solo le stats, la logica di retry rimane invariata
+        await updatePlayerProfileRpcStats(selectedUrl, respondedInTime);
+        if (respondedInTime) {
+          console.log('[findPlayerProfilesForWalletWithRpc] getProgramAccounts result count:', accountsWithWallet.length);
+          if (accountsWithWallet.length > 0) {
+            accountsWithWallet.forEach((acc, idx) => {
+              console.log(`[findPlayerProfilesForWalletWithRpc] Found profile ${idx + 1}:`, acc.pubkey.toBase58());
+              variants.push({
+                label: `profile_found_${idx + 1}`,
+                description: `Profile account found containing wallet ${wallet.toBase58()} in data`,
+                profileId: acc.pubkey.toBase58(),
+                source: 'on-chain search at offset 30'
+              });
             });
-          });
+            return variants;
+          }
         }
-        if (variants.length === 0) {
-          console.log('[findPlayerProfilesForWalletWithRpc] No player profile found for this wallet on-chain');
-          variants.push({
-            label: 'not_found',
-            description: 'No player profile found for this wallet on-chain',
-            profileId: '',
-            source: 'on-chain search returned empty'
-          });
-        }
-        return variants;
+        // Se non trovato o timeout, continua con il prossimo endpoint
       } catch (e) {
+        if (profileId) await updatePlayerProfileRpcStats(selectedUrl, false);
         lastError = e;
         console.log(`[findPlayerProfilesForWalletWithRpc] Attempt ${attempt + 1}/${maxAttempts} failed on ${selectedUrl}:`, (e as any)?.message || e);
       }

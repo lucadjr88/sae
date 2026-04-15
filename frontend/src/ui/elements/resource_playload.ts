@@ -3,7 +3,7 @@ import { normalizeOpName, resolveTxTimeRange } from '@/utils/utils';
 import resourceMintImageCsvRaw from '@/assets/staratlas_resource_mint_image.csv?raw';
 import { TICKER_CONFIG } from './footBar';
 
-const atlasIcon = `<img style="width: 25%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/>`;
+const atlasIcon = `<img style="width: 15%" src="${TICKER_CONFIG.find(c => c.id === 'star-atlas')?.img}"/>`;
 
 function getAtlasUsdPrice(): number | null {
   if (typeof window === 'undefined') return null;
@@ -838,8 +838,8 @@ if (hasAtlasPricing) {
       if (atlasPrice !== null) {
         const totalAtlasInDollars = totalAtlasInValue * atlasPrice;
         const totalAtlasOutDollars = totalAtlasOutValue * atlasPrice;
-        totalOutValue.innerHTML = formatAmount(totalAtlasOutValue) + atlasIcon + `<span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatUsdAmount(totalAtlasOutDollars)} $)</span>`;
-        totalInValue.innerHTML = formatAmount(totalAtlasInValue) + atlasIcon + `<span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatUsdAmount(totalAtlasInDollars)} $)</span>`;
+        totalOutValue.innerHTML = formatAmount(totalAtlasOutValue) + atlasIcon + ` <span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatUsdAmount(totalAtlasOutDollars)} $)</span>`;
+        totalInValue.innerHTML = formatAmount(totalAtlasInValue) + atlasIcon + ` <span style="display:flex; flex-flow: row; align-items: center; font-size: 0.7em;">(${formatUsdAmount(totalAtlasInDollars)} $)</span>`;
         return;
       }
 
