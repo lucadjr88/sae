@@ -6,7 +6,6 @@ import { getRpcConnectionWithUrl } from './rpc/connection.js';
 
 const PLAYER_PROFILE_PROGRAM_ID = 'pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9';
 const RPC_POOL_COMPLETE = path.join(process.cwd(), 'utility', 'rpc-pool-complete.json');
-let rawPoolCursor = 0;
 
 type ProfilePDAVariant = {
   label: string;
@@ -40,7 +39,8 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
       const bTotal = b.plrProfile_total || 0;
       const aRatio = aTotal > 0 ? (a.plrProfile_success || 0) / aTotal : -1;
       const bRatio = bTotal > 0 ? (b.plrProfile_success || 0) / bTotal : -1;
-      return bRatio - aRatio;
+      if (bRatio !== aRatio) return bRatio - aRatio;
+      return bTotal - aTotal;
     });
     const orderedEndpoints: string[] = endpointObjs.map((ep: any) => ep.url);
     const uniqueEndpoints: string[] = Array.from(new Set(orderedEndpoints));
@@ -52,7 +52,7 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
       throw new Error('No RPC endpoints configured in utility/rpc-pool-complete.json');
     }
 
-    const startIndex = rawPoolCursor % candidates.length;
+    const startIndex = 0;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const index = (startIndex + attempt) % candidates.length;
       const selectedUrl = candidates[index];
@@ -91,7 +91,6 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
           respondedInTime = false;
           accountsWithWallet = [];
         }
-        rawPoolCursor = (index + 1) % candidates.length;
         // Aggiorna solo le stats, la logica di retry rimane invariata
         await updatePlayerProfileRpcStats(selectedUrl, respondedInTime);
         if (respondedInTime) {
@@ -111,7 +110,7 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
         }
         // Se non trovato o timeout, continua con il prossimo endpoint
       } catch (e) {
-        if (profileId) await updatePlayerProfileRpcStats(selectedUrl, false);
+        await updatePlayerProfileRpcStats(selectedUrl, false);
         lastError = e;
         console.log(`[findPlayerProfilesForWalletWithRpc] Attempt ${attempt + 1}/${maxAttempts} failed on ${selectedUrl}:`, (e as any)?.message || e);
       }
