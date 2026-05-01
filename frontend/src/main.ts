@@ -1,7 +1,6 @@
-// Forza l'inclusione di createSidebarElement nel bundle per asset Vite
+// Forza l'inclusione di createSidebarElement nel bundle per Vite
 import { createSidebarElement as _createSidebarElement } from '@/ui/elements/sideBar';
-// Forza inclusione home.png nel bundle Vite
-//import homePng from '@/assets/icons/home.png'; // eslint-disable-line @typescript-eslint/no-unused-vars
+(window as any).__VITE_ASSETS__ = { _createSidebarElement };
 import "@/style.css";
 import "@/ui/styles/alertInstructions.css";
 import "@/ui/styles/backGround.css";

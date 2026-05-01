@@ -6,7 +6,6 @@ import { createPrivacyPolicySidebarElement } from "@/ui/elements/privacyPolicy";
 import { toggleSwitchHTML } from "@/ui/elements/toggleSwitch";
 import { applyProfileFactionIcon, getCachedProfileFaction } from "@/utils/faction";
 import { currentProfileId } from "@/utils/state";
-import homeIcona from "@/assets/icons/home.png";
 import playstoreIcona from "@/assets/icons/playstore.png";
 
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -77,7 +76,7 @@ homeIcon.addEventListener('click', () => {
 sidebar.appendChild(homeIcon);
 
 const homeIconImg = document.createElement('img');
-homeIconImg.src = homeIcona;
+homeIconImg.src = '/home.png';
 homeIconImg.className = 'home-icon-img';
 homeIconImg.alt = 'Home';
 homeIcon.appendChild(homeIconImg);
