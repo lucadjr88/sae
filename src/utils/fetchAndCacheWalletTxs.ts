@@ -4,11 +4,9 @@
 import { setCache } from './cache.js';
 import { normalizeRawTx } from './normalizeRawTx.js';
 
-// Salva solo le tx passate (già filtrate e riuscite)
+// Salva in parallelo le tx passate (già filtrate e riuscite)
 export async function fetchAndCacheWalletTxs(walletPubkey: string, profileId: string, sinceMs: number, txs: any[] = []): Promise<any[]> {
   const normTxs = txs.map(normalizeRawTx);
-  for (const tx of txs) {
-    await setCache(`wallet-txs/${walletPubkey}`, tx.signature, tx, profileId);
-  }
+  await Promise.all(txs.map(tx => setCache(`wallet-txs/${walletPubkey}`, tx.signature, tx, profileId)));
   return normTxs;
 }

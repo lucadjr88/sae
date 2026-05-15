@@ -1,6 +1,7 @@
 
 import { PublicKey } from '@solana/web3.js';
 import { RpcPoolManager } from './rpc/rpc-pool-manager.js';
+import { withRpcTimeout } from './solanaRpc.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -72,12 +73,16 @@ export async function fetchProfileFleets(profileId: string): Promise<any[]> {
     const { connection, release } = pick;
     // call getProgramAccounts with memcmp on owner_profile
     const programPubkey = new PublicKey(SAGE_PROGRAM_ID);
-      const accounts = await connection.getProgramAccounts(programPubkey, {
-      filters: [
-        { memcmp: { offset: OWNER_PROFILE_OFFSET, bytes: profileId } }
-      ],
-      commitment: 'confirmed'
-    });
+      const accounts = await withRpcTimeout<any[]>(
+        connection.getProgramAccounts(programPubkey, {
+          filters: [
+            { memcmp: { offset: OWNER_PROFILE_OFFSET, bytes: profileId } }
+          ],
+          commitment: 'confirmed'
+        }),
+        8000,
+        `getProgramAccounts(fleets) ${profileId}`
+      );
     // decode full Fleet via manual Borsh-style parser
     function readPubkey(buf: Buffer, off: number) {
       return new PublicKey(buf.slice(off, off + 32)).toBase58();

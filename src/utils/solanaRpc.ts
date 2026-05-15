@@ -19,7 +19,7 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function withRpcTimeout<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+export async function withRpcTimeout<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -287,7 +287,6 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
         const endpointList = archivalEndpoints;
         console.log(`[fetchWalletTransactions] cross-check: archival_endpoints=${endpointList.length} union=${unionSize} intersection=${intersectionSet.size} endpointList=[${endpointList.join(',')}]`);
 
-        // if intersection small relative to union, retry with more endpoints (paginated per-endpoint)
         while (unionSize > 0 && (intersectionSet.size / unionSize) < THRESHOLD_RATIO && checkCount < MAX_CHECK) {
           if (Date.now() - crossCheckStart > CROSSCHECK_MAX_MS) {
             console.warn(`[fetchWalletTransactions] cross-check time budget exceeded (${CROSSCHECK_MAX_MS}ms); aborting further retries`);
@@ -345,8 +344,8 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
     const maxRetries = 3;
     const txs: any[] = [];
     const failed: string[] = [];
-    const MAX_CONCURRENT = 10; // RIDOTTO da 20 per rispettare rate limit Helius
-    const INTER_REQUEST_DELAY_MS = 150; // delay tra richieste per throttling
+    // Scala la concorrenza in base alla dimensione del pool attivo; cap a 25
+    const MAX_CONCURRENT = Math.min(25, Math.max(10, endpoints.length * 3));
     const progressStep = filtered.length <= 10 ? Math.max(1, filtered.length) : Math.max(5, Math.ceil(filtered.length / 4));
     const endpointHits = new Map<string, number>();
     const endpoint429 = new Map<string, number>();
@@ -398,8 +397,6 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
         const start = Date.now();
         bumpCounter(endpointHits, endpoint.url);
         try {
-          // Throttle: aggiunge un piccolo delay per rispettare rate limits
-          await sleep(Math.random() * INTER_REQUEST_DELAY_MS / 2);
           const fetchedTx: any = await withRpcTimeout(
             connection.getTransaction(sig.signature, {
               maxSupportedTransactionVersion: 0,
@@ -458,23 +455,29 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
   }
 }
 
-// Cross-check delle signature ottenute da più endpoint del pool
+// Endpoint che hanno dimostrato di non supportare getSignaturesForAddress (blocklist per sessione)
+const sigAddrUnsupported = new Set<string>();
+
+// Cross-check delle signature ottenute da più endpoint del pool — esecuzione parallela
 export async function crossCheckSignatures(profileId: string, pubkey: string, sinceMs: number, endpointsToCheck = 3, maxPages = 50): Promise<{perEndpoint: Record<string, {count: number, signatures: string[]}>, intersection: string[], union: string[], differences: Record<string,string[]>}> {
   const address = new PublicKey(pubkey);
   const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
-  // Preferisci endpoint healthy
-  const healthy = pool.filter(ep => RpcPoolManager.health.isHealthy(ep.url) && !RpcPoolManager.health.isInBackoff(ep.url));
-  const candidates = healthy.length > 0 ? healthy : pool;
+  // Preferisci endpoint healthy ed esclude quelli noti per non supportare getSignaturesForAddress
+  const healthy = pool.filter(ep =>
+    RpcPoolManager.health.isHealthy(ep.url) &&
+    !RpcPoolManager.health.isInBackoff(ep.url) &&
+    !sigAddrUnsupported.has(ep.url)
+  );
+  const candidates = (healthy.length > 0 ? healthy : pool.filter(ep => !sigAddrUnsupported.has(ep.url)));
   const chosen = candidates.slice(0, Math.max(1, Math.min(endpointsToCheck, candidates.length)));
 
-  const perEndpoint: Record<string, {count: number, signatures: string[]}> = {};
+  const EP_MAX_MS = 1500; // budget per endpoint
 
-  for (const ep of chosen) {
+  const fetchOneEndpoint = async (ep: any): Promise<[string, {count: number, signatures: string[]}]> => {
     const conn = new (await import('@solana/web3.js')).Connection(ep.url, { commitment: 'confirmed' });
     const sigs: string[] = [];
     let before: string | undefined = undefined;
     const epStart = Date.now();
-    const EP_MAX_MS = 1500; // don't spend more than ~1.5s per endpoint
     for (let page = 0; page < maxPages; page++) {
       if (Date.now() - epStart > EP_MAX_MS) {
         console.warn('[crossCheckSignatures] endpoint time budget exceeded for', ep.url);
@@ -483,7 +486,6 @@ export async function crossCheckSignatures(profileId: string, pubkey: string, si
       try {
         const pageSigs = await conn.getSignaturesForAddress(address, { before });
         if (!pageSigs || pageSigs.length === 0) break;
-        // aggiungi solo quelle >= sinceMs
         for (const s of pageSigs) {
           if (s.blockTime && s.blockTime * 1000 >= sinceMs) sigs.push(s.signature);
         }
@@ -491,23 +493,34 @@ export async function crossCheckSignatures(profileId: string, pubkey: string, si
         const last = pageSigs[pageSigs.length - 1];
         if (last && last.blockTime && (last.blockTime * 1000) < sinceMs) break;
         before = pageSigs[pageSigs.length - 1].signature;
-        // small delay to avoid thundering herd across endpoints
-        await new Promise(r => setTimeout(r, 50 + Math.floor(Math.random() * 100)));
       } catch (e: any) {
-        const is429 = e && (e.status === 429 || (e.message && String(e.message).includes('429')));
+        const msg = String(e?.message || '');
+        const is429 = e?.status === 429 || msg.includes('429');
         if (is429) {
-          const delay = 500 + Math.floor(Math.random() * 800);
-          await new Promise(r => setTimeout(r, delay));
+          await new Promise(r => setTimeout(r, 500 + Math.floor(Math.random() * 800)));
           continue;
-        } else {
-          // on other errors, quickly break and record what we have
-          console.warn('[crossCheckSignatures] errore su endpoint', ep.url, e?.message || e);
-          break;
         }
+        // Errore non-429: potrebbe essere che l'endpoint non supporti il metodo
+        const isMethodUnsupported =
+          msg.includes('not available for anonymous') ||
+          msg.includes('Method') ||
+          msg.includes('not available') ||
+          e?.status === 403;
+        if (isMethodUnsupported) {
+          sigAddrUnsupported.add(ep.url);
+          console.warn('[crossCheckSignatures] endpoint rimosso dalla blocklist (metodo non supportato):', ep.url);
+        } else {
+          console.warn('[crossCheckSignatures] errore su endpoint', ep.url, msg);
+        }
+        break;
       }
     }
-    perEndpoint[ep.url] = { count: sigs.length, signatures: Array.from(new Set(sigs)) };
-  }
+    return [ep.url, { count: sigs.length, signatures: Array.from(new Set(sigs)) }];
+  };
+
+  // Tutti gli endpoint in parallelo
+  const results = await Promise.all(chosen.map(fetchOneEndpoint));
+  const perEndpoint: Record<string, {count: number, signatures: string[]}> = Object.fromEntries(results);
 
   // compute intersection and union
   const endpointLists = Object.values(perEndpoint).map(p => p.signatures);

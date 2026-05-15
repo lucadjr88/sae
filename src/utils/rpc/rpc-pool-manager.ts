@@ -86,6 +86,11 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
   const healthy = pool.filter(ep => health.isHealthy(ep.url) && !health.isInBackoff(ep.url));
   const filteredHealthy = healthy.filter(ep => !metrics.shouldExcludeEndpoint(ep.url));
   let candidates = filteredHealthy.length > 0 ? filteredHealthy : healthy.length > 0 ? healthy : pool;
+  // Ordina candidati per tasso 429 crescente negli ultimi 2 min: meno 429 = priorità più alta
+  const WINDOW_429_MS = 2 * 60 * 1000;
+  candidates = [...candidates].sort((a, b) =>
+    metrics.countStatusInWindow(a.url, 429, WINDOW_429_MS) - metrics.countStatusInWindow(b.url, 429, WINDOW_429_MS)
+  );
 
   const startTime = Date.now();
   const waitForMs = opts?.waitForMs ?? 0;

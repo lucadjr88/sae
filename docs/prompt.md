@@ -10,4 +10,4 @@ curl -s 'http://localhost:3000/api/rentals/contracts' | jq
 git add .
 git commit -m "Sae v1.3"
 
-pkill -9 node; cd ~/sae && rm -rf dist log && npm install && cd frontend && npm install && cd .. && npm run build:decoder && npm run build && sleep 1 && mkdir -p log && nohup npm start > log/server-$(date +%Y%m%d-%H%M%S).log 2>&1 &
+sudo pkill -9 -x node || true; cd ~/sae && rm -rf dist log && npm install && npm --prefix frontend install && npm run build && mkdir -p log && nohup npm start > "log/server-$(date +%Y%m%d-%H%M%S).log" 2>&1 &

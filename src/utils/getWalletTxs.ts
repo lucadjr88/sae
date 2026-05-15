@@ -5,12 +5,8 @@ import { fetchWalletTransactions } from './solanaRpc.js';
 // Restituisce anche il totale signature tentate e quelle fallite
 export async function getWalletTxsUtil(wallet: string, lats: number, profileId: string): Promise<{txs: any[], total: number, failed: string[]}> {
   const sinceMs = Date.now() - lats * 3600 * 1000;
-  // fetchWalletTransactions ora ritorna solo le tx riuscite, ma logga le fallite
-  // Per sapere le fallite, serve modificarla per restituire anche le signature fallite
   const { txs, total, failed } = await fetchWalletTransactions(wallet, sinceMs, profileId);
-  // Salva solo le tx riuscite
-  for (const tx of txs) {
-    await fetchAndCacheWalletTxs(wallet, profileId, sinceMs, [tx]);
-  }
+  // Salva tutte le tx in parallelo invece di attenderle una per una
+  await fetchAndCacheWalletTxs(wallet, profileId, sinceMs, txs);
   return { txs, total, failed };
 }
