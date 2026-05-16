@@ -24,6 +24,7 @@ export default defineConfig({
         main: path.resolve(__dirname, 'index.html'),
         'pages/privacy_policy': path.resolve(__dirname, 'pages/privacy_policy.html'),
         'pages/instructions': path.resolve(__dirname, 'pages/instructions.html'),
+        'pages/terms': path.resolve(__dirname, 'pages/terms.html'),
       },
     },
   },
