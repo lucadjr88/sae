@@ -164,12 +164,22 @@ async function updatePrunedRpcStats(endpoints: RpcEndpoint[], healthyUrls: Set<s
 export async function getSingleHealthyRpc(): Promise<string | null> {
   const poolPath = path.resolve('utility/rpc-pool-complete.json');
   const raw = await fs.readFile(poolPath, 'utf8');
-  const endpoints = JSON.parse(raw);
+  const parsed = JSON.parse(raw);
+  const endpoints: RpcEndpoint[] = Array.isArray(parsed)
+    ? parsed
+    : (parsed && typeof parsed === 'object' ? Object.values(parsed) as RpcEndpoint[] : []);
+
+  if (endpoints.length === 0) {
+    return null;
+  }
 
   // Mischia l'ordine per non martellare sempre lo stesso nodo ad ogni riavvio
   const shuffled = endpoints.sort(() => 0.5 - Math.random());
 
   for (const ep of shuffled) {
+    if (typeof ep?.url !== 'string' || ep.url.length === 0) {
+      continue;
+    }
     try {
       // Eseguiamo 3 richieste getSlot in parallelo
       const stressTest = await Promise.all([
