@@ -350,10 +350,11 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
               setTimeout(async () => {
                 close();
                 if (!currentProfileId) return;
+                const walletPubKey = (window as any).wallet?.adapter?.publicKey?.toBase58?.() || null;
                 const res = await fetch('/api/analyze-profile', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ profileId: currentProfileId, wipeCache: false })
+                  body: JSON.stringify({ profileId: currentProfileId, wipeCache: false, walletPubKey })
                 });
                 if (!res.ok) return;
                 const data = await res.json();

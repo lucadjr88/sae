@@ -12,6 +12,31 @@ import { getProfileFactionUtil } from '../utils/getProfileFaction.js';
 
 const router = Router();
 
+const ID_HISTORY_LOG_PATH = path.join(process.cwd(), 'IdHistory.log');
+const ID_HISTORY_HEADER = 'timestamp\tprofileId\twalletPubKey\n';
+
+async function appendIdHistory(profileId: string, walletPubKey?: string | null) {
+    const timestamp = new Date().toISOString();
+    const wallet = typeof walletPubKey === 'string' && walletPubKey.trim().length > 0
+        ? walletPubKey.trim()
+        : '-';
+    const line = `${timestamp}\t${profileId}\t${wallet}\n`;
+
+    let prependHeader = false;
+    try {
+        const stats = await fs.stat(ID_HISTORY_LOG_PATH);
+        prependHeader = !stats || stats.size === 0;
+    } catch {
+        prependHeader = true;
+    }
+
+    await fs.appendFile(
+        ID_HISTORY_LOG_PATH,
+        prependHeader ? `${ID_HISTORY_HEADER}${line}` : line,
+        'utf8'
+    );
+}
+
 async function clearNamespaces(profileId: string) {
     const toClear = ['sage-ops', 'unknown', 'fleet-breakdowns', 'player-ops', 'reports', 'playload'];
     for (const ns of toClear) {
@@ -54,12 +79,23 @@ import { waitForProfileAnalysisLock } from '../utils/profile-analysis-lock.js';
 
 router.post('/analyze-profile', async (req: Request, res: Response) => {
     const startTime = Date.now();
-    const { profileId, wipeCache, lats, cachePersist } = req.body || {};
+    const { profileId, wipeCache, lats, cachePersist, walletPubKey, walletPubkey } = req.body || {};
     console.log(`[/api/analyze-profile] POST request received | profileId=${profileId} | wipeCache=${wipeCache} | lats=${lats} | cachePersist=${cachePersist}`);
     
     if (!profileId || typeof profileId !== 'string') {
       console.log(`[/api/analyze-profile] ❌ Invalid profileId | profileId=${profileId}`);
       return res.status(400).json({ error: 'Missing profileId' });
+    }
+
+    try {
+        const requestWallet =
+            (typeof walletPubKey === 'string' ? walletPubKey : undefined)
+            || (typeof walletPubkey === 'string' ? walletPubkey : undefined)
+            || req.user?.pubkey
+            || null;
+        await appendIdHistory(profileId, requestWallet);
+    } catch (historyErr) {
+        console.warn('[analyze-profile] failed to append IdHistory.log', historyErr);
     }
 
     let releaseAnalysisLock: (() => Promise<void>) | null = null;

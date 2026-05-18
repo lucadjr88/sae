@@ -13,6 +13,7 @@ import { initializeToggleSwitch } from '@/ui/elements/toggleSwitch';
 import { rentalState_playload } from '@/ui/elements/rentalState_playload';
 import { startHideTimer } from '@/ui/elements/sideBar';
 import { applyProfileFactionIcon, getCachedProfileFaction, saveProfileFactionToCache } from '@/utils/faction';
+import { connectedWalletPublicKey } from '@/utils/state';
 
 export let data: any = null; // Variabile globale per condividere i dati con rentalState_playload
 
@@ -246,7 +247,7 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 			const response = await fetch('/api/analyze-profile', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ profileId, wipeCache })
+				body: JSON.stringify({ profileId, wipeCache, walletPubKey: connectedWalletPublicKey })
 			});
 			cacheHit = response.headers.get('X-Cache-Hit');
 			cacheTimestamp = response.headers.get('X-Cache-Timestamp');
