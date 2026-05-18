@@ -100,26 +100,34 @@ async function deriveFleetContextFromChain(fleet: PublicKey): Promise<{ ownerPro
 	console.log("[LIST] deriveFleetContextFromChain:start", {
 		fleet: fleet.toBase58(),
 	});
-	const connection = await getRpcConnection();
-	const fleetInfo = await connection.getAccountInfo(fleet);
-	if (!fleetInfo?.data || fleetInfo.data.length < 73) {
-		console.warn("[LIST] deriveFleetContextFromChain: account missing or too short", {
+	try {
+		const connection = await getRpcConnection();
+		const fleetInfo = await connection.getAccountInfo(fleet);
+		if (!fleetInfo?.data || fleetInfo.data.length < 73) {
+			console.warn("[LIST] deriveFleetContextFromChain: account missing or too short", {
+				fleet: fleet.toBase58(),
+				dataLength: fleetInfo?.data?.length ?? null,
+			});
+			return {};
+		}
+
+		const raw = Buffer.from(fleetInfo.data);
+		const derived = {
+			gameId: new PublicKey(raw.subarray(9, 41)).toBase58(),
+			ownerProfile: new PublicKey(raw.subarray(41, 73)).toBase58(),
+		};
+		console.log("[LIST] deriveFleetContextFromChain:result", {
 			fleet: fleet.toBase58(),
-			dataLength: fleetInfo?.data?.length ?? null,
+			...derived,
+		});
+		return derived;
+	} catch (error) {
+		console.warn("[LIST] deriveFleetContextFromChain: getAccountInfo failed", {
+			fleet: fleet.toBase58(),
+			error: error instanceof Error ? error.message : String(error),
 		});
 		return {};
 	}
-
-	const raw = Buffer.from(fleetInfo.data);
-	const derived = {
-		gameId: new PublicKey(raw.subarray(9, 41)).toBase58(),
-		ownerProfile: new PublicKey(raw.subarray(41, 73)).toBase58(),
-	};
-	console.log("[LIST] deriveFleetContextFromChain:result", {
-		fleet: fleet.toBase58(),
-		...derived,
-	});
-	return derived;
 }
 
 function normalizeInstructionAccounts(accounts: any[]): any[] {
