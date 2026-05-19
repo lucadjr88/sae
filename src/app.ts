@@ -13,6 +13,7 @@ import authRouter from './backend/routes/auth.js';
 import resourceFlowsRouter from './backend/routes/resource-flows.js';
 import assetsRouter from './backend/routes/assets.js';
 import rentalRouter from './backend/routes/rental.js';
+import sduRouter from './backend/routes/sdu.js';
 import { startNonInvasiveMetricsLogger } from './utils/rpc/metrics.js';
 
 installProcessLogContext();
@@ -37,6 +38,7 @@ app.use('/api', getFleetInfoMinimalRouter);
 // Serve static assets via API routes (for Android app)
 app.use('/api', assetsRouter);
 app.use('/api', rentalRouter);
+app.use('/api', sduRouter);
 
 // Serve frontend static files at /
 app.use('/', frontendRouter);

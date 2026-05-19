@@ -13,7 +13,7 @@
   justify-content: space-between;
   align-items: center;
   width: 50px;
-  height: 180px; /* Aumentato da 120px a 180px per la terza icona */
+  height: 240px;
   border-radius: 12px;
   padding: 5px 0;
   box-sizing: border-box;
@@ -41,18 +41,22 @@
 /* LOGICA DI MOVIMENTO dello slider scuro */
 /* Se il secondo radio è selezionato, scendi di circa 60px */
 #opt-resource:checked ~ .vertical-selector::before {
-  transform: translateY(90px);
+  transform: translateY(60px);
 }
 
 /* Se il terzo radio è selezionato, scendi di circa 120px */
 #opt-rental:checked ~ .vertical-selector::before {
-  transform: translateY(150px);
+  transform: translateY(120px);
+}
+
+#opt-sdu:checked ~ .vertical-selector::before {
+  transform: translateY(180px);
 }
 
 /* Stile delle icone (Label) */
 .selector-item {
   width: 50px;
-  height: 60px; /* Ogni slot occupa 60px (180/3) */
+  height: 60px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -88,7 +92,7 @@ input:checked + .selector-item img {
 
   .vertical-selector {
     width: 65px;  /* Più largo per facilitare il touch */
-    height: 240px; /* Aumentato per dare respiro alle 3 icone */
+    height: 320px;
     border-radius: 15px;
     padding: 8px 0;
             top: -8vh;
@@ -103,21 +107,24 @@ input:checked + .selector-item img {
     border-radius: 12px;
   }
 
-  /* LOGICA DI MOVIMENTO (Ricalcolata su altezza 240px) */
-  /* Ogni slot ora è circa 76px (230/3) */
+  /* LOGICA DI MOVIMENTO su 4 slot */
   
   #opt-resource:checked ~ .vertical-selector::before {
-    transform: translateY(77px);
+    transform: translateY(80px);
   }
 
   #opt-rental:checked ~ .vertical-selector::before {
-    transform: translateY(154px);
+    transform: translateY(160px);
+  }
+
+  #opt-sdu:checked ~ .vertical-selector::before {
+    transform: translateY(240px);
   }
 
   /* Stile delle icone (Label) */
   .selector-item {
     width: 65px;
-    height: 76px; /* Slot aumentato */
+    height: 80px;
     padding: 15px 0;
   }
 

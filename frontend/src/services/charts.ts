@@ -7,6 +7,69 @@ import solIcon from '@/assets/icons/sol.svg';
 // Use Chart from global window (loaded via CDN in HTML)
 declare const Chart: any;
 
+export function drawVerticalBarChart(
+  canvas: HTMLCanvasElement,
+  labels: string[],
+  values: number[],
+  datasetLabel: string
+): void {
+  if (!canvas) {
+    return;
+  }
+
+  const canvasAny = canvas as any;
+  if (canvasAny._chartInstance) {
+    try {
+      canvasAny._chartInstance.destroy();
+    } catch (error) {
+      console.warn('Error destroying previous chart instance:', error);
+    }
+    canvasAny._chartInstance = null;
+  }
+
+  const chartInstance = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: datasetLabel,
+        data: values,
+        backgroundColor: '#3b82f6',
+        borderColor: '#2563eb',
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context: any): string {
+              return `${datasetLabel}: ${context.raw ?? 0}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#cbd5e1' },
+          grid: { color: 'rgba(148, 163, 184, 0.2)' }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#cbd5e1' },
+          grid: { color: 'rgba(148, 163, 184, 0.2)' }
+        }
+      }
+    } as any
+  });
+
+  canvasAny._chartInstance = chartInstance;
+}
+
 export function drawPieChart(
   canvasId: string,
   legendId: string,

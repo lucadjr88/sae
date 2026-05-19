@@ -396,7 +396,7 @@ export function rentalState_playload(data: any,) {
         container.classList.add(title.toLowerCase());
 
         container.innerHTML = `
-        <h3>  ${title}</h3>
+        <h3>${title}</h3>
         <table class="rentalState-table">
             <thead>
                 <tr>

@@ -6,11 +6,12 @@ import { setLoadingBackgroundState, updateProgress } from '@/ui/elements/loading
 import { displayFeeResults } from '@/ui/elements/fees_playload';
 import { displayResourceResults } from '@/ui/elements/resource_playload';
 import { fetchAndDisplayRentals } from '@/ui/elements/rental_playload';
-import { setRentalLoader } from '@/ui/elements/toggleSwitch';
+import { setCachedSduView, setRentalLoader } from '@/ui/elements/toggleSwitch';
 import type { FleetsRequest, FleetsResponse, WalletSageFeesStreamRequest, FleetBreakdownRequest, FleetBreakdownResponse, ApiError } from '@/types/api';
 import type { FeesByFleet } from '@/types/operation-list';
 import { initializeToggleSwitch } from '@/ui/elements/toggleSwitch';
 import { rentalState_playload } from '@/ui/elements/rentalState_playload';
+import { createSduProgramView } from '@/ui/elements/sduProgram_playload';
 import { startHideTimer } from '@/ui/elements/sideBar';
 import { applyProfileFactionIcon, getCachedProfileFaction, saveProfileFactionToCache } from '@/utils/faction';
 import { connectedWalletPublicKey } from '@/utils/state';
@@ -290,6 +291,12 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		displayResourceResults(data);
 		//setRentalLoader(fetchAndDisplayRentals);
 		rentalState_playload(data);
+		const sduFleetIds = Array.from(new Set(
+			(processed.fleets || [])
+				.map((fleet: any) => (fleet?.key || fleet?.data?.fleetShips || '').trim())
+				.filter((fleetId: string) => !!fleetId)
+		));
+		setCachedSduView(createSduProgramView({ fleetIds: sduFleetIds, days: 10 }));
 
 		if (data && data.feesByFleet && typeof data.feesByFleet === 'object') {
 			displayFleetOperationCharts(data.feesByFleet, processed.fleetNames);
