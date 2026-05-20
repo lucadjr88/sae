@@ -75,14 +75,32 @@ router.get('/assets/manifest', (req, res) => {
       const manualFile = assetFiles.find(f => f.startsWith('writing'));
       if (manualFile) manifest.assets.iconManual = `/api/assets/${manualFile}`;
       
-      // Resources icon
-      const resourcesFile = assetFiles.find(f => f.startsWith('resources_icon-'));
-      if (resourcesFile) manifest.assets.iconResources = `/api/assets/${resourcesFile}`;
-      
-      // Tax icon
-      const taxFile = assetFiles.find(f => f.startsWith('tax_icon-'));
-      if (taxFile) manifest.assets.iconTax = `/api/assets/${taxFile}`;
-      
+      // Fee icon
+      const feeFile = assetFiles.find(f => f.startsWith('taxes-'));
+      if (feeFile) manifest.assets.iconFee = `/api/assets/${feeFile}`;
+
+      // Resource icon
+      const resourceFile = assetFiles.find(f => f.startsWith('risorseIcon_4-'));
+      if (resourceFile) manifest.assets.iconResource = `/api/assets/${resourceFile}`;
+
+      // Rental icon
+      const rentalFile = assetFiles.find(f => f.startsWith('rental2-'));
+      if (rentalFile) manifest.assets.iconRental = `/api/assets/${rentalFile}`;
+
+      // Loading background (GIF)
+      const loadingBgFile = assetFiles.find(f => f.startsWith('sequenza_background-'));
+      if (loadingBgFile) manifest.assets.backgroundLoading = `/api/assets/${loadingBgFile}`;
+
+      // Characters
+      const charLeftFile = assetFiles.find(f => f.startsWith('personaggio2-'));
+      if (charLeftFile) manifest.assets.characterLeft = `/api/assets/${charLeftFile}`;
+
+      const charRightFile = assetFiles.find(f => f.startsWith('personaggio3-'));
+      if (charRightFile) manifest.assets.characterRight = `/api/assets/${charRightFile}`;
+
+      const charLoadingFile = assetFiles.find(f => f.startsWith('personaggio1-'));
+      if (charLoadingFile) manifest.assets.characterLoading = `/api/assets/${charLoadingFile}`;
+
       // Istruzioni
       const istr1File = assetFiles.find(f => f.startsWith('istruzione1-'));
       if (istr1File) manifest.assets.imageInstruction1 = `/api/assets/${istr1File}`;
