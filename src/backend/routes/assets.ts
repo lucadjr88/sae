@@ -89,6 +89,13 @@ router.get('/assets/manifest', (req, res) => {
       
       const istr2File = assetFiles.find(f => f.startsWith('istruzione2-'));
       if (istr2File) manifest.assets.imageInstruction2 = `/api/assets/${istr2File}`;
+
+      // SDU Program icons
+      const sduWhiteFile = assetFiles.find(f => f.startsWith('sduProgramWhite-'));
+      if (sduWhiteFile) manifest.assets.sduProgramWhite = `/api/assets/${sduWhiteFile}`;
+
+      const sduBlackFile = assetFiles.find(f => f.startsWith('sduProgramBlack-'));
+      if (sduBlackFile) manifest.assets.sduProgramBlack = `/api/assets/${sduBlackFile}`;
     }
 
     // Scansiona pagine
