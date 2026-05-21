@@ -87,6 +87,12 @@ router.get('/assets/manifest', (req, res) => {
       const rentalFile = assetFiles.find(f => f.startsWith('rental2-'));
       if (rentalFile) manifest.assets.iconRental = `/api/assets/${rentalFile}`;
 
+      // Listing dialog background pattern
+      const listingDialogBgFile = assetFiles.find(f => f.startsWith('MetalPlatePatterned3-'));
+      if (listingDialogBgFile) {
+        manifest.assets.listingDialogBackground = `/api/assets/${listingDialogBgFile}`;
+      }
+
       // Loading background (GIF)
       const loadingBgFile = assetFiles.find(f => f.startsWith('sequenza_background-'));
       if (loadingBgFile) manifest.assets.backgroundLoading = `/api/assets/${loadingBgFile}`;
