@@ -239,6 +239,6 @@
   }
 
   .sdu-program-hero-icon {
-    max-width: 220px;
+    align-self: center;
   }
 }

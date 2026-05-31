@@ -493,7 +493,8 @@ export function rentalState_playload(data: any,) {
 
         // Creiamo la riga
         const row = document.createElement("tr");
-        const total_amount = parseInt(computeDisplayedRentalTotal(fleet), 10);
+        const displayedTotal = computeDisplayedRentalTotal(fleet);
+        const total_amount = displayedTotal === null ? null : Number.parseFloat(displayedTotal);
 
         if (fleet.isRented) {
             row.classList.add("fleet-item-rented");
@@ -506,7 +507,7 @@ export function rentalState_playload(data: any,) {
             <td>${fleetRentalEnd}</td>
             
             <td style="color:#7f2713; display: flex; flex-direction: row; align-items: center;">
-            <div style="display: flex; flex-direction: row; align-items: center;">${total_amount} ${atlasIcon}</div>
+            <div style="display: flex; flex-direction: row; align-items: center;">${total_amount !== null ? total_amount : "-"} ${total_amount !== null ? atlasIcon : ""}</div>
             <button
                 class="cancel-rental-button"
                 data-fleet-id="${fleet.fleet_id || fleet.fleet || ""}"

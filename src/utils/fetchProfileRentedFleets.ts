@@ -433,9 +433,37 @@ export async function fetchProfileRentedFleets(profileId: string): Promise<any[]
         rpcName,
         rpcUrl
       );
+      const currentRentalStatePubkeys = Array.from(
+        new Set(
+          listedContracts
+            .map(({ contractState }) => contractState.current_rental_state)
+            .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        )
+      );
+      const listedRentalStateMap = new Map<string, any>();
+      for (const rentalStateChunk of chunkArray(currentRentalStatePubkeys, 50)) {
+        try {
+          const rentalStateInfos = await connection.getMultipleAccountsInfo(
+            rentalStateChunk.map((address) => new PublicKey(address)),
+            'confirmed'
+          );
+          rentalStateChunk.forEach((rentalStatePubkey, idx) => {
+            const rentalStateInfo = rentalStateInfos[idx];
+            if (!rentalStateInfo?.data) return;
+            const decodedRentalState = decodeRentalState(Buffer.from(rentalStateInfo.data));
+            if (!decodedRentalState || decodedRentalState.cancelled) return;
+            listedRentalStateMap.set(rentalStatePubkey, decodedRentalState);
+          });
+        } catch (rentalStateErr) {
+          console.log(`[DEBUG RENTAL] Failed fetching listed rental state chunk size=${rentalStateChunk.length} via rpc=${rpcName} url=${rpcUrl}: ${rentalStateErr}`);
+        }
+      }
       for (const { acct, contractState } of listedContracts) {
         const fleetParsed = listedFleetMap.get(contractState.fleet) ?? null;
         const isLoaned = !!contractState.current_rental_state;
+        const linkedRentalState = isLoaned && typeof contractState.current_rental_state === 'string'
+          ? listedRentalStateMap.get(contractState.current_rental_state)
+          : null;
         const ownedFleet = {
           ...(fleetParsed || {}),
           pubkey: contractState.fleet,
@@ -450,6 +478,10 @@ export async function fetchProfileRentedFleets(profileId: string): Promise<any[]
           duration_min: contractState.duration_min,
           duration_max: contractState.duration_max,
           payment_frequency: contractState.payment_frequency,
+          rental_state_pubkey: linkedRentalState ? contractState.current_rental_state : null,
+          rental_start_time: linkedRentalState?.start_time,
+          rental_end_time: linkedRentalState?.end_time,
+          rental_cancelled: linkedRentalState?.cancelled ?? false,
         };
         /*console.log('[DEBUG RENTAL][CATALOGAZIONE FLEET]', {
           fleet: contractState.fleet,

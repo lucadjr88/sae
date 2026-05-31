@@ -257,10 +257,6 @@ export function createSduProgramView(options: CreateSduProgramViewOptions): HTML
   heroIcon.className = 'sdu-program-hero-icon';
   left.appendChild(heroIcon);
 
-  const title = document.createElement('h2');
-  title.className = 'sdu-program-title';
-  title.textContent = 'SDU Program';
-  left.appendChild(title);
 
   const summary = document.createElement('div');
   summary.className = 'sdu-summary-box';
