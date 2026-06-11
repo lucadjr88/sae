@@ -52,7 +52,7 @@ function renderInstructionsPage(): void {
 
       <h2>6. Contact</h2>
       <p>If you have any questions regarding how your blockchain data is handled, please contact us.</p>
-      <p>Email: lucadjr88@gmail.com</p>
+      <p>Email: <a href="mailto:info@staratlasexplorer.it">info@staratlasexplorer.it</a></p>
     </div>
   `;
   mainContainer.appendChild(contentContainer);

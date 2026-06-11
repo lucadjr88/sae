@@ -34,27 +34,23 @@ function renderTermsPage(): void {
   contentContainer.innerHTML = `
     <div class="content">
       <h1>Terms of Use</h1>
-      <p>Last updated: 16 May 2026</p>
+      <p><strong>Last Updated:</strong> June 2026</p>
+      <div class="disclaimer">
+        <strong>IMPORTANT NOTICE &amp; OFFICIAL DISCLAIMER:</strong><br>
+        Star Atlas Explorer is an independent, unofficial, community-driven dashboard and analytics tool. It is <strong>NOT</strong> affiliated with, authorized, endorsed, or sponsored by ATMTA, Inc., the Star Atlas development team, or the Solana Foundation. All official Star Atlas trademarks, names, and assets belong to their respective owners.
+      </div>
       <h2>1. Acceptance of Terms</h2>
-      <p>By using SaeMobile (the \"App\"), you agree to these Terms of Use. If you do not agree, please do not use the App.</p>
-      <h2>2. Use of Blockchain Data</h2>
-      <p>The App interacts with the Solana blockchain. All transactions are public and immutable. You are responsible for your wallet and private keys. The App does not store or have access to your private keys.</p>
-      <h2>3. No Custody or Financial Advice</h2>
-      <p>The App does not provide custody of assets, nor does it offer financial, investment, or legal advice. Use at your own risk.</p>
-      <h2>4. User Responsibilities</h2>
-      <ul>
-        <li>Do not use the App for illegal activities.</li>
-        <li>Ensure compliance with your local laws.</li>
-        <li>You are solely responsible for your actions and transactions.</li>
-      </ul>
+      <p>By accessing or using Star Atlas Explorer (the "Application"), you agree to be bound by these Terms of Use. If you do not agree, please do not use the Application.</p>
+      <h2>2. Description of Service &amp; Use of Blockchain Data</h2>
+      <p>The Application provides real-time dashboard and analytics data regarding the Star Atlas on-chain game operations on the Solana blockchain. All data displayed is fetched directly from public, open-source Solana blockchain records. We do not guarantee the permanent availability, accuracy, or completeness of such public data.</p>
+      <h2>3. No Custody, Wallet Responsibility &amp; Financial Advice</h2>
+      <p>The Application is a non-custodial software. We do not hold, store, manage, or have access to your private keys, seed phrases, or crypto assets (tokens/NFTs). You are solely responsible for the security of your own Solana wallet. Nothing contained in this Application constitutes financial, investment, or legal advice.</p>
+      <h2>4. Assumption of Risk &amp; Blockchain Irreversibility</h2>
+      <p>By using this Application, you acknowledge that blockchain transactions are permanent and irreversible. You accept all inherent risks associated with cryptographic systems, smart contracts, network fees (gas/rent), extreme price volatility, and potential technical exploits or bugs within the underlying Solana network or Star Atlas protocols.</p>
       <h2>5. Limitation of Liability</h2>
-      <p>The App is provided \"as is\" without warranties of any kind. The developers are not liable for any damages, losses, or issues arising from use of the App, including but not limited to loss of funds, data, or access.</p>
-      <h2>6. Third-Party Services</h2>
-      <p>The App may link to third-party services or content. The developers are not responsible for third-party content or services.</p>
-      <h2>7. Changes to Terms</h2>
-      <p>We may update these Terms at any time. Continued use of the App after changes means you accept the new Terms.</p>
-      <h2>8. Contact</h2>
-      <p>For questions, contact: staratlasexplorer@duckdns.org</p>
+      <p>To the maximum extent permitted by law, Star Atlas Explorer and its developers shall not be liable for any direct, indirect, incidental, or consequential damages, including but not limited to loss of funds, tokens, NFTs, or profits, arising out of your use or inability to use the Application.</p>
+      <h2>6. Contact Information</h2>
+      <p>For any questions or support regarding these Terms, contact: <a href="mailto:info@staratlasexplorer.it">info@staratlasexplorer.it</a></p>
     </div>
   `;
   mainContainer.appendChild(contentContainer);

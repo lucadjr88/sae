@@ -1,7 +1,7 @@
 
 export const APP_IDENTITY = {
   name: 'Star Atlas Explorer',
-  uri: 'https://staratlasexplorer.duckdns.org',
+  uri: 'https://staratlasexplorer.it',
   icon: 'favicon.ico',
 };
 
