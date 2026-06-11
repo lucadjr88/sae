@@ -1,7 +1,7 @@
 // Modulo per l'elemento di loading
 // Esporta funzione per creare la struttura reale dell'elemento di loading
 import { progressInterval, setAnalysisStartTime, setProgressInterval } from '@/utils/state';
-import loadingBackgroundGif from '@/assets/sequenza_background.gif';
+import loadingBackgroundGif from '@/assets/sequenza_background.webp';
 import personaggio1 from '@/assets/personaggio1.png';
 
 export function setLoadingBackgroundState(isLoading: boolean): void {

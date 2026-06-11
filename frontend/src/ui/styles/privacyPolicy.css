@@ -44,5 +44,9 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
   .privacy-policy-link {
     font-size: 11px;
     opacity: 0.9;
+    display: inline-block;
+    padding: 8px 6px;
+    min-height: 44px;
+    line-height: 44px;
   }
 }

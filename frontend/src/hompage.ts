@@ -57,12 +57,14 @@ export function createHomePage(): void {
   const character2 = document.createElement('img');
   character2.src = personaggio2;
   character2.className = 'character2';
+  character2.alt = 'Star Atlas Character';
   mainContainer.appendChild(character2);
 
   // Aggiungiamo il personaggio in basso a destra
   const character3 = document.createElement('img');
   character3.src = personaggio3;
   character3.className = 'character3';
+  character3.alt = 'Star Atlas Character';
   mainContainer.appendChild(character3);
 
   mainContainer.appendChild(heroDiv);
