@@ -252,7 +252,7 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
     font-size: 10px;
   }
   .playstore-icon {
-    bottom: 100px;
+    /*bottom: 100px;*/
   }
 
 
