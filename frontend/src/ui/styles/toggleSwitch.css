@@ -91,8 +91,8 @@ input:checked + .selector-item img {
   }
 
   .vertical-selector {
-    width: 65px;  /* Più largo per facilitare il touch */
-    height: 320px;
+    width: 65px;
+    height: 235px;
     border-radius: 15px;
     padding: 8px 0;
             top: -8vh;
@@ -100,9 +100,9 @@ input:checked + .selector-item img {
 
   /* Il "pallino" mobile (Slider Scuro) */
   .vertical-selector::before {
-    height: 70px; /* Più grande per l'estetica mobile */
+    height: 55px;
     width: 65px;
-    top: 5px;     /* Offset iniziale */
+    top: 5px;
     left: 0;
     border-radius: 12px;
   }
@@ -110,26 +110,26 @@ input:checked + .selector-item img {
   /* LOGICA DI MOVIMENTO su 4 slot */
   
   #opt-resource:checked ~ .vertical-selector::before {
-    transform: translateY(80px);
+    transform: translateY(55px);
   }
 
   #opt-rental:checked ~ .vertical-selector::before {
-    transform: translateY(160px);
+    transform: translateY(110px);
   }
 
   #opt-sdu:checked ~ .vertical-selector::before {
-    transform: translateY(240px);
+    transform: translateY(165px);
   }
 
   /* Stile delle icone (Label) */
   .selector-item {
     width: 65px;
-    height: 80px;
-    padding: 15px 0;
+    height: 55px;
+    padding: 5px 0;
   }
 
   .selector-item img {
-    width: 45px; /* Icone più grandi e leggibili su AMOLED */
-    height: 45px;
+    width: 38px;
+    height: 38px;
   }
 }
