@@ -43,7 +43,7 @@ export function createHomePage(): void {
 
   const startDiv = document.createElement('div');
   startDiv.id = 'buttons-container';
-  if (!window.skipWalletPage) {
+  if (!(window as any).skipWalletPage) {
     startDiv.appendChild(createStartButtonsElement());
   }
 
