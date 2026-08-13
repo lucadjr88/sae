@@ -94,7 +94,9 @@ if (isMobile()) {
   window.wallet = new Wallet();
 }
 
+(window as any).skipWalletPage = true;
 createHomePage();
+manualProfileEntryListener();
 //console.log('[main.ts] Initialization complete | imports resolved directly without window globals');
 
 const connectBtn = document.getElementById('connectWalletBtn') as HTMLButtonElement | null;

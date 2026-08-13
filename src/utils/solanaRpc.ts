@@ -340,7 +340,7 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
     }
 
     // Fetch singolo per signature usando RpcPoolManager.pickRpcConnection per ogni tentativo
-    // CRUCIALE: limitare a 3-5 per non colpire rate limit (Helius ~10 req/sec)
+    // CRUCIALE: limitare a 3-5 per non colpire rate limit 
     const maxRetries = 3;
     const txs: any[] = [];
     const failed: string[] = [];

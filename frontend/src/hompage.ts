@@ -43,7 +43,9 @@ export function createHomePage(): void {
 
   const startDiv = document.createElement('div');
   startDiv.id = 'buttons-container';
-  startDiv.appendChild(createStartButtonsElement());
+  if (!window.skipWalletPage) {
+    startDiv.appendChild(createStartButtonsElement());
+  }
 
   const privacyDiv = document.createElement('div');
   privacyDiv.id = 'privacy-container';
