@@ -166,6 +166,12 @@ function startLockHeartbeat() {
     try {
       fsSync.writeFileSync(LOCK_FILE, buildLockPayload(), 'utf8');
     } catch (e) {
+      if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        clearInterval(lockHeartbeatTimer);
+        lockHeld = false;
+        lockHeartbeatTimer = null;
+        return;
+      }
       console.warn('[TickersCache] Lock heartbeat failed:', e);
     }
   }, LOCK_HEARTBEAT_MS);
@@ -204,9 +210,15 @@ async function acquireLock() {
     if (!isLockStale(rawLock)) {
       return false;
     }
-    fsSync.unlinkSync(LOCK_FILE);
+    try {
+      fsSync.unlinkSync(LOCK_FILE);
+    } catch (e: any) {
+      if (e?.code !== 'ENOENT') throw e;
+    }
   } catch (e) {
-    console.warn('[TickersCache] Failed to inspect stale lock, retrying acquisition:', e);
+    if (e?.code !== 'ENOENT') {
+      console.warn('[TickersCache] Failed to inspect stale lock, retrying acquisition:', e);
+    }
   }
 
   try {

@@ -458,6 +458,10 @@ export async function fetchWalletTransactions(pubkey: string, sinceMs: number, p
 // Endpoint che hanno dimostrato di non supportare getSignaturesForAddress (blocklist per sessione)
 const sigAddrUnsupported = new Set<string>();
 
+function supportsSignatureQueries(endpoint: any): boolean {
+  return !String(endpoint?.url || '').includes('gateway.tatum.io');
+}
+
 // Cross-check delle signature ottenute da più endpoint del pool — esecuzione parallela
 export async function crossCheckSignatures(profileId: string, pubkey: string, sinceMs: number, endpointsToCheck = 3, maxPages = 50): Promise<{perEndpoint: Record<string, {count: number, signatures: string[]}>, intersection: string[], union: string[], differences: Record<string,string[]>}> {
   const address = new PublicKey(pubkey);
@@ -466,9 +470,12 @@ export async function crossCheckSignatures(profileId: string, pubkey: string, si
   const healthy = pool.filter(ep =>
     RpcPoolManager.health.isHealthy(ep.url) &&
     !RpcPoolManager.health.isInBackoff(ep.url) &&
-    !sigAddrUnsupported.has(ep.url)
+    !sigAddrUnsupported.has(ep.url) &&
+    supportsSignatureQueries(ep)
   );
-  const candidates = (healthy.length > 0 ? healthy : pool.filter(ep => !sigAddrUnsupported.has(ep.url)));
+  const candidates = (healthy.length > 0
+    ? healthy
+    : pool.filter(ep => !sigAddrUnsupported.has(ep.url) && supportsSignatureQueries(ep)));
   const chosen = candidates.slice(0, Math.max(1, Math.min(endpointsToCheck, candidates.length)));
 
   const EP_MAX_MS = 1500; // budget per endpoint

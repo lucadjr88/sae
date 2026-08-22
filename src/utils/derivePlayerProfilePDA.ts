@@ -44,18 +44,22 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
     });
     const orderedEndpoints: string[] = endpointObjs.map((ep: any) => ep.url);
     const uniqueEndpoints: string[] = Array.from(new Set(orderedEndpoints));
-    const candidates: string[] = rpcUrl ? [rpcUrl, ...uniqueEndpoints.filter((url) => url !== rpcUrl)] : uniqueEndpoints;
-    const maxAttempts = Math.max(1, candidates.length);
+    const candidates: string[] = rpcUrl
+      ? [rpcUrl, ...uniqueEndpoints.filter((url) => url !== rpcUrl)]
+      : uniqueEndpoints;
+    const programAccountCandidates = candidates.filter((url) => !url.includes('gateway.tatum.io'));
+    const effectiveCandidates = programAccountCandidates.length > 0 ? programAccountCandidates : candidates;
+    const maxAttempts = Math.max(1, effectiveCandidates.length);
     const programPubkey = new PublicKey(PLAYER_PROFILE_PROGRAM_ID);
 
-    if (candidates.length === 0) {
+    if (effectiveCandidates.length === 0) {
       throw new Error('No RPC endpoints configured in utility/rpc-pool-complete.json');
     }
 
     const startIndex = 0;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const index = (startIndex + attempt) % candidates.length;
-      const selectedUrl = candidates[index];
+      const index = (startIndex + attempt) % effectiveCandidates.length;
+      const selectedUrl = effectiveCandidates[index];
       const { connection } = await getRpcConnectionWithUrl({
   rpcUrl: selectedUrl,
   commitment: 'confirmed'
