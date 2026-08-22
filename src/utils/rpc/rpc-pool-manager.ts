@@ -80,12 +80,15 @@ export async function pruneRpcPool(profileId?: string, force?: boolean): Promise
 
 
 // Acquisisce una connessione dal pool con logica health-aware, fallback e adaptive concurrency
-export async function pickRpcConnection(profileId: string, opts?: { allowStale?: boolean; waitForMs?: number }): Promise<{ connection: any, endpoint: any, release: (opts?: { success?: boolean, latencyMs?: number, errorType?: string }) => void }> {
+export async function pickRpcConnection(profileId: string, opts?: { allowStale?: boolean; waitForMs?: number; excludeUrls?: readonly string[] }): Promise<{ connection: any, endpoint: any, release: (opts?: { success?: boolean, latencyMs?: number, errorType?: string }) => void }> {
   const pool = await loadOrCreateRpcPool(profileId);
   // Ordina endpoint: healthy e non in backoff prima
   const healthy = pool.filter(ep => health.isHealthy(ep.url) && !health.isInBackoff(ep.url));
   const filteredHealthy = healthy.filter(ep => !metrics.shouldExcludeEndpoint(ep.url));
   let candidates = filteredHealthy.length > 0 ? filteredHealthy : healthy.length > 0 ? healthy : pool;
+  const excludedUrls = new Set(opts?.excludeUrls ?? []);
+  const availableCandidates = candidates.filter(ep => !excludedUrls.has(ep.url));
+  if (availableCandidates.length > 0) candidates = availableCandidates;
   // Ordina candidati per tasso 429 crescente negli ultimi 2 min: meno 429 = priorità più alta
   const WINDOW_429_MS = 2 * 60 * 1000;
   candidates = [...candidates].sort((a, b) =>

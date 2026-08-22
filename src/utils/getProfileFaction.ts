@@ -84,6 +84,7 @@ async function executeRpcWithPool<T>(profileId: string, operation: (connection: 
   const pool = await RpcPoolManager.loadOrCreateRpcPool(normalizedProfileId);
   const maxAttempts = Math.max(4, Math.round(pool.length * 1.5));
   let lastError: unknown = null;
+  const failedRpcUrls = new Set<string>();
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | null = null;
@@ -93,6 +94,7 @@ async function executeRpcWithPool<T>(profileId: string, operation: (connection: 
       pick = await RpcPoolManager.pickRpcConnection(normalizedProfileId, {
         waitForMs: 3000,
         allowStale: attempt > 2,
+        excludeUrls: failedRpcUrls,
       });
       const result = await operation(pick.connection);
       pick.release({ success: true, latencyMs: Date.now() - startedAt });
@@ -107,6 +109,7 @@ async function executeRpcWithPool<T>(profileId: string, operation: (connection: 
       }
       const rpcName = pick?.endpoint?.name ?? 'unknown';
       const rpcUrl = pick?.endpoint?.url ?? 'n/a';
+      if (pick?.endpoint?.url) failedRpcUrls.add(pick.endpoint.url);
       lastError = error;
       console.warn(`[getProfileFactionUtil] attempt ${attempt + 1}/${maxAttempts} failed for profile ${normalizedProfileId} | rpc=${rpcName} | url=${rpcUrl}:`, error);
     }

@@ -16,10 +16,10 @@ export function createManualLoginElement(): HTMLDivElement {
           <svg class="info-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
           </svg>
-          <p class="body-medium">
-            You can find your profileId in Sage under Player Information and Details in CSS Starbase // Details
+          <p class="hompage-presentation">
+            Star Atlas Explorer is an independent, unofficial, community-driven dashboard and analytics tool. Insert your Player Profile ID to analyze your in-game operations costs and claims.
           </p>
-        <p class="body-medium">Check the instructions page for detailed steps.</p>
+        <p class="id-instructions">Check the instructions page for detailed steps.</p>
         <a href="/pages/instructions.html" target="_blank">Instructions Page</a>
       </div>
       </div>
