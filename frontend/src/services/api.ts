@@ -245,17 +245,58 @@ export async function analyzeFees(profileIdParam?: string, wipeCache: boolean = 
 		let cacheTimestamp: string | null = null;
 		console.log('[analyzeFees] About to fetch /api/analyze-profile');
 		try {
-			const response = await fetch('/api/analyze-profile', {
+			const requestAnalysis = (requestedProfileId: string) => fetch('/api/analyze-profile', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ profileId, wipeCache, walletPubKey: connectedWalletPublicKey })
+				body: JSON.stringify({ profileId: requestedProfileId, wipeCache, walletPubKey: connectedWalletPublicKey })
 			});
+			const resolveWalletProfile = async () => {
+				const walletResponse = await fetch(`/api/debug/player-profile-id?wallet=${encodeURIComponent(profileId)}`);
+				const walletData = await walletResponse.json();
+				return Array.isArray(walletData.variants)
+					? walletData.variants.find((variant: any) => variant?.profileId && variant.profileId !== profileId)?.profileId
+					: undefined;
+			};
+			let response = await requestAnalysis(profileId);
+			if (!response.ok) {
+				const initialError = new Error('analyze-profile request failed: ' + response.statusText);
+				try {
+					const resolvedProfileId = await resolveWalletProfile();
+					if (resolvedProfileId) {
+						console.log('[analyzeFees] Input resolved as wallet, retrying with profileId:', resolvedProfileId);
+						profileId = resolvedProfileId;
+						setCurrentProfileId(profileId);
+						response = await requestAnalysis(profileId);
+					}
+				} catch (fallbackError) {
+					console.warn('[analyzeFees] Wallet fallback failed:', fallbackError);
+				}
+				if (!response.ok) throw initialError;
+			}
 			cacheHit = response.headers.get('X-Cache-Hit');
 			cacheTimestamp = response.headers.get('X-Cache-Timestamp');
-			if (!response.ok) {
-				throw new Error('analyze-profile request failed: ' + response.statusText);
-			}
 			data = await response.json();
+			const analysisIsEmpty = data && typeof data === 'object'
+				&& Object.keys(data.feesByFleet || {}).length === 0
+				&& Number(data.transactionCount24h || 0) === 0
+				&& Number(data.sageFees24h || 0) === 0;
+			if (analysisIsEmpty) {
+				try {
+					const resolvedProfileId = await resolveWalletProfile();
+					if (resolvedProfileId) {
+						console.log('[analyzeFees] Empty analysis resolved as wallet, retrying with profileId:', resolvedProfileId);
+						profileId = resolvedProfileId;
+						setCurrentProfileId(profileId);
+						response = await requestAnalysis(profileId);
+						if (!response.ok) throw new Error('analyze-profile retry failed: ' + response.statusText);
+						cacheHit = response.headers.get('X-Cache-Hit');
+						cacheTimestamp = response.headers.get('X-Cache-Timestamp');
+						data = await response.json();
+					}
+				} catch (fallbackError) {
+					console.warn('[analyzeFees] Empty-analysis wallet fallback failed:', fallbackError);
+				}
+			}
 			console.log('[analyzeFees] Fetch successful, data:', data);
 		} catch (error) {
 			throw new Error('analyze-profile request failed: ' + (error.message || error));
