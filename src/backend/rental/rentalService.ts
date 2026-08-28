@@ -1,9 +1,6 @@
 import {
-	CONTRACT_DISCRIMINATOR,
-	decodeContractState,
 	decodeFleetMeta,
 	decodeFleetShipsEntries,
-	decodeRentalState,
 	decodeShipName,
 	decodeFuel,
 	decodeCargo,
@@ -14,10 +11,12 @@ import {
 // Aggiunge log di debug per ogni stato
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import bs58 from 'bs58';
+import { createRequire } from 'node:module';
 import { PublicKey, type AccountInfo, type Connection } from '@solana/web3.js';
 
 import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager.js';
+import { getHealthyRpcUrlOrThrow } from '../../utils/rpc/connection.js';
+import { mapSrslyV2Contract } from './srslyV2Adapter.js';
 import type { ContractQueryOptions, FleetStarbase, RentalContract } from './types.js';
 // ...existing code...
 // ...existing code...
@@ -28,9 +27,10 @@ interface FleetCacheEntry { fleet_name?: string; fleet_composition?: string; fle
 type MaybeAccount = AccountInfo<Buffer> | null;
 
 let MAX_LIMIT = 10000;
-const SRSLY_PROGRAM_ID = 'SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT';
 const CACHE_TTL_MS = 10_000; //30_000;
 const RPC_CALL_TIMEOUT_MS = 5_000; //12_000;
+const require = createRequire(import.meta.url);
+const srslyV2 = require('@sly-rentals/core/legacy') as typeof import('@sly-rentals/core/legacy');
 
 function chunk<T>(input: T[], size: number): T[][] {
 	const out: T[][] = [];
@@ -126,34 +126,24 @@ async function withRpcTimeout<T>(operation: Promise<T>, label: string, timeoutMs
 export class RentalService {
 		// Recupera i rental contracts da blockchain (prima chiamata RPC)
 		public async fetchContractsOnChain(profileId: string, limit?: number): Promise<RentalContract[]> {
-			const accounts = await this.executeRpc(profileId, (connection) =>
-				connection.getProgramAccounts(this.programId, {
-					filters: [{ memcmp: { offset: 0, bytes: bs58.encode(CONTRACT_DISCRIMINATOR) } }],
-					commitment: 'confirmed',
-				}),
-			);
-
+			const rpcUrl = await getHealthyRpcUrlOrThrow();
+			srslyV2.setSdkConfig({
+				programs: 'mainnet',
+				rpcUrl,
+				commitment: 'confirmed',
+				PublicKey,
+			});
+			const v2Contracts = await srslyV2.fetchAllContracts(rpcUrl);
 			const contracts: RentalContract[] = [];
-			// Prepara lista di fleet addresses da decodificare dopo
 			const fleetAddresses: string[] = [];
-			for (const { pubkey, account } of accounts) {
-				const decoded = decodeContractState(account.data);
-				if (!decoded || decoded.to_close) continue;
-				contracts.push({
-					address: pubkey.toBase58(),
-					owner: decoded.owner,
-					owner_profile: decoded.owner_profile,
-					fleet: decoded.fleet,
-					game_id: decoded.game_id,
-					rate: decoded.rate,
-					duration_min: decoded.duration_min,
-					duration_max: decoded.duration_max,
-					payment_frequency: decoded.payment_frequency,
-					to_close: decoded.to_close,
-					current_rental_state: decoded.current_rental_state,
-					owner_token_account: decoded.owner_token_account,
+			for (const record of v2Contracts) {
+				const contract = mapSrslyV2Contract({
+					address: record.address,
+					data: record.data,
 				});
-				fleetAddresses.push(decoded.fleet);
+				if (contract.to_close) continue;
+				contracts.push(contract);
+				fleetAddresses.push(contract.fleet);
 				if (limit !== undefined && contracts.length >= limit) break;
 			}
 

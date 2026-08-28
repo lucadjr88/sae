@@ -231,30 +231,15 @@ export function manualProfileEntryListener() {
       datalist.innerHTML = getRecentProfileIds().map(pid => `<option value="${pid}"></option>`).join('');
     }
     const analyzeBtn = buttonsContainer.querySelector('#analyzeBtn') as HTMLButtonElement | null;
-    analyzeBtn?.addEventListener('click', async () => {
+    analyzeBtn?.addEventListener('click', () => {
 
-      const inputId = (buttonsContainer.querySelector('#profileId') as HTMLInputElement)?.value.trim();
-      if (!inputId) {
+      const profileId = (buttonsContainer.querySelector('#profileId') as HTMLInputElement)?.value.trim();
+      if (!profileId) {
         //alert('Inserisci un Player Profile ID!');
         return;
       }
-      let profileId = inputId;
-      try {
-        const walletResponse = await fetch(`/api/debug/player-profile-id?wallet=${encodeURIComponent(inputId)}`);
-        const walletData = await walletResponse.json();
-        const resolvedProfileId = Array.isArray(walletData.variants)
-          ? walletData.variants.find((variant: any) => variant?.profileId && variant.profileId !== inputId)?.profileId
-          : undefined;
-        if (resolvedProfileId) {
-          profileId = resolvedProfileId;
-          console.log('[manualProfileEntryListener] Input resolved as wallet:', { wallet: inputId, profileId });
-        }
-      } catch (fallbackError) {
-        console.warn('[manualProfileEntryListener] Wallet resolution failed, using input as profileId:', fallbackError);
-      }
       const allert_istruzioni = document.getElementById('allert_istruzioni');
       allert_istruzioni?.remove();
-      saveProfileIdToCache(profileId);
 
       const loading = createLoadingElement('Processing transaction data, this may take up to 5 minutes depending on your tx/day...<br>Analyzing profile (this may take a while)...');
       buttonsContainer.appendChild(loading);

@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.26.0",
+    "@sly-rentals/core": "^5.4.0",
     "@solana/web3.js": "^1.98.4",
     "@staratlas/sage": "^1.9.0-alpha.12",
     "@types/express": "^5.0.6",

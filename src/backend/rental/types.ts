@@ -2,6 +2,7 @@ export type FleetStarbase = 'mud' | 'oni' | 'ustur';
 
 export interface RentalContract {
   address: string;
+  rental_version?: 2;
   owner: string;
   owner_profile: string;
   fleet: string;
@@ -12,11 +13,21 @@ export interface RentalContract {
   faction?: number;
   game_id: string;
   rate: number;
+  rate_stardust?: string;
   duration_min: number;
   duration_max: number;
+  duration_min_seconds?: string;
+  duration_max_seconds?: string;
   payment_frequency: string;
   to_close: boolean;
   current_rental_state: string | null;
+  active_rental?: string | null;
+  queued_rental?: string | null;
+  rental_status?: 'available' | 'queued' | 'active' | 'cancelled';
+  cancel_delay_seconds?: string;
+  reservations_disabled?: boolean;
+  weight?: number;
+  managed_token_account?: string;
   rental_start_time?: number;
   rental_end_time?: number;
   owner_token_account: string;

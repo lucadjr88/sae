@@ -45,14 +45,18 @@ function queryStarbase(value: unknown): FleetStarbase | undefined {
 
 import fs from 'fs/promises';
 import path from 'path';
+import { resolveToPlayerProfileId } from '../../utils/resolveToPlayerProfileId.js';
 
 router.get('/rentals/contracts', async (req, res) => {
+  const rawProfileId = queryString(req.query.profileId);
+  const profileId = rawProfileId ? await resolveToPlayerProfileId(rawProfileId, req.query.wipecache === 'true') : undefined;
   console.log('[rental] GET /rentals/contracts', {
-    profileId: queryString(req.query.profileId),
+    rawProfileId,
+    profileId,
     wipecache: req.query.wipecache,
   });
   const options: ContractQueryOptions = {
-    profileId: queryString(req.query.profileId),
+    profileId,
     q: queryString(req.query.q),
     state: queryState(req.query.state),
     starbase: queryStarbase(req.query.starbase),

@@ -75,22 +75,25 @@ import { resetHealthMap } from '../utils/rpc/health-manager.js';
 import { resetConcurrencyMap } from '../utils/rpc/concurrency-manager.js';
 import { resetMetricsMap } from '../utils/rpc/metrics.js';
 import { waitForProfileAnalysisLock } from '../utils/profile-analysis-lock.js';
-
+import { resolveToPlayerProfileId } from '../utils/resolveToPlayerProfileId.js';
 
 router.post('/analyze-profile', async (req: Request, res: Response) => {
     const startTime = Date.now();
-    const { profileId, wipeCache, lats, cachePersist, walletPubKey, walletPubkey } = req.body || {};
-    console.log(`[/api/analyze-profile] POST request received | profileId=${profileId} | wipeCache=${wipeCache} | lats=${lats} | cachePersist=${cachePersist}`);
+    const { profileId: rawProfileId, wipeCache, lats, cachePersist, walletPubKey, walletPubkey } = req.body || {};
     
-    if (!profileId || typeof profileId !== 'string') {
-      console.log(`[/api/analyze-profile] ❌ Invalid profileId | profileId=${profileId}`);
+    if (!rawProfileId || typeof rawProfileId !== 'string') {
+      console.log(`[/api/analyze-profile] ❌ Invalid profileId | profileId=${rawProfileId}`);
       return res.status(400).json({ error: 'Missing profileId' });
     }
+
+    const profileId = await resolveToPlayerProfileId(rawProfileId, Boolean(wipeCache));
+    console.log(`[/api/analyze-profile] POST request received | input=${rawProfileId} | resolvedProfileId=${profileId} | wipeCache=${wipeCache} | lats=${lats} | cachePersist=${cachePersist}`);
 
     try {
         const requestWallet =
             (typeof walletPubKey === 'string' ? walletPubKey : undefined)
             || (typeof walletPubkey === 'string' ? walletPubkey : undefined)
+            || (rawProfileId !== profileId ? rawProfileId : null)
             || req.user?.pubkey
             || null;
         await appendIdHistory(profileId, requestWallet);
@@ -170,7 +173,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                             res.set('X-Cache-Hit', 'disk');
                             res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
                         }
-                        return res.json(payloadData);
+                        return res.json(Object.assign({ profileId }, payloadData));
                     }
 
                     console.warn('[analyze-profile] Cached playload is all-zero, forcing a fresh recompute');
@@ -196,7 +199,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                     res.set('X-Cache-Hit', 'disk');
                     res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
                 }
-                return res.json(cachedPlayload?.data);
+                return res.json(Object.assign({ profileId }, cachedPlayload?.data));
             }
             if (wipeCache) {
                 console.log('[analyze-profile] Lock wait timed out during wipeCache request; refusing cached fallback');
@@ -213,7 +216,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
                     res.set('X-Cache-Hit', 'disk');
                     res.set('X-Cache-Timestamp', String(cachedPlayload.savedAt));
                 }
-                return res.json(cachedPlayload?.data);
+                return res.json(Object.assign({ profileId }, cachedPlayload?.data));
             }
             if (wipeCache) {
                 console.log(`[analyze-profile] wipeCache requested after waiting ${waitedMs}ms; recomputing instead of serving cached playload`);
@@ -373,7 +376,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
             console.log("###################### FINE FASE 7: FINE FLUSSO ANALYZE #########################");
             res.set('X-Cache-Hit', 'miss');
             res.set('X-Cache-Timestamp', String(Date.now()));
-            return res.json(finalPayload);
+            return res.json(Object.assign({ profileId }, finalPayload));
         } catch (e) {
             console.log('[analyze-profile] buildFeesDetailed failed', e);
 
@@ -419,7 +422,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
             res.set('X-Cache-Timestamp', String(Date.now()));
             const duration = Date.now() - startTime;
             console.log(`[/api/analyze-profile] ✅ SUCCESS | profileId=${profileId} | duration=${duration}ms`);
-            return res.json(playload);
+            return res.json(Object.assign({ profileId }, playload));
         }
     } catch (e: any) {
         const duration = Date.now() - startTime;
