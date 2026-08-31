@@ -119,7 +119,7 @@ async function executeRpcWithPool<T>(profileId: string, operation: (connection: 
   throw new Error('RPC request failed');
 }
 
-export async function getProfileFactionUtil(profileId: string): Promise<ProfileFactionResult> {
+export async function getProfileFactionUtil(profileId: string, persist = true): Promise<ProfileFactionResult> {
   const emptyResult: ProfileFactionResult = {
     profileFactionAccount: null,
     profileFactionId: null,
@@ -143,7 +143,7 @@ export async function getProfileFactionUtil(profileId: string): Promise<ProfileF
     });
 
     if (!Array.isArray(accounts) || accounts.length === 0) {
-      await persistProfileFaction(profileId, emptyResult);
+      if (persist) await persistProfileFaction(profileId, emptyResult);
       return emptyResult;
     }
 
@@ -160,7 +160,7 @@ export async function getProfileFactionUtil(profileId: string): Promise<ProfileF
       profileFaction,
     };
 
-    await persistProfileFaction(profileId, result);
+    if (persist) await persistProfileFaction(profileId, result);
     return result;
   } catch (error) {
     console.log('[getProfileFactionUtil] Error:', error);

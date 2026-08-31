@@ -23,7 +23,7 @@ debugRouter.get('/player-profile-id', playerProfileIdHandler);
 debugRouter.get('/profile-faction', async (req, res) => {
   const profileId = typeof req.query.profileId === 'string' ? req.query.profileId.trim() : '';
   if (!profileId) return res.status(400).json({ error: 'Missing profileId' });
-  return res.json(await getProfileFactionUtil(profileId));
+  return res.json(await getProfileFactionUtil(profileId, false));
 });
 debugRouter.get('/playload', playloadHandler);
 debugRouter.post('/playload', walletSageFeesDetailedHandler);
