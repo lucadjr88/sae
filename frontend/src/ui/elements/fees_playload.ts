@@ -142,7 +142,7 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
   createResultPage();
 
   // Sidebar auto-hide after 10 seconds + toggle on click (mobile only)
-  const isMobile = window.matchMedia('(max-width: 1200px) and (max-height: 2670px), (max-width: 2670px) and (max-height: 1200px)').matches;
+  const isMobile = window.matchMedia('(max-width: 1200px)').matches;
 
 
   const colonna2 = document.getElementById('colonna2');
@@ -181,7 +181,7 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
     heroLogo.style.opacity = '1';
 
     contentColumn.addEventListener('scroll', () => {
-      if (!isMobile || canHideSidebarFromScroll()) {
+      if (isMobile && canHideSidebarFromScroll()) {
         hideSidebar();
       }
 

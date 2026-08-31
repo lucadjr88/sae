@@ -100,7 +100,7 @@ export function getWalletIcon(wallet: any): string {
 
 
 
-export async function getWalletConnection(wallet: any) {
+export async function getWalletConnection(wallet: any, profileData?: any, showWalletHeader = true) {
 
   const buttonsContainer = document.getElementById('buttons-container') as HTMLDivElement | null;
   if (buttonsContainer) {
@@ -114,13 +114,13 @@ export async function getWalletConnection(wallet: any) {
     // Titolo hero, poi wallet header, poi card profili
     buttonsContainer.innerHTML = `
         <div class="profile-card-minimal-wrapper">
-          <div class="wallet-minimal-header">
+          ${showWalletHeader ? `<div class="wallet-minimal-header">
             <img src="${connectedWalletIcon}" alt="Wallet" class="wallet-minimal-icon">
             <div class="wallet-minimal-info">
               <div class="wallet-minimal-label">Wallet Connected</div>
               <div class="wallet-minimal-pubkey">${walletPubKeyStr.slice(0, 6)}...${walletPubKeyStr.slice(-8)}</div>
             </div>
-          </div>
+          </div>` : ''}
           <div class="profile-card-minimal">
             <div class="profile-card-minimal-title" id="profileCardTitle">CHOOSE PLAYER PROFILE</div>
             <div class="profile-list-minimal" id="profileList">Caricamento...</div>
@@ -131,9 +131,8 @@ export async function getWalletConnection(wallet: any) {
     // Carica lista profili associati al wallet
     const profileListDiv = buttonsContainer.querySelector('#profileList') as HTMLDivElement;
     try {
-      //const resp = await fetch(`/api/debug/player-profile-id?wallet=${walletPubKeyStr}`);
-      const resp = await fetch(`/api/debug/player-profile-id?wallet=${walletPubKeyStr}`);
-      const data = await resp.json();
+      const data = profileData ?? await fetch(`/api/debug/player-profile-id?wallet=${walletPubKeyStr}`)
+        .then(resp => resp.json());
       let html = "";
       const titleDiv = buttonsContainer.querySelector('#profileCardTitle') as HTMLDivElement;
       if (Array.isArray(data.variants) && data.variants.length > 0 && data.variants.some((v: any) => v.profileId)) {
@@ -232,7 +231,6 @@ export function manualProfileEntryListener() {
     }
     const analyzeBtn = buttonsContainer.querySelector('#analyzeBtn') as HTMLButtonElement | null;
     analyzeBtn?.addEventListener('click', () => {
-
       const profileId = (buttonsContainer.querySelector('#profileId') as HTMLInputElement)?.value.trim();
       if (!profileId) {
         //alert('Inserisci un Player Profile ID!');
@@ -241,10 +239,27 @@ export function manualProfileEntryListener() {
       const allert_istruzioni = document.getElementById('allert_istruzioni');
       allert_istruzioni?.remove();
 
+      fetch(`/api/debug/profile-faction?profileId=${profileId}`)
+        .then(resp => resp.json())
+        .then(data => {
+          if (data.profileFaction !== null) {
+            saveProfileFactionToCache(profileId, data.profileFaction);
+            startManualProfileAnalysis(profileId);
+            return;
+          }
+          getWalletConnection({ publicKey: profileId }, undefined, false);
+        })
+        .catch(() => getWalletConnection({ publicKey: profileId }, undefined, false));
+    });
+  }
+}
+
+function startManualProfileAnalysis(profileId: string) {
+  const buttonsContainer = document.getElementById('buttons-container') as HTMLDivElement | null;
+  if (buttonsContainer) {
       const loading = createLoadingElement('Processing transaction data, this may take up to 5 minutes depending on your tx/day...<br>Analyzing profile (this may take a while)...');
       buttonsContainer.appendChild(loading);
       console.log('[manualProfileEntryListener] Calling analyzeFees with profileId:', profileId);
       analyzeFees(profileId);
-    });
   }
 }

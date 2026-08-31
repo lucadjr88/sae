@@ -9,6 +9,7 @@ import { walletSageFeesDetailedHandler } from './walletSageFeesDetailed.js';
 import { playloadHandler } from './playload.js';
 import { playerProfileIdHandler } from './playerProfileId.js';
 import { enrichFleetStateHandler } from '../../decoders/fleetstatehandler.js';
+import { getProfileFactionUtil } from '../../utils/getProfileFaction.js';
 
 const debugRouter = Router();
 
@@ -19,6 +20,11 @@ debugRouter.get('/decode-sage-ops', decodeSageOpsHandler);
 debugRouter.get('/decode-sage-ops-full', decodeSageOpsFullHandler);
 debugRouter.get('/associate-sage-ops-to-fleets', associateSageOpsToFleetsHandler);
 debugRouter.get('/player-profile-id', playerProfileIdHandler);
+debugRouter.get('/profile-faction', async (req, res) => {
+  const profileId = typeof req.query.profileId === 'string' ? req.query.profileId.trim() : '';
+  if (!profileId) return res.status(400).json({ error: 'Missing profileId' });
+  return res.json(await getProfileFactionUtil(profileId));
+});
 debugRouter.get('/playload', playloadHandler);
 debugRouter.post('/playload', walletSageFeesDetailedHandler);
 

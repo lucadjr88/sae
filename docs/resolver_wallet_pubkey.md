@@ -1,23 +1,86 @@
-resolver wallet pubkey
+# Allineamento app: input Player Profile ID / Wallet Public Key
 
-Obiettivo: permettere l'inserimento manuale di un Wallet Public Key oltre al Player Profile ID, ricavando il profilo associato prima di avviare l'analisi.
+## Obiettivo
 
-File coinvolti:
-- `/home/luca/sae/frontend/src/ui/elements/manualLogin.ts`: definisce il campo di input manuale e il placeholder `Player Profile ID`.
-- `/home/luca/sae/frontend/src/hompage.ts`: gestisce il submit manuale e risolve l'input wallet prima di salvare la cache locale e chiamare l'analisi.
-- `/home/luca/sae/frontend/src/services/api.ts`: contiene il fallback aggiuntivo durante `analyzeFees`, nel caso la prima analisi fallisca o restituisca un payload vuoto.
-- `/home/luca/sae/src/analysis/debug/playerProfileId.ts`: espone l'endpoint locale usato per la risoluzione wallet.
-- `/home/luca/sae/src/utils/derivePlayerProfilePDA.ts`: cerca on-chain gli account del programma Player Profile che contengono la wallet.
+Replicare nell'app il comportamento del frontend web per un unico campo manuale e un unico comando `Analyze`.
 
-Flusso:
-1. Il submit manuale chiama `/api/debug/player-profile-id?wallet=<input>`.
-2. Il backend converte l'input in `PublicKey` e usa `findPlayerProfilesForWalletWithRpc` per cercare i profili associati tramite `getProgramAccounts` e filtro `memcmp` all'offset 30.
-3. Se trova un profilo, il frontend usa il relativo `profileId`; altrimenti mantiene l'input originale per consentire il normale inserimento di un Player Profile ID.
-4. Solo il `profileId` risolto viene salvato nella cache locale `recentProfileIds` e passato a `/api/analyze-profile`.
-5. Il backend gestisce quindi la cache su `cache/<profileId>/`, non su `cache/<walletPubKey>/`.
-6. `analyzeFees` ripete la risoluzione come rete di sicurezza se la prima richiesta fallisce oppure restituisce un payload senza dati.
+L'utente inserisce un indirizzo Solana. L'app determina automaticamente se e' un Player Profile ID tramite la fazione associata. Solo quando non esiste una fazione associata, l'input viene trattato come Wallet Public Key e viene presentata la lista dei profili disponibili.
 
-Note:
-- La risoluzione usa l'endpoint locale dell'applicazione, che interroga RPC Solana tramite il resolver esistente.
-- Una wallet può avere più profili; il flusso manuale seleziona il primo `profileId` restituito.
-- Se l'input non è una `PublicKey` valida, la chiamata di risoluzione fallisce e l'input viene trattato come `profileId`.
+## Flusso UI
+
+1. L'utente inserisce il valore e seleziona `Analyze`.
+2. L'app invia `GET /api/debug/profile-faction?profileId=<input>`.
+3. Se la risposta contiene `profileFaction` non nullo:
+	 - l'input e' un Player Profile ID;
+	 - avvia direttamente l'analisi con quell'ID;
+	 - opzionalmente salva la fazione nella cache locale dell'app.
+4. Se `profileFaction` e' nullo, oppure la richiesta fallisce:
+	 - l'input e' trattato come Wallet Public Key;
+	 - invia `GET /api/debug/player-profile-id?wallet=<input>`;
+	 - mostra tutti gli elementi di `variants` con `profileId` valorizzato.
+5. Quando l'utente seleziona un profilo dalla lista, avvia l'analisi usando il `profileId` selezionato.
+
+Nel flusso manuale, la lista profili non deve mostrare l'header, l'icona o la chiave `Wallet Connected`. Questi elementi restano esclusivi del flusso di connessione wallet reale.
+
+## Contratti API
+
+### Rilevamento fazione
+
+`GET /api/debug/profile-faction?profileId=<base58>`
+
+Risposta:
+
+```json
+{
+	"profileFactionAccount": "<base58>|null",
+	"profileFactionId": 1,
+	"profileFaction": "mud"
+}
+```
+
+Valori possibili di `profileFaction`: `mud`, `oni`, `ustur`, `unaligned`, `null`.
+
+La condizione per avviare direttamente l'analisi e' esclusivamente `profileFaction !== null`.
+
+### Risoluzione wallet
+
+`GET /api/debug/player-profile-id?wallet=<base58>`
+
+Risposta:
+
+```json
+{
+	"wallet": "<base58>",
+	"variants": [
+		{
+			"profileId": "<base58>",
+			"profileFaction": "mud",
+			"profileFactionId": 1,
+			"profileFactionAccount": "<base58>"
+		}
+	]
+}
+```
+
+Filtrare la lista su `variant.profileId` non vuoto. La risposta puo' contenere piu' profili: non selezionare automaticamente il primo.
+
+### Avvio analisi
+
+`POST /api/analyze-profile`
+
+```json
+{
+	"profileId": "<profile-id>",
+	"wipeCache": false
+}
+```
+
+Inviare sempre il Player Profile ID selezionato o rilevato, mai il Wallet Public Key. La risposta puo' restituire il `profileId` canonico: usare quello per cache e stato dell'app.
+
+## Riferimenti web
+
+- `frontend/src/hompage.ts`: routing dell'input manuale e rendering lista.
+- `frontend/src/services/api.ts`: chiamata `POST /api/analyze-profile`.
+- `src/analysis/debug/index.ts`: route `GET /api/debug/profile-faction`.
+- `src/analysis/debug/playerProfileId.ts`: route `GET /api/debug/player-profile-id`.
+- `src/utils/getProfileFaction.ts`: sorgente della verita' per il rilevamento della fazione.

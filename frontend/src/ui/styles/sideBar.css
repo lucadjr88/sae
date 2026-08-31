@@ -281,6 +281,7 @@ screen and (hover: none) and (pointer: coarse) and (max-width: 2670px) and (max-
 }
 
 body.sidebar-is-hidden .sidebar-toggle-tab {
+  display: flex !important;
   opacity: 1;
   pointer-events: auto;
 }

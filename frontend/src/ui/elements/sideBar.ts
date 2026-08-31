@@ -28,8 +28,13 @@ import playstoreIcona from "@/assets/icons/playstore.png";
 
   export const startHideTimer = () => {
     clearHideTimer();
+    if (!window.matchMedia('(max-width: 1200px)').matches) {
+      return;
+    }
     hideTimeout = setTimeout(() => {
-      hideSidebar();
+      if (window.matchMedia('(max-width: 1200px)').matches) {
+        hideSidebar();
+      }
     }, 5000);
   };
 
