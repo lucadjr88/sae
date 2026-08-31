@@ -20,7 +20,7 @@ import { connectedWalletIcon } from '@/utils/state';
 import { applyProfileFactionIcon, getCachedProfileFaction, normalizeProfileFaction, renderProfileFactionIconMarkup, saveProfileFactionToCache } from '@/utils/faction';
 import defaultWalletIcon from '@/assets/icons/seedvault2.png';
 
-import { createLoadingElement } from '@/ui/elements/loading';
+import { createLoadingElement, setLoadingBackgroundState } from '@/ui/elements/loading';
 import { analyzeFees } from '@/services/api';
 import { createManualLoginElement } from '@/ui/elements/manualLogin';
 
@@ -104,6 +104,7 @@ export async function getWalletConnection(wallet: any, profileData?: any, showWa
 
   const buttonsContainer = document.getElementById('buttons-container') as HTMLDivElement | null;
   if (buttonsContainer) {
+    if (!showWalletHeader) setLoadingBackgroundState(false);
     console.log('[DEBUG] walletStateChanged event received, wallet state:', wallet);
     if (!wallet.publicKey) {
       console.warn('[DEBUG] Wallet publicKey is null, aborting wallet display');
@@ -181,6 +182,10 @@ export async function getWalletConnection(wallet: any, profileData?: any, showWa
 
           const profileCardWrapper = buttonsContainer.querySelector('.profile-card-minimal-wrapper') as HTMLDivElement;
           profileCardWrapper.style.display = 'none';
+          if (!showWalletHeader) {
+            startManualProfileAnalysis(pid);
+            return;
+          }
           const resultsDiv = buttonsContainer.querySelector('#results') as HTMLDivElement | null;
           if (resultsDiv) {
             resultsDiv.innerHTML = '';
@@ -238,6 +243,9 @@ export function manualProfileEntryListener() {
       }
       const allert_istruzioni = document.getElementById('allert_istruzioni');
       allert_istruzioni?.remove();
+      buttonsContainer.querySelector('#loading')?.remove();
+      (buttonsContainer.querySelector('.form-box') as HTMLDivElement | null)?.style.setProperty('display', 'none');
+      buttonsContainer.appendChild(createLoadingElement('Looking up player profile...'));
 
       fetch(`/api/debug/profile-faction?profileId=${profileId}`)
         .then(resp => resp.json())
@@ -257,8 +265,10 @@ export function manualProfileEntryListener() {
 function startManualProfileAnalysis(profileId: string) {
   const buttonsContainer = document.getElementById('buttons-container') as HTMLDivElement | null;
   if (buttonsContainer) {
-      const loading = createLoadingElement('Processing transaction data, this may take up to 5 minutes depending on your tx/day...<br>Analyzing profile (this may take a while)...');
-      buttonsContainer.appendChild(loading);
+  const loadingMessage = 'Processing transaction data, this may take up to 5 minutes depending on your tx/day...<br>Analyzing profile (this may take a while)...';
+  const loading = buttonsContainer.querySelector('#loading') as HTMLDivElement | null;
+  if (loading) loading.innerHTML = `${loadingMessage}<br><span id="secondsSpan">- 0s</span>`;
+  else buttonsContainer.appendChild(createLoadingElement(loadingMessage));
       console.log('[manualProfileEntryListener] Calling analyzeFees with profileId:', profileId);
       analyzeFees(profileId);
   }

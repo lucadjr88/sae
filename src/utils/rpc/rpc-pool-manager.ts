@@ -21,6 +21,7 @@ const RPC_POOL_COMPLETE = path.join(process.cwd(), 'utility', 'rpc-pool-complete
 // In-memory cache per profileId per evitare letture FS ripetute
 const poolCache: Record<string, any[]> = {};
 const rrCursorByProfile: Record<string, number> = {};
+let transientPool: any[] | null = null;
 
 export function resetPoolCache(profileId?: string) {
   if (profileId) {
@@ -37,7 +38,11 @@ export function resetPoolCache(profileId?: string) {
 }
 
 // Carica pool da cache (in memoria -> disco), se non esiste crea con prune
-export async function loadOrCreateRpcPool(profileId: string): Promise<any[]> {
+export async function loadOrCreateRpcPool(profileId: string, persist = true): Promise<any[]> {
+  if (!persist) {
+    if (!transientPool) transientPool = await prune.pruneEndpoints();
+    return transientPool;
+  }
   if (poolCache[profileId]) {
     return poolCache[profileId];
   }
@@ -80,8 +85,8 @@ export async function pruneRpcPool(profileId?: string, force?: boolean): Promise
 
 
 // Acquisisce una connessione dal pool con logica health-aware, fallback e adaptive concurrency
-export async function pickRpcConnection(profileId: string, opts?: { allowStale?: boolean; waitForMs?: number; excludeUrls?: ReadonlySet<string> }): Promise<{ connection: any, endpoint: any, release: (opts?: { success?: boolean, latencyMs?: number, errorType?: string }) => void }> {
-  const pool = await loadOrCreateRpcPool(profileId);
+export async function pickRpcConnection(profileId: string, opts?: { allowStale?: boolean; waitForMs?: number; excludeUrls?: ReadonlySet<string>; persist?: boolean }): Promise<{ connection: any, endpoint: any, release: (opts?: { success?: boolean, latencyMs?: number, errorType?: string }) => void }> {
+  const pool = await loadOrCreateRpcPool(profileId, opts?.persist);
   // Ordina endpoint: healthy e non in backoff prima
   const healthy = pool.filter(ep => health.isHealthy(ep.url) && !health.isInBackoff(ep.url));
   const filteredHealthy = healthy.filter(ep => !metrics.shouldExcludeEndpoint(ep.url));

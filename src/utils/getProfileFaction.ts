@@ -79,9 +79,9 @@ async function loadCachedProfileFaction(profileId: string): Promise<ProfileFacti
   }
 }
 
-async function executeRpcWithPool<T>(profileId: string, operation: (connection: any) => Promise<T>): Promise<T> {
+async function executeRpcWithPool<T>(profileId: string, operation: (connection: any) => Promise<T>, persist: boolean): Promise<T> {
   const normalizedProfileId = normalizeRpcProfileId(profileId);
-  const pool = await RpcPoolManager.loadOrCreateRpcPool(normalizedProfileId);
+  const pool = await RpcPoolManager.loadOrCreateRpcPool(normalizedProfileId, persist);
   const maxAttempts = Math.max(4, Math.round(pool.length * 1.5));
   let lastError: unknown = null;
   const failedRpcUrls = new Set<string>();
@@ -95,6 +95,7 @@ async function executeRpcWithPool<T>(profileId: string, operation: (connection: 
         waitForMs: 3000,
         allowStale: attempt > 2,
         excludeUrls: failedRpcUrls,
+        persist,
       });
       const result = await operation(pick.connection);
       pick.release({ success: true, latencyMs: Date.now() - startedAt });
@@ -140,7 +141,7 @@ export async function getProfileFactionUtil(profileId: string, persist = true): 
         }
       }
       return [];
-    });
+    }, persist);
 
     if (!Array.isArray(accounts) || accounts.length === 0) {
       if (persist) await persistProfileFaction(profileId, emptyResult);
