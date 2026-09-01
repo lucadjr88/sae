@@ -282,7 +282,11 @@ export function createRentalContractWindow(fleetName: string, contractDetails: R
 
           const submitRent = async () => {
             const contractAddress = String(contractDetails.address || '').trim();
-            const borrower = ((window as any).wallet?.adapter?.publicKey?.toBase58?.() || currentProfileId || '').trim();
+            const wallet = (window as any).wallet;
+            if (!wallet?.isConnected || !wallet?.publicKey) {
+              await wallet?.connect?.();
+            }
+            const borrower = (wallet?.publicKey?.toBase58?.() || wallet?.publicKey?.toString?.() || '').trim();
             const borrowerProfile = String(currentProfileId || '').trim();
             const starbase = contractDetails.starbase || '';
             const amount = contractDetails.rate || 1;

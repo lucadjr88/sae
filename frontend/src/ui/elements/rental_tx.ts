@@ -61,6 +61,9 @@ export async function rentTx({
 
       const tx = Transaction.from(base64ToUint8Array(data.transaction));
       if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
+        await window.wallet?.connect?.();
+      }
+      if (!window.wallet?.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
         return "Wallet desktop not connected or unsupported!";
       }
 
@@ -180,6 +183,9 @@ export async function cancelRentTx({
       console.log("[DEBUG][cancel-rent][COPY-FRONTEND-PRESIGN-TX-END]");
       if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
         console.error("[DEBUG][cancel-rent] Wallet adapter unavailable for signing");
+        await window.wallet?.connect?.();
+      }
+      if (!window.wallet?.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
         return "Wallet desktop not connected or unsupported!";
       }
 
