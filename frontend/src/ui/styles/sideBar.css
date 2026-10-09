@@ -110,6 +110,10 @@ display: flex;
   object-fit: contain;
   padding: 4px;
 }
+.sea-map-link {
+  text-decoration: none;
+}
+.sea-map-link img { width: 42px; height: 42px; object-fit: contain; pointer-events: none; }
 .cache-tooltip {
   position: absolute;
   left: 70px;

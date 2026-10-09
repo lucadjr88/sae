@@ -1,4 +1,5 @@
 import { Connection, type Commitment } from '@solana/web3.js';
+import nodeFetch from 'node-fetch';
 import { getSingleHealthyRpc } from './prune.js';
 
 type RpcConnectionOptions = {
@@ -19,7 +20,7 @@ function fetchWithTimeout(resource: RequestInfo, options: RequestInit = {}) {
   const timeout = 20000;
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
-  return fetch(resource, { ...options, signal: controller.signal })
+  return nodeFetch(resource as any, { ...options, signal: controller.signal } as any)
     .finally(() => clearTimeout(id));
 }
 

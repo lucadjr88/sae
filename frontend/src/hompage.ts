@@ -136,7 +136,13 @@ export async function getWalletConnection(wallet: any, profileData?: any, showWa
         .then(resp => resp.json());
       let html = "";
       const titleDiv = buttonsContainer.querySelector('#profileCardTitle') as HTMLDivElement;
-      if (Array.isArray(data.variants) && data.variants.length > 0 && data.variants.some((v: any) => v.profileId)) {
+      const lookupFailed = !!data.error || data.variants?.some((variant: any) => variant.source === 'search failed' || variant.label === 'error');
+      if (lookupFailed) {
+        if (titleDiv) {
+          titleDiv.textContent = 'PROFILE SEARCH FAILED';
+          titleDiv.classList.add('profile-card-minimal-title-error');
+        }
+      } else if (Array.isArray(data.variants) && data.variants.length > 0 && data.variants.some((v: any) => v.profileId)) {
         html = data.variants
           .filter((v: any) => v.profileId)
           .map((v: any, idx: number, arr: any[]) => {

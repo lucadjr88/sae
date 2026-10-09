@@ -1,0 +1,214 @@
+{
+ "models": {
+  "barque": {
+   "nets": 1
+  },
+  "cutter_war": {
+   "nets": 1
+  },
+  "ketch": {
+   "nets": 1
+  },
+  "lougre_grande": {
+   "nets": 1
+  },
+  "nave_della_neve": {
+   "nets": 1
+  },
+  "peschereccio": {
+   "nets": 3
+  },
+  "pink": {
+   "nets": 1
+  },
+  "sloop": {
+   "nets": 1
+  },
+  "sloop_guerra_grande": {
+   "nets": 1
+  },
+  "small_brig": {
+   "nets": 1
+  },
+  "spritsail_barge": {
+   "nets": 1
+  }
+ },
+ "textures": {
+  "barque_sail": {
+   "w": 168.0,
+   "oy": 0.8158,
+   "top": 192.5
+  },
+  "barque_furled": {
+   "w": 168.0,
+   "oy": 0.8158,
+   "top": 192.5
+  },
+  "barque_net0": {
+   "w": 168.0,
+   "oy": 0.8158,
+   "top": 192.5
+  },
+  "cutter_war_sail": {
+   "w": 150.0,
+   "oy": 0.8105,
+   "top": 162.9
+  },
+  "cutter_war_furled": {
+   "w": 323.96,
+   "oy": 0.8302,
+   "top": 375.2
+  },
+  "cutter_war_net0": {
+   "w": 323.96,
+   "oy": 0.8302,
+   "top": 375.2
+  },
+  "ketch_sail": {
+   "w": 145.0,
+   "oy": 0.7973,
+   "top": 155.5
+  },
+  "ketch_furled": {
+   "w": 145.0,
+   "oy": 0.7973,
+   "top": 155.5
+  },
+  "ketch_net0": {
+   "w": 145.0,
+   "oy": 0.7933,
+   "top": 155.5
+  },
+  "lougre_grande_sail": {
+   "w": 167.0,
+   "oy": 0.8124,
+   "top": 182.8
+  },
+  "lougre_grande_furled": {
+   "w": 167.0,
+   "oy": 0.8124,
+   "top": 182.8
+  },
+  "lougre_grande_net0": {
+   "w": 167.0,
+   "oy": 0.8088,
+   "top": 182.8
+  },
+  "nave_della_neve_sail": {
+   "w": 162.0,
+   "oy": 0.8167,
+   "top": 196.0
+  },
+  "nave_della_neve_furled": {
+   "w": 162.0,
+   "oy": 0.8167,
+   "top": 196.0
+  },
+  "nave_della_neve_net0": {
+   "w": 162.0,
+   "oy": 0.8167,
+   "top": 196.0
+  },
+  "peschereccio_sail": {
+   "w": 323.61,
+   "oy": 0.811,
+   "top": 342.2
+  },
+  "peschereccio_furled": {
+   "w": 323.61,
+   "oy": 0.811,
+   "top": 342.2
+  },
+  "peschereccio_net0": {
+   "w": 323.61,
+   "oy": 0.7977,
+   "top": 342.2
+  },
+  "peschereccio_net1": {
+   "w": 323.61,
+   "oy": 0.7831,
+   "top": 342.2
+  },
+  "peschereccio_net2": {
+   "w": 323.61,
+   "oy": 0.7831,
+   "top": 342.2
+  },
+  "pink_sail": {
+   "w": 151.0,
+   "oy": 0.8106,
+   "top": 167.0
+  },
+  "pink_furled": {
+   "w": 151.0,
+   "oy": 0.8106,
+   "top": 167.0
+  },
+  "pink_net0": {
+   "w": 151.0,
+   "oy": 0.8067,
+   "top": 167.0
+  },
+  "sloop_sail": {
+   "w": 140.0,
+   "oy": 0.8145,
+   "top": 158.8
+  },
+  "sloop_furled": {
+   "w": 140.0,
+   "oy": 0.8145,
+   "top": 158.8
+  },
+  "sloop_net0": {
+   "w": 140.0,
+   "oy": 0.8145,
+   "top": 158.8
+  },
+  "sloop_guerra_grande_sail": {
+   "w": 166.0,
+   "oy": 0.8178,
+   "top": 198.7
+  },
+  "sloop_guerra_grande_furled": {
+   "w": 166.0,
+   "oy": 0.8178,
+   "top": 198.7
+  },
+  "sloop_guerra_grande_net0": {
+   "w": 166.0,
+   "oy": 0.8178,
+   "top": 198.7
+  },
+  "small_brig_sail": {
+   "w": 323.44,
+   "oy": 0.8246,
+   "top": 370.2
+  },
+  "small_brig_furled": {
+   "w": 323.44,
+   "oy": 0.8015,
+   "top": 326.2
+  },
+  "small_brig_net0": {
+   "w": 323.44,
+   "oy": 0.7822,
+   "top": 351.2
+  },
+  "spritsail_barge_sail": {
+   "w": 155.0,
+   "oy": 0.8043,
+   "top": 166.5
+  },
+  "spritsail_barge_furled": {
+   "w": 155.0,
+   "oy": 0.8043,
+   "top": 166.5
+  },
+  "spritsail_barge_net0": {
+   "w": 155.0,
+   "oy": 0.7967,
+   "top": 166.5
+  }
+ }
+}

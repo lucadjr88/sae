@@ -167,6 +167,18 @@ toggleSwitchContainer.className = 'toggle-switch-container';
 toggleSwitchContainer.innerHTML = toggleSwitchHTML;
 sidebar.appendChild(toggleSwitchContainer);
 
+const seaMapLink = document.createElement('a');
+seaMapLink.className = 'selector-item sea-map-link';
+seaMapLink.title = 'Mappa SEA';
+seaMapLink.setAttribute('aria-label', 'Mappa SEA');
+const seaMapIcon = document.createElement('img');
+seaMapIcon.src = '/sea/assets/Gemini_Generated_Image_8x1fni8x1fni8x1f%20(1).png';
+seaMapIcon.alt = 'Mappa SEA';
+seaMapLink.appendChild(seaMapIcon);
+seaMapLink.href = currentProfileId
+  ? `/pages/sea.html?${new URLSearchParams({ profileId: currentProfileId })}`
+  : '/pages/sea.html';
+toggleSwitchContainer.querySelector('.vertical-selector')?.appendChild(seaMapLink);
 
 const playstoreIcon = document.createElement('div');
 playstoreIcon.id = 'playstoreIcon';

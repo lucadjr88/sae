@@ -60,9 +60,8 @@ async function loadFleetsFromCache(profileId: string): Promise<any[]> {
 }
 
 // Fetch fleets associated to a profileId using getProgramAccounts + memcmp
-export async function fetchProfileFleets(profileId: string): Promise<any[]> {
+export async function fetchProfileFleets(profileId: string, profileOffset = 41, persistCache = true, useCacheFallback = true, logRpcDetails = true): Promise<any[]> {
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
-  const OWNER_PROFILE_OFFSET = 41; // 8 (disc) +1(version) +32(game_id)
   const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId).catch(() => []);
   const maxAttempts = Math.max(5, Math.round((Array.isArray(pool) ? pool.length : 0) * 1.5));
   let lastErr: any = null;
@@ -76,7 +75,7 @@ export async function fetchProfileFleets(profileId: string): Promise<any[]> {
       const accounts = await withRpcTimeout<any[]>(
         connection.getProgramAccounts(programPubkey, {
           filters: [
-            { memcmp: { offset: OWNER_PROFILE_OFFSET, bytes: profileId } }
+            { memcmp: { offset: profileOffset, bytes: profileId } }
           ],
           commitment: 'confirmed'
         }),
@@ -260,19 +259,21 @@ export async function fetchProfileFleets(profileId: string): Promise<any[]> {
       return parsed;
     }).filter(Boolean);
     // save fleets into cache/<profileId>/fleets/<fleetid>.json
-    try {
-      const cacheDir = path.join(process.cwd(), 'cache', profileId, 'fleets');
-      await fs.mkdir(cacheDir, { recursive: true });
-      await Promise.all(fleets.map(async (f: any) => {
-        const file = path.join(cacheDir, `${f.pubkey}.json`);
-        try {
-          await fs.writeFile(file, JSON.stringify(f, null, 2), 'utf8');
-        } catch (wfErr) {
-          console.log(`[fetchProfileFleets] Failed writing ${file}: ${wfErr}`);
-        }
-      }));
-    } catch (wErr) {
-      console.log(`[fetchProfileFleets] Failed creating/writing cache for profile=${profileId}: ${wErr}`);
+    if (persistCache) {
+      try {
+        const cacheDir = path.join(process.cwd(), 'cache', profileId, 'fleets');
+        await fs.mkdir(cacheDir, { recursive: true });
+        await Promise.all(fleets.map(async (f: any) => {
+          const file = path.join(cacheDir, `${f.pubkey}.json`);
+          try {
+            await fs.writeFile(file, JSON.stringify(f, null, 2), 'utf8');
+          } catch (wfErr) {
+            console.log(`[fetchProfileFleets] Failed writing ${file}: ${wfErr}`);
+          }
+        }));
+      } catch (wErr) {
+        console.log(`[fetchProfileFleets] Failed creating/writing cache for profile=${profileId}: ${wErr}`);
+      }
     }
       release({ success: true, latencyMs: 0 });
       return fleets;
@@ -282,7 +283,9 @@ export async function fetchProfileFleets(profileId: string): Promise<any[]> {
       const { errorType, retryable } = getRpcRetryInfo(e);
       const rpcName = pick?.endpoint?.name ?? 'unknown';
       const rpcUrl = pick?.endpoint?.url ?? 'n/a';
-      console.warn(`[fetchProfileFleets] attempt ${attempt}/${maxAttempts} failed for profile=${profileId} rpc=${rpcName} url=${rpcUrl} retryable=${retryable} errorType=${errorType}: ${errMsg}`);
+      const rpcDetails = logRpcDetails ? ` rpc=${rpcName} url=${rpcUrl}` : '';
+      const errorDetails = logRpcDetails ? `: ${errMsg}` : '';
+      console.warn(`[fetchProfileFleets] attempt ${attempt}/${maxAttempts} failed for profile=${profileId}${rpcDetails} retryable=${retryable} errorType=${errorType}${errorDetails}`);
       if (pick && pick.release) {
         try { pick.release({ success: false, errorType }); } catch {}
       }
@@ -295,13 +298,13 @@ export async function fetchProfileFleets(profileId: string): Promise<any[]> {
     }
   }
 
-  const cached = await loadFleetsFromCache(profileId);
+  const cached = useCacheFallback ? await loadFleetsFromCache(profileId) : [];
   if (cached.length > 0) {
     console.log(`[fetchProfileFleets] RPC fetch failed, serving ${cached.length} fleets from cache for profile=${profileId}`);
     return cached;
   }
 
-  if (lastErr) {
+  if (lastErr && logRpcDetails) {
     console.log(`[fetchProfileFleets] RPC fetch failed with no cache for profile=${profileId}: ${String(lastErr?.message || lastErr)}`);
   }
   return [];

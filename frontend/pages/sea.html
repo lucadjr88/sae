@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SEA | Star Atlas Explorer</title>
+    <script type="module" src="/src/sea/seaPage.ts"></script>
+  </head>
+  <body>
+    <div id="game"></div>
+    <aside id="hud"></aside>
+    <a class="sea-home" href="/" title="Torna a SAE" aria-label="Torna a SAE">⌂</a>
+    <form id="profile-form" class="profile-form">
+      <label for="profile-id">Player Profile ID</label>
+      <input id="profile-id" name="profileId" autocomplete="off" required />
+      <button type="submit">Apri mappa</button>
+      <div id="profile-error" role="alert"></div>
+    </form>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+html, body { margin: 0; height: 100%; background: #0b3d59; overflow: hidden; font: 13px sans-serif; color: #e8f1f5; }
+#game { position: fixed; inset: 0; }
+#hud { position: fixed; top: 8px; right: 8px; width: 300px; max-height: calc(100% - 16px); overflow-y: auto; background: rgba(5, 25, 38, 0.85); border-radius: 6px; padding: 8px; }
+#hud .status { margin-bottom: 8px; opacity: 0.85; }
+#hud .status.error { color: #ff9b8a; }
+#hud .fleet { padding: 4px 6px; border-radius: 4px; cursor: pointer; }
+#hud .fleet:hover, #hud .fleet.selected { background: rgba(255, 255, 255, 0.15); }
+#hud .fleet .name { font-weight: bold; }
+#hud .fleet .detail { opacity: 0.8; }
+#hud .toolbar { display: flex; gap: 6px; margin-bottom: 8px; }
+#hud .toolbar button { flex: 1; font-size: 18px; padding: 2px 0; background: rgba(255, 255, 255, 0.12); color: inherit; border: 0; border-radius: 4px; cursor: pointer; }
+#hud .toolbar button:hover { background: rgba(255, 255, 255, 0.25); }
+.sea-home { position: fixed; top: 10px; left: 10px; z-index: 3; color: #e8f1f5; font-size: 26px; text-decoration: none; }
+.profile-form { position: fixed; z-index: 4; top: 50%; left: 50%; display: grid; gap: 10px; width: min(340px, calc(100vw - 40px)); transform: translate(-50%, -50%); padding: 18px; background: #102d3a; border: 1px solid #58717b; border-radius: 6px; color: #e8f1f5; }
+.profile-form[hidden] { display: none; }
+.profile-form input, .profile-form button { min-height: 40px; padding: 8px; }
+.profile-form button { cursor: pointer; }
+#profile-error { color: #ff9b8a; }
