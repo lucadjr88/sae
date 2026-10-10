@@ -382,17 +382,20 @@ export async function delistFleetTx({
 export async function listFleetTx({
   fleet_id,
   rate,
+  durationMin,
   owner,
   profileId,
 }: {
   fleet_id: string;
   rate: number;
+  durationMin?: number;
   owner?: string;
   profileId?: string;
 }): Promise< boolean | string | Error> {
   console.log("[DEBUG][list] Starting listFleetTx with:", {
     fleet_id,
     rate,
+    durationMin,
     owner,
     profileId,
   });
@@ -401,6 +404,7 @@ export async function listFleetTx({
     const requestPayload = {
       fleet_id,
       rate,
+      durationMin,
       owner,
       profileId,
       paymentFrequency: "daily",

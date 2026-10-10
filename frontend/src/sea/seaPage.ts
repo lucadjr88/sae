@@ -11,6 +11,7 @@ import './sea.css';
 const form = document.querySelector<HTMLFormElement>('#profile-form');
 const profileInput = document.querySelector<HTMLInputElement>('#profile-id');
 const profileError = document.querySelector<HTMLDivElement>('#profile-error');
+const loader = document.querySelector<HTMLDivElement>('#sea-loader');
 const initialProfileId = new URLSearchParams(location.search).get('profileId') ?? '';
 const returnLink = document.querySelector<HTMLAnchorElement>('.sea-home');
 
@@ -26,9 +27,11 @@ returnLink?.addEventListener('click', event => {
 });
 
 if (profileInput) profileInput.value = initialProfileId;
+if (!initialProfileId && loader) loader.hidden = true;
 
 async function startMap(profileId: string) {
   if (!form) return;
+  if (loader) loader.hidden = false;
   form.hidden = true;
   const starbases = classifyStarbases(await fetch('/api/sea/starbases').then(response => {
     if (!response.ok) throw new Error('starbases unavailable');
@@ -39,14 +42,17 @@ async function startMap(profileId: string) {
   const hud = new Hud(document.querySelector<HTMLElement>('#hud'), starbases);
   feed.on('snapshot', snapshot => hud.setSnapshot(snapshot));
   feed.on('status', status => hud.setConnection(status));
+  let resolveMapReady: () => void = () => {};
+  const mapReady = new Promise<void>(resolve => { resolveMapReady = resolve; });
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
     scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
     scene: [BootScene, MapScene],
   });
-  game.registry.set('services', { feed, hud, starbases });
-  feed.start();
+  game.registry.set('services', { feed, hud, starbases, onMapReady: resolveMapReady });
+  await Promise.all([feed.start(), mapReady]);
+  if (loader) loader.hidden = true;
   window.addEventListener('pagehide', () => {
     feed.stop();
     hud.destroy();
@@ -64,6 +70,7 @@ form?.addEventListener('submit', event => {
     if (profileError) profileError.textContent = '';
     startMap(profileId);
   } catch {
+    if (loader) loader.hidden = true;
     if (profileError) profileError.textContent = 'Player Profile ID non valido';
   }
 });

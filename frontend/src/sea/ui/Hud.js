@@ -30,24 +30,44 @@ export class Hud extends Emitter {
     this.connection = 'disconnected';
     this.selectedId = null;
     this.rows = new Map();
-    const toolbar = document.createElement('div');
-    toolbar.className = 'toolbar';
-    for (const [text, dir, title] of [['⟲', -1, 'Ruota a sinistra (Q)'], ['⟳', 1, 'Ruota a destra (E)']]) {
+    this.toolbar = document.createElement('div');
+    this.toolbar.className = 'map-controls';
+    this.toolbar.setAttribute('role', 'toolbar');
+    this.toolbar.setAttribute('aria-label', 'Controlli della mappa');
+    for (const [action, title, image, className] of [
+      ['rotate', 'Ruota in senso antiorario (Q)', 'semifreccia_oraria.png', 'counterclockwise'],
+      ['zoom', 'Aumenta zoom', "icons8-lente-d'ingrandimento-68.png", 'zoom-in'],
+      ['zoom', 'Riduci zoom', "icons8-lente-d'ingrandimento-68.png", 'zoom-out'],
+      ['rotate', 'Ruota in senso orario (E)', 'semifreccia_oraria.png', 'clockwise'],
+    ]) {
       const btn = document.createElement('button');
-      btn.textContent = text;
       btn.title = title;
-      btn.addEventListener('click', () => this.emit('rotate', dir));
-      toolbar.append(btn);
+      btn.setAttribute('aria-label', title);
+      btn.className = className;
+      const imageElement = document.createElement('img');
+      imageElement.src = `/sea/assets/${image}`;
+      imageElement.alt = '';
+      btn.append(imageElement);
+      if (action === 'zoom') {
+        const mark = document.createElement('span');
+        mark.className = 'zoom-mark';
+        //mark.textContent = className === 'zoom-in' ? '+' : '−';
+        btn.append(mark);
+      }
+      btn.addEventListener('click', () => this.emit(action, className === 'clockwise' || className === 'zoom-in' ? -1 : 1));
+      this.toolbar.append(btn);
     }
+    document.body.append(this.toolbar);
     this.status = document.createElement('div');
     this.status.className = 'status';
     this.list = document.createElement('div');
-    root.append(toolbar, this.status, this.list);
+    root.append(this.status, this.list);
     this.renderTimer = setInterval(() => this.render(), 1000);
   }
 
   destroy() {
     clearInterval(this.renderTimer);
+    this.toolbar.remove();
     this.root.replaceChildren();
   }
 

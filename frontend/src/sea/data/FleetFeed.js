@@ -13,7 +13,7 @@ export class FleetFeed extends Emitter {
 
   start() {
     this.stopped = false;
-    this.poll();
+    return this.poll();
   }
 
   stop() {

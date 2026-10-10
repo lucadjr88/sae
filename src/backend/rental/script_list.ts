@@ -1,31 +1,33 @@
-import { PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
-import * as anchor from "@coral-xyz/anchor";
+import { PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
 import BN from "bn.js";
 import express from "express";
-import {
-	ASSOCIATED_TOKEN_PROGRAM_ID,
-	createAssociatedTokenAccountInstruction,
-	getAssociatedTokenAddress,
-	TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
+import { createRequire } from "node:module";
 
-import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
 import { getRpcConnection } from "../../utils/rpc/connection.js";
+import { RpcPoolManager } from "../../utils/rpc/rpc-pool-manager.js";
 import { deriveWalletAuthority } from "../../utils/deriveWalletAuthority.js";
 import { prepareTxForWalletSignature } from "../security/txSigningMiddleware.js";
 import { fetchProfileFleets } from "../../utils/fetchProfileFleets.js";
 import { getWalletAuthorityUtil } from "../../utils/getWalletAuthority.js";
 
 const router = express.Router();
+const require = createRequire(import.meta.url);
+const { createContract, deriveContract, deriveRentalAuthority, setSdkConfig } = require("@sly-rentals/core/legacy") as typeof import("@sly-rentals/core/legacy");
 
-const SRSLY_PROGRAM_ID = new PublicKey("SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT");
-const ATLAS_MINT = new PublicKey("ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx");
-const GAME_ID = new PublicKey("GAMEzqJehF8yAnKiTARUuhZMvLvkZVAsCVri5vSfemLr");
-const SAGE_PROGRAM_ID = new PublicKey("SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE");
-const CREATE_CONTRACT_DISCRIMINATOR = Buffer.from(
-	(srslyIdl as any)?.instructions?.find?.((ix: any) => ix?.name === "create_contract" || ix?.name === "createContract")?.discriminator
-		?? [244, 48, 244, 178, 216, 88, 122, 52],
-);
+function normalizeRpcProfileId(value?: string | null): string {
+	const cleaned = typeof value === 'string' ? value.trim() : '';
+	return cleaned.length > 0 ? cleaned : 'default';
+}
+
+function getRpcErrorType(error: unknown): '429' | '503' | 'error' {
+	const status = typeof (error as { status?: unknown })?.status === 'number'
+		? Number((error as { status?: number }).status)
+		: undefined;
+	const message = error instanceof Error ? error.message : String(error ?? '');
+	if (status === 429 || /429|Too Many Requests/i.test(message)) return '429';
+	if (status === 503 || /503|Service Unavailable/i.test(message)) return '503';
+	return 'error';
+}
 
 function pickString(...values: unknown[]): string | undefined {
 	for (const value of values) {
@@ -130,132 +132,6 @@ async function deriveFleetContextFromChain(fleet: PublicKey): Promise<{ ownerPro
 	}
 }
 
-function normalizeInstructionAccounts(accounts: any[]): any[] {
-	return accounts.map((acc) => {
-		if (acc.accounts && Array.isArray(acc.accounts)) {
-			return {
-				...acc,
-				accounts: normalizeInstructionAccounts(acc.accounts),
-			};
-		}
-		return {
-			...acc,
-			isMut: acc.isMut ?? acc.writable ?? false,
-			isSigner: acc.isSigner ?? acc.signer ?? false,
-			isOptional: acc.isOptional ?? acc.optional ?? false,
-		};
-	});
-}
-
-function normalizeIdlType(type: any): any {
-	if (typeof type === "string") {
-		return type === "pubkey" ? "publicKey" : type;
-	}
-	if (!type || typeof type !== "object") {
-		return type;
-	}
-	if ("vec" in type) {
-		return { vec: normalizeIdlType(type.vec) };
-	}
-	if ("option" in type) {
-		return { option: normalizeIdlType(type.option) };
-	}
-	if ("array" in type && Array.isArray(type.array)) {
-		return { array: [normalizeIdlType(type.array[0]), type.array[1]] };
-	}
-	if ("defined" in type) {
-		const defined = type.defined;
-		if (typeof defined === "string") {
-			return { defined };
-		}
-		if (defined && typeof defined === "object" && typeof defined.name === "string") {
-			return { defined: defined.name };
-		}
-	}
-	return type;
-}
-
-function normalizeTypeDef(typeDef: any): any {
-	if (!typeDef?.type?.kind) {
-		return typeDef;
-	}
-
-	if (typeDef.type.kind === "struct") {
-		return {
-			...typeDef,
-			type: {
-				...typeDef.type,
-				fields: (typeDef.type.fields ?? []).map((field: any) => ({
-					...field,
-					type: normalizeIdlType(field.type),
-				})),
-			},
-		};
-	}
-
-	if (typeDef.type.kind === "enum") {
-		return {
-			...typeDef,
-			type: {
-				...typeDef.type,
-				variants: (typeDef.type.variants ?? []).map((variant: any) => ({
-					...variant,
-					fields: Array.isArray(variant.fields)
-						? variant.fields.map((field: any) => {
-							if (field && typeof field === "object" && "type" in field) {
-								return { ...field, type: normalizeIdlType(field.type) };
-							}
-							return normalizeIdlType(field);
-						})
-						: variant.fields,
-				})),
-			},
-		};
-	}
-
-	return typeDef;
-}
-
-function toLegacyAnchorIdl(rawIdl: any): anchor.Idl {
-	const types = Array.isArray(rawIdl.types) ? rawIdl.types.map(normalizeTypeDef) : [];
-	const typeByName = new Map(types.map((t: any) => [t.name, t.type]));
-
-	const accounts = Array.isArray(rawIdl.accounts)
-		? rawIdl.accounts.map((acc: any) => {
-			const type = acc.type ?? typeByName.get(acc.name);
-			if (!type) {
-				throw new Error(`[IDL] Missing type for account ${acc.name}`);
-			}
-			return {
-				...acc,
-				type,
-			};
-		})
-		: undefined;
-
-	const instructions = Array.isArray(rawIdl.instructions)
-		? rawIdl.instructions.map((ix: any) => ({
-			...ix,
-			args: (ix.args ?? []).map((arg: any) => ({
-				...arg,
-				type: normalizeIdlType(arg.type),
-			})),
-			accounts: normalizeInstructionAccounts(ix.accounts ?? []),
-		}))
-		: [];
-
-	return {
-		...rawIdl,
-		version: rawIdl.version ?? rawIdl.metadata?.version ?? "0.1.0",
-		name: rawIdl.name ?? rawIdl.metadata?.name ?? "unknown_program",
-		instructions,
-		accounts,
-		types,
-	} as anchor.Idl;
-}
-
-const srslyLegacyIdl = toLegacyAnchorIdl(srslyIdl);
-
 function toPk(value: string | PublicKey): PublicKey {
 	return typeof value === "string" ? new PublicKey(value) : value;
 }
@@ -277,21 +153,6 @@ function normalizePaymentFrequency(value: unknown): string {
 	if (["@weekly", "weekly", "week", "weeks"].includes(normalized)) return "@weekly";
 	if (["@monthly", "monthly", "month", "months"].includes(normalized)) return "@monthly";
 	return "@daily";
-}
-
-async function deriveContractPda(fleet: PublicKey): Promise<PublicKey> {
-	const [contractPda] = await PublicKey.findProgramAddress([
-		Buffer.from("rental_contract"),
-		fleet.toBuffer(),
-	], SRSLY_PROGRAM_ID);
-	return contractPda;
-}
-
-async function deriveRentalAuthorityPda(): Promise<PublicKey> {
-	const [rentalAuthority] = await PublicKey.findProgramAddress([
-		Buffer.from("rental_authority"),
-	], SRSLY_PROGRAM_ID);
-	return rentalAuthority;
 }
 
 async function resolveOwnerKeyIndex(profileId: string, owner: string): Promise<number> {
@@ -318,42 +179,6 @@ async function resolveOwnerKeyIndex(profileId: string, owner: string): Promise<n
 	}
 }
 
-function encodeU64(value: BN): Buffer {
-	const out = Buffer.alloc(8);
-	out.writeBigUInt64LE(BigInt(value.toString(10)), 0);
-	return out;
-}
-
-function encodeU16(value: number): Buffer {
-	const out = Buffer.alloc(2);
-	out.writeUInt16LE(value, 0);
-	return out;
-}
-
-function encodeBorshString(value: string): Buffer {
-	const content = Buffer.from(value, "utf8");
-	const length = Buffer.alloc(4);
-	length.writeUInt32LE(content.length, 0);
-	return Buffer.concat([length, content]);
-}
-
-function encodeCreateContractInstructionData(params: {
-	rate: BN;
-	durationMin: BN;
-	durationMax: BN;
-	paymentFrequency: string;
-	ownerKeyIndex: number;
-}): Buffer {
-	return Buffer.concat([
-		CREATE_CONTRACT_DISCRIMINATOR,
-		encodeU64(params.rate),
-		encodeU64(params.durationMin),
-		encodeU64(params.durationMax),
-		encodeBorshString(params.paymentFrequency),
-		encodeU16(params.ownerKeyIndex),
-	]);
-}
-
 async function buildListFleetTx(params: {
 	owner: string | PublicKey;
 	ownerProfile: string | PublicKey;
@@ -364,124 +189,108 @@ async function buildListFleetTx(params: {
 	paymentFrequency?: string;
 	ownerKeyIndex?: number | string;
 	gameId?: string | PublicKey | null;
+	rpcProfileId?: string;
 }) {
-	const connection = await getRpcConnection();
-
 	const owner = toPk(params.owner);
 	const ownerProfile = toPk(params.ownerProfile);
 	const fleet = toPk(params.fleet);
-	const gameId = params.gameId ? toPk(params.gameId) : GAME_ID;
-	// SRSLY `rate` is charged per raw `paymentFrequency` unit; do not auto-convert here.
-	const rate = toU64Bn(params.rate, "rate");
-	const durationMin = toU64Bn(params.durationMin, "durationMin", 1);
-	const durationMax = toU64Bn(params.durationMax, "durationMax", 24);
 	const paymentFrequency = normalizePaymentFrequency(params.paymentFrequency);
 	const ownerKeyIndex = Number(params.ownerKeyIndex ?? 0);
+
+	// The SDK's `rate` is ATLAS (not raw stardust) and enforces a 1 ATLAS minimum.
+	const rateAtlas = Number(params.rate);
+	if (!Number.isFinite(rateAtlas) || rateAtlas <= 0) {
+		throw new Error("Invalid rate: expected a positive number of ATLAS per period");
+	}
+	// duration_min/duration_max are stored on-chain in seconds; the UI collects days.
+	const durationMinDays = toU64Bn(params.durationMin, "durationMin", 1).toNumber();
+	const durationMaxDays = toU64Bn(params.durationMax, "durationMax", 24).toNumber();
 
 	if (!Number.isInteger(ownerKeyIndex) || ownerKeyIndex < 0 || ownerKeyIndex > 65535) {
 		throw new Error("Invalid ownerKeyIndex: expected an integer between 0 and 65535");
 	}
-	if (durationMin.gt(durationMax)) {
+	if (durationMinDays > durationMaxDays) {
 		throw new Error("durationMin cannot be greater than durationMax");
 	}
 
-	const contract = await deriveContractPda(fleet);
-	const rentalAuthority = await deriveRentalAuthorityPda();
-	const ownerTokenAccount = await getAssociatedTokenAddress(
-		ATLAS_MINT,
-		owner,
-		false,
-		TOKEN_PROGRAM_ID,
-		ASSOCIATED_TOKEN_PROGRAM_ID,
-	);
+	const profileId = normalizeRpcProfileId(params.rpcProfileId || ownerProfile.toBase58());
+	const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
+	const attemptedUrls = new Set<string>();
+	let lastError: unknown;
 
-	console.log("[LIST] Building createContract tx:", {
-		owner: owner.toBase58(),
-		ownerProfile: ownerProfile.toBase58(),
-		fleet: fleet.toBase58(),
-		gameId: gameId.toBase58(),
-		contract: contract.toBase58(),
-		rentalAuthority: rentalAuthority.toBase58(),
-		rate: rate.toString(),
-		durationMin: durationMin.toString(),
-		durationMax: durationMax.toString(),
-		paymentFrequency,
-		ownerKeyIndex,
-	});
+	for (let attempt = 0; attempt < Math.max(1, pool.length); attempt += 1) {
+		let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | null = null;
+		try {
+			pick = await RpcPoolManager.pickRpcConnection(profileId, {
+				waitForMs: 3000,
+				allowStale: attempt > 2,
+				excludeUrls: attemptedUrls,
+			});
+			attemptedUrls.add(pick.endpoint.url);
+			setSdkConfig({ programs: "mainnet", rpcUrl: pick.endpoint.url, PublicKey });
 
-	const instructionData = encodeCreateContractInstructionData({
-		rate,
-		durationMin,
-		durationMax,
-		paymentFrequency,
-		ownerKeyIndex,
-	});
-	console.log("[LIST] createContract ix payload", {
-		dataHex: instructionData.toString("hex"),
-		dataBase64: instructionData.toString("base64"),
-		paymentFrequency,
-		ownerKeyIndex,
-	});
+			console.log("[LIST] Building createContract tx via SDK:", {
+				owner: owner.toBase58(),
+				fleet: fleet.toBase58(),
+				rateAtlas,
+				durationMinDays,
+				durationMaxDays,
+				ownerKeyIndex,
+			});
 
-	const createIx = new TransactionInstruction({
-		programId: SRSLY_PROGRAM_ID,
-		keys: [
-			{ pubkey: ATLAS_MINT, isSigner: false, isWritable: false },
-			{ pubkey: owner, isSigner: true, isWritable: true },
-			{ pubkey: ownerTokenAccount, isSigner: false, isWritable: true },
-			{ pubkey: fleet, isSigner: false, isWritable: true },
-			{ pubkey: ownerProfile, isSigner: false, isWritable: false },
-			{ pubkey: gameId, isSigner: false, isWritable: false },
-			{ pubkey: contract, isSigner: false, isWritable: true },
-			{ pubkey: rentalAuthority, isSigner: false, isWritable: false },
-			{ pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-			{ pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-			{ pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-			{ pubkey: SAGE_PROGRAM_ID, isSigner: false, isWritable: false },
-		],
-		data: instructionData,
-	});
-	console.log("[LIST] createContract ix keys", createIx.keys.map((key, index) => ({
-		index,
-		pubkey: key.pubkey.toBase58(),
-		isSigner: key.isSigner,
-		isWritable: key.isWritable,
-	})));
+			const instructions = await createContract({
+				owner: owner.toBase58(),
+				fleet: fleet.toBase58(),
+				rate: { atlas: rateAtlas },
+				durationMin: { days: durationMinDays },
+				durationMax: { days: durationMaxDays },
+				ownerKeyIndex,
+				// Manual-mode listing: skip bundling createContractThread automation.
+				automated: false,
+			});
 
-	const tx = new Transaction();
-	const ownerAtaInfo = await connection.getAccountInfo(ownerTokenAccount);
-	if (!ownerAtaInfo) {
-		console.log("[LIST] owner ATA missing, adding create ATA pre-instruction:", ownerTokenAccount.toBase58());
-		tx.add(createAssociatedTokenAccountInstruction(
-			owner,
-			ownerTokenAccount,
-			owner,
-			ATLAS_MINT,
-			TOKEN_PROGRAM_ID,
-			ASSOCIATED_TOKEN_PROGRAM_ID,
-		));
+			const contract = await deriveContract(fleet.toBase58());
+			const rentalAuthority = await deriveRentalAuthority();
+
+			const tx = new Transaction().add(...instructions.map((instruction: any) => new TransactionInstruction({
+				programId: new PublicKey(instruction.programId),
+				keys: instruction.keys.map((key: any) => ({
+					pubkey: new PublicKey(key.pubkey),
+					isSigner: key.isSigner,
+					isWritable: key.isWritable,
+				})),
+				data: Buffer.from(instruction.data),
+			})));
+
+			pick.release({ success: true });
+
+			return {
+				tx,
+				derivedAccounts: {
+					owner: owner.toBase58(),
+					ownerProfile: ownerProfile.toBase58(),
+					fleet: fleet.toBase58(),
+					contract: String(contract),
+					rentalAuthority: String(rentalAuthority),
+				},
+				normalizedArgs: {
+					rate: rateAtlas,
+					durationMin: durationMinDays,
+					durationMax: durationMaxDays,
+					paymentFrequency,
+					ownerKeyIndex,
+				},
+			};
+		} catch (error) {
+			const errorType = getRpcErrorType(error);
+			if (pick) pick.release({ success: false, errorType });
+			lastError = error;
+			if (errorType !== '429' && errorType !== '503') throw error;
+			console.warn("[LIST] RPC failed; trying next endpoint", { attempt: attempt + 1, errorType });
+		}
 	}
-	tx.add(createIx);
 
-	return {
-		tx,
-		derivedAccounts: {
-			owner: owner.toBase58(),
-			ownerProfile: ownerProfile.toBase58(),
-			fleet: fleet.toBase58(),
-			gameId: gameId.toBase58(),
-			contract: contract.toBase58(),
-			rentalAuthority: rentalAuthority.toBase58(),
-			ownerTokenAccount: ownerTokenAccount.toBase58(),
-		},
-		normalizedArgs: {
-			rate: rate.toString(),
-			durationMin: durationMin.toString(),
-			durationMax: durationMax.toString(),
-			paymentFrequency,
-			ownerKeyIndex,
-		},
-	};
+	throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "All RPC endpoints failed"));
 }
 
 async function handleListFleet(req: express.Request, res: express.Response) {
@@ -618,6 +427,7 @@ async function handleListFleet(req: express.Request, res: express.Response) {
 			paymentFrequency: paymentFrequency ?? payment_frequency,
 			ownerKeyIndex: resolvedOwnerKeyIndex,
 			gameId: gameIdInput ? new PublicKey(gameIdInput) : null,
+			rpcProfileId: pickString(profileId, ownerProfileInput),
 		});
 
 		tx.feePayer = ownerPk;

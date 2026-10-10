@@ -37,6 +37,7 @@ type ListingFormSection = {
     fleetSelect: HTMLSelectElement;
     listingActionArea: HTMLDivElement;
     rateInput: HTMLInputElement;
+    durationMinInput: HTMLInputElement;
     submitButton: HTMLButtonElement;
 };
 
@@ -104,6 +105,8 @@ function createListingFormSection(contentEl: HTMLDivElement, atlasIcon: string):
     listingActionArea.id = "listingActionArea";
 
     const rateInput = createDialogNumberInput("listingRateInput", "Rate / day");
+    const durationMinInput = createDialogNumberInput("listingDurationMinInput", "Minimum rental (days)");
+    durationMinInput.value = "1";
     const rateMeta = document.createElement("div");
     rateMeta.style.display = "flex";
     rateMeta.style.alignItems = "center";
@@ -126,6 +129,7 @@ function createListingFormSection(contentEl: HTMLDivElement, atlasIcon: string):
     actionAreraContainer.appendChild(rateInput);
     actionAreraContainer.appendChild(rateMeta);
     listingActionArea.appendChild(actionAreraContainer);
+    listingActionArea.appendChild(durationMinInput);
     listingActionArea.appendChild(submitButton);
     contentEl.appendChild(fleetSelect);
     contentEl.appendChild(listingActionArea);
@@ -134,6 +138,7 @@ function createListingFormSection(contentEl: HTMLDivElement, atlasIcon: string):
         fleetSelect,
         listingActionArea,
         rateInput,
+        durationMinInput,
         submitButton,
     };
 }
@@ -228,7 +233,7 @@ function openListingDialog(options: ListingDialogOptions = {}) {
         closeButtonId: "closeListingDetailWindow",
     });
 
-    const { fleetSelect, listingActionArea, rateInput, submitButton } = createListingFormSection(contentEl, atlasIcon);
+    const { fleetSelect, listingActionArea, rateInput, durationMinInput, submitButton } = createListingFormSection(contentEl, atlasIcon);
 
     const updateActionAreaVisibility = () => {
         listingActionArea.style.display = fleetSelect.value ? "flex" : "none";
@@ -270,12 +275,18 @@ function openListingDialog(options: ListingDialogOptions = {}) {
     const submitListing = async () => {
         const fleetId = fleetSelect.value.trim();
         const ratePerDay = Number.parseInt(rateInput.value, 10);
-        const owner = window.wallet?.adapter?.publicKey?.toBase58?.();
+        const durationMin = Number.parseInt(durationMinInput.value, 10);
+        const wallet = window.wallet;
+        if (!wallet?.isConnected || !wallet.publicKey) {
+            await wallet?.connect?.();
+        }
+        const owner = wallet?.publicKey?.toBase58?.() || wallet?.publicKey?.toString?.();
 
         console.log("[listing-window] Submit requested", {
             fleetId,
             rateInput: rateInput.value,
             parsedRatePerDay: ratePerDay,
+            durationMin,
             owner,
         });
 
@@ -295,9 +306,16 @@ function openListingDialog(options: ListingDialogOptions = {}) {
             return;
         }
 
+        if (!Number.isFinite(durationMin) || durationMin < 1 || durationMin > 24) {
+            console.warn("[listing-window] Submit blocked: invalid minimum rental", { durationMin });
+            durationMinInput.focus();
+            return;
+        }
+
         submitButton.disabled = true;
         fleetSelect.disabled = true;
         rateInput.disabled = true;
+        durationMinInput.disabled = true;
         setListingDialogState(contentEl, "loading", { message: "Sending TX..." });
 
         try {
@@ -305,12 +323,14 @@ function openListingDialog(options: ListingDialogOptions = {}) {
             console.log("[listing-window] Calling listFleetTx", {
                 fleetId,
                 ratePerDay,
+                durationMin,
                 owner,
                 profileId: currentProfileId || undefined,
             });
             const listed = await listFleetTx({
                 fleet_id: fleetId,
                 rate: ratePerDay,
+                durationMin,
                 owner,
                 profileId: currentProfileId || undefined,
             });

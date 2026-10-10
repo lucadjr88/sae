@@ -93,6 +93,17 @@ function getRpcErrorType(error: unknown): '429' | '503' | 'error' {
 	return 'error';
 }
 
+// Alcuni RPC pubblici rispondono 403 a getProgramAccounts anche se getSlot funziona: va escluso e riprovato altrove.
+function isEndpointRejectionError(error: unknown): boolean {
+	const status = typeof (error as { status?: unknown })?.status === 'number'
+		? Number((error as { status?: number }).status)
+		: undefined;
+	const message = error instanceof Error ? error.message : String(error ?? '');
+	if (status === 403 || /403|Forbidden/i.test(message)) return true;
+	return getRpcErrorType(error) !== 'error';
+}
+
+
 function getRpcRetryDelayMs(errorType: '429' | '503' | 'error', attempt: number): number {
 	if (errorType === '429') {
 		const base = Math.min(4_000, 400 * Math.pow(2, Math.max(0, attempt - 1)));
@@ -124,16 +135,37 @@ async function withRpcTimeout<T>(operation: Promise<T>, label: string, timeoutMs
 }
 
 export class RentalService {
+		// Prova gli endpoint della pool in sequenza: getProgramAccounts può essere rifiutato (403/429/503)
+		// da un endpoint anche se getSlot ha successo, quindi un singolo RPC non basta.
+		private async fetchAllContractsWithFallback(profileId: string): Promise<Awaited<ReturnType<typeof srslyV2.fetchAllContracts>>> {
+			const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
+			const urls = Array.from(new Set(pool.map((ep: any) => ep?.url).filter((url: unknown): url is string => typeof url === 'string' && url.length > 0)));
+			if (urls.length === 0) {
+				urls.push(await getHealthyRpcUrlOrThrow());
+			}
+
+			let lastError: unknown;
+			for (const rpcUrl of urls) {
+				try {
+					srslyV2.setSdkConfig({
+						programs: 'mainnet',
+						rpcUrl,
+						commitment: 'confirmed',
+						PublicKey,
+					});
+					return await srslyV2.fetchAllContracts(rpcUrl);
+				} catch (error) {
+					lastError = error;
+					if (!isEndpointRejectionError(error)) throw error;
+					console.warn(`[rentalService] fetchAllContracts rejected by ${rpcUrl}, trying next endpoint: ${summarizeRpcError(error)}`);
+				}
+			}
+			throw lastError instanceof Error ? lastError : new Error('All RPC endpoints failed for fetchAllContracts');
+		}
+
 		// Recupera i rental contracts da blockchain (prima chiamata RPC)
 		public async fetchContractsOnChain(profileId: string, limit?: number): Promise<RentalContract[]> {
-			const rpcUrl = await getHealthyRpcUrlOrThrow();
-			srslyV2.setSdkConfig({
-				programs: 'mainnet',
-				rpcUrl,
-				commitment: 'confirmed',
-				PublicKey,
-			});
-			const v2Contracts = await srslyV2.fetchAllContracts(rpcUrl);
+			const v2Contracts = await this.fetchAllContractsWithFallback(profileId);
 			const contracts: RentalContract[] = [];
 			const fleetAddresses: string[] = [];
 			for (const record of v2Contracts) {

@@ -1,7 +1,8 @@
-import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
+import { ComputeBudgetProgram, Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import BN from "bn.js";
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { createRequire } from "node:module";
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
 import { RentalService } from "./rentalService.js";
 import { decodeRentalState } from "./decode.js";
@@ -14,6 +15,8 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 const router = express.Router();
+const require = createRequire(import.meta.url);
+const { acceptRental, createBorrower, setSdkConfig } = require("@sly-rentals/core/legacy") as typeof import("@sly-rentals/core/legacy");
 
 const DURATION_SECONDS_BY_UNIT: Record<string, number> = {
   decasecond: 10,
@@ -494,17 +497,14 @@ router.post("/rent-fleet", async (req, res) => {
     const sageProgramId = new PublicKey("SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE");
     const SLY_SQUADS = new PublicKey("FEESnQG5d8UmUUbogJUaiQjMZpRQ9fCEDf3nBRf1ut9M");
 
-    // contractPda
-    const [contractPda] = await PublicKey.findProgramAddress([
-      Buffer.from("rental_contract"), fleetPk.toBuffer()
-    ], srslyProgramId);
+    const contractPda = new PublicKey(contractAddress);
     // rentalAuthority
     const [rentalAuthority] = await PublicKey.findProgramAddress([
       Buffer.from("rental_authority")
     ], srslyProgramId);
     // rentalState
     const [rentalState] = await PublicKey.findProgramAddress([
-      Buffer.from("rental_state"), contractPda.toBuffer(), borrowerPk.toBuffer()
+      Buffer.from("rental_state"), contractPda.toBuffer(), Buffer.from("active")
     ], srslyProgramId);
     // rentalThread
     const [rentalThread] = await PublicKey.findProgramAddress([
@@ -564,12 +564,14 @@ router.post("/rent-fleet", async (req, res) => {
     try {
 
       // Il rate del contratto è espresso nella `payment_frequency`; convertiamo prima la durata e poi calcoliamo il totale atteso dal programma SRSLY.
-      const amountAtomics = BigInt(Math.round(quotedRate * contractDuration * 100_000_000));
+      const rateAtomics = BigInt(Math.round(quotedRate * 100_000_000));
+      const durationSeconds = requestedDuration * DURATION_SECONDS_BY_UNIT[normalizeDurationUnit(requestedDurationUnit)];
 
       // Debug: log dei parametri critici
       console.log("[RENT-FLEET] TX params:", {
         amount: quotedRate,
-        amountAtomics: amountAtomics.toString(),
+        rateAtomics: rateAtomics.toString(),
+        durationSeconds,
         requestedDuration,
         requestedDurationUnit,
         contractDuration,
@@ -579,30 +581,13 @@ router.post("/rent-fleet", async (req, res) => {
         contractPda: contractPda.toBase58()
       });
 
-      // Costruisci la custom instruction acceptRental
+      // Build with the current SRSLY IDL-derived instruction layout.
       const tx = await acceptRentalTx({
-        mint: mintPk,
         borrower: borrowerPk,
-        borrower_profile: borrowerProfilePk,
-        borrower_profile_faction: borrowerProfileFactionPk,
-        borrower_token_account: borrowerTokenAccount,
-        fleet: fleetPk,
-        game_id: gameIdPk,
-        starbase: starbasePda,
-        starbase_player: starbasePlayer,
         contract: contractPda,
-        rental_state: rentalState,
-        rental_authority: rentalAuthority,
-        rental_token_account: rentalTokenAccount,
-        rental_thread: rentalThread,
-        fee_token_account: feeTokenAccount,
-        sage_program: sageProgramId,
-        antegen_program: antigenProgramId,
-        token_program: TOKEN_PROGRAM_ID,
-        associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
-        system_program: SystemProgram.programId,
-        amount: amountAtomics.toString(),
-        duration: contractDuration,
+        borrowerProfile: borrowerProfilePk,
+        rate: rateAtomics,
+        durationSeconds,
         rpcProfileId,
       });
 
@@ -614,6 +599,18 @@ router.post("/rent-fleet", async (req, res) => {
       tx.recentBlockhash = latestBlockhash.blockhash;
       // Log oggetto tx DOPO l'assegnazione
       console.log("[RENT-FLEET] TX oggetto dopo feePayer/recentBlockhash:", tx);
+      const simulation = await executeRpcWithPool(rpcProfileId, (connection) =>
+        connection.simulateTransaction(tx),
+      );
+      if (simulation.value.err) {
+        console.error("[RENT-FLEET] Simulation failed:", simulation.value.err, simulation.value.logs);
+        res.status(400).json({
+          error: "Rent transaction simulation failed",
+          simulationErr: simulation.value.err,
+          simulationLogs: simulation.value.logs ?? [],
+        });
+        return;
+      }
       const signingPayload = prepareTxForWalletSignature({
         tx,
         signer: borrowerPk,
@@ -950,7 +947,7 @@ router.post('/send-tx', requireVerifiedTxSignature(), async (req, res) => {
 export default router;
 
 // Parametri principali
-const SRSLY_PROGRAM_ID = new PublicKey("SRSLY1fq9TJqCk1gNSE7VZL2bztvTn9wm4VR8u8jMKT");
+const SRSLY_PROGRAM_ID = new PublicKey("SRSLYxcFnjd5jG2DpJw4as6UEyjwJQK1U4J1TD1hvZH");
 
 // PATCH: wallet va gestito in modo sicuro, qui placeholder
 const wallet = "";//Keypair.fromSecretKey(/* ... */);
@@ -961,106 +958,65 @@ const wallet = "";//Keypair.fromSecretKey(/* ... */);
 // Costruisce la transazione rental senza firmarla e la restituisce
 
 export async function acceptRentalTx(params: any) {
-  // Helper: se è stringa, converte in PublicKey, altrimenti lascia
-  const toPk = (v: any) => (typeof v === "string" ? new PublicKey(v) : v);
-  const {
-    mint,
-    borrower,
-    borrower_profile,
-    borrower_profile_faction,
-    borrower_token_account,
-    fleet,
-    game_id,
-    starbase,
-    starbase_player,
-    contract,
-    rental_state,
-    rental_authority,
-    rental_token_account,
-    rental_thread,
-    fee_token_account,
-    sage_program,
-    antegen_program,
-    token_program,
-    associated_token_program,
-    system_program,
-    amount,
-    duration,
-    rpcProfileId,
-  } = params;
-  // Minimal debug: print all params before toBase58 conversion
-  //console.log("[acceptRentalTx] RAW params:", params);
-  // Log all parameters with correct snake_case names
-  console.log("[acceptRentalTx] params:", {
-    mint: toPk(mint).toBase58(),
-    borrower: toPk(borrower).toBase58(),
-    borrower_profile: toPk(borrower_profile).toBase58(),
-    borrower_profile_faction: toPk(borrower_profile_faction).toBase58(),
-    borrower_token_account: toPk(borrower_token_account).toBase58(),
-    fleet: toPk(fleet).toBase58(),
-    game_id: toPk(game_id).toBase58(),
-    starbase: toPk(starbase).toBase58(),
-    starbase_player: toPk(starbase_player).toBase58(),
-    contract: toPk(contract).toBase58(),
-    rental_state: toPk(rental_state).toBase58(),
-    rental_authority: toPk(rental_authority).toBase58(),
-    rental_token_account: toPk(rental_token_account).toBase58(),
-    rental_thread: toPk(rental_thread).toBase58(),
-    fee_token_account: toPk(fee_token_account).toBase58(),
-    sage_program: toPk(sage_program).toBase58(),
-    antegen_program: toPk(antegen_program).toBase58(),
-    token_program: toPk(token_program).toBase58(),
-    associated_token_program: toPk(associated_token_program).toBase58(),
-    system_program: toPk(system_program).toBase58(),
-    amount,
-    duration
-  });
-  const dummyWallet = {
-    publicKey: PublicKey.default,
-    signTransaction: async (tx: any) => tx,
-    signAllTransactions: async (txs: any) => txs,
-  };
+  const profileId = normalizeRpcProfileId(params.rpcProfileId || params.borrowerProfile.toBase58());
+  const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
+  const attemptedUrls = new Set<string>();
+  let lastError: unknown;
 
-  let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | null = null;
-  try {
-    pick = await RpcPoolManager.pickRpcConnection(
-      normalizeRpcProfileId(rpcProfileId || toPk(borrower_profile).toBase58()),
-      { waitForMs: 3000, allowStale: true },
-    );
-    const provider = new anchor.AnchorProvider(pick.connection as Connection, dummyWallet as any, anchor.AnchorProvider.defaultOptions());
-    const program = new anchor.Program(srslyLegacyIdl, SRSLY_PROGRAM_ID, provider);
-
-    const tx = await program.methods.acceptRental(new BN(amount), new BN(duration)).accountsStrict({
-      mint: toPk(mint),
-      borrower: toPk(borrower),
-      borrower_profile: toPk(borrower_profile),
-      borrower_profile_faction: toPk(borrower_profile_faction),
-      borrower_token_account: toPk(borrower_token_account),
-      fleet: toPk(fleet),
-      game_id: toPk(game_id),
-      starbase: toPk(starbase),
-      starbase_player: toPk(starbase_player),
-      contract: toPk(contract),
-      rental_state: toPk(rental_state),
-      rental_authority: toPk(rental_authority),
-      rental_token_account: toPk(rental_token_account),
-      rental_thread: toPk(rental_thread),
-      fee_token_account: toPk(fee_token_account),
-      sage_program: toPk(sage_program),
-      antegen_program: toPk(antegen_program),
-      token_program: toPk(token_program),
-      associated_token_program: toPk(associated_token_program),
-      system_program: toPk(system_program),
-    }).transaction();
-    pick.release({ success: true });
-    console.log("[acceptRentalTx] Instruction data (hex):", tx.instructions[0].data?.toString('hex') || "N/A");
-    console.log("[acceptRentalTx] BN values - amount:", new BN(amount).toString(), "duration:", new BN(duration).toString());
-    console.log("[acceptRentalTx] TX oggetto:", tx);
-    return tx;
-  } catch (error) {
-    if (pick) {
-      pick.release({ success: false, errorType: getRpcErrorType(error) });
+  for (let attempt = 0; attempt < Math.max(1, pool.length); attempt += 1) {
+    let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | null = null;
+    try {
+      pick = await RpcPoolManager.pickRpcConnection(profileId, {
+        waitForMs: 3000,
+        allowStale: attempt > 2,
+        excludeUrls: attemptedUrls,
+      });
+      attemptedUrls.add(pick.endpoint.url);
+      setSdkConfig({ programs: "mainnet", rpcUrl: pick.endpoint.url, PublicKey });
+      const [borrowerState] = await PublicKey.findProgramAddress([
+        Buffer.from("borrower_state"), params.borrower.toBuffer(),
+      ], SRSLY_PROGRAM_ID);
+      const borrowerStateInfo = await (pick.connection as Connection).getAccountInfo(borrowerState);
+      const borrowerInstructions = borrowerStateInfo
+        ? []
+        : await createBorrower({ borrower: params.borrower.toBase58() });
+      const instructions = await acceptRental({
+        borrower: params.borrower.toBase58(),
+        borrowerProfile: params.borrowerProfile.toBase58(),
+        contract: params.contract.toBase58(),
+        rate: params.rate,
+        duration: params.durationSeconds,
+        computeUnits: 400_000,
+      });
+      const computeBudgetInstructions = instructions.filter(
+        (instruction) => String(instruction.programId) === "ComputeBudget111111111111111111111111111111",
+      );
+      const rentalInstructions = instructions.filter(
+        (instruction) => String(instruction.programId) !== "ComputeBudget111111111111111111111111111111",
+      );
+      const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10_000 });
+      const tx = new Transaction().add(...[...computeBudgetInstructions, priorityFeeInstruction, ...borrowerInstructions, ...rentalInstructions].map((instruction) => new TransactionInstruction({
+        programId: new PublicKey(instruction.programId),
+        keys: instruction.keys.map((key) => ({
+          pubkey: new PublicKey(key.pubkey),
+          isSigner: key.isSigner,
+          isWritable: key.isWritable,
+        })),
+        data: Buffer.from(instruction.data),
+      })));
+      pick.release({ success: true });
+      console.log("[acceptRentalTx] Instruction data (hex):", tx.instructions[0].data?.toString('hex') || "N/A");
+      console.log("[acceptRentalTx] SDK arguments:", { rate: params.rate.toString(), durationSeconds: params.durationSeconds });
+      console.log("[acceptRentalTx] TX oggetto:", tx);
+      return tx;
+    } catch (error) {
+      const errorType = getRpcErrorType(error);
+      if (pick) pick.release({ success: false, errorType });
+      lastError = error;
+      if (errorType !== '429' && errorType !== '503') throw error;
+      console.warn("[acceptRentalTx] RPC failed; trying next endpoint", { attempt: attempt + 1, errorType });
     }
-    throw error;
   }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "All RPC endpoints failed"));
 }

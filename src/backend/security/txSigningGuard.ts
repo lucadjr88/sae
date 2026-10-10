@@ -374,7 +374,10 @@ export function createTxSigningRequest(input: CreateTxSigningRequestInput): TxSi
     messageHash: sha256Hex(messageBytes),
     intentHash: buildTxIntentHash(tx),
     recentBlockhash: tx.recentBlockhash ?? null,
-    instructionIntents: buildInstructionIntents(tx),
+    // ComputeBudget instructions are wallet-adjustable (see isAllowedWalletInstruction), so they must not be required to match exactly.
+    instructionIntents: buildInstructionIntents(tx).filter(
+      (intent) => intent.programId !== ComputeBudgetProgram.programId.toBase58(),
+    ),
     accountPrivileges: buildAccountPrivileges(tx),
     meta,
   };

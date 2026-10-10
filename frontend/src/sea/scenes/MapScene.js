@@ -19,10 +19,11 @@ export class MapScene extends Phaser.Scene {
     this.selectedId = null;
   }
 
-  init({ feed, hud, starbases }) {
+  init({ feed, hud, starbases, onMapReady }) {
     this.feed = feed;
     this.hud = hud;
     this.starbases = starbases;
+    this.onMapReady = onMapReady;
     this.starbaseSectors = starbaseSectorSet(starbases);
   }
 
@@ -36,8 +37,10 @@ export class MapScene extends Phaser.Scene {
     if (this.feed.lastSnapshot) this.applySnapshot(this.feed.lastSnapshot);
     this.hud.on('select', id => this.select(id, true));
     this.hud.on('rotate', dir => this.rotateView(dir));
+    this.hud.on('zoom', dir => this.zoomView(dir));
     this.input.keyboard.on('keydown-Q', () => this.rotateView(-1));
     this.input.keyboard.on('keydown-E', () => this.rotateView(1));
+    this.onMapReady?.();
   }
 
   setupCamera() {
@@ -52,8 +55,13 @@ export class MapScene extends Phaser.Scene {
       cam.scrollY -= (p.y - p.prevPosition.y) / cam.zoom;
     });
     this.input.on('wheel', (_p, _o, _dx, dy) => {
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.1), ZOOM_MIN, ZOOM_MAX));
+      this.zoomView(dy > 0 ? -1 : 1);
     });
+  }
+
+  zoomView(dir) {
+    const cam = this.cameras.main;
+    cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dir > 0 ? 1.1 : 0.9), ZOOM_MIN, ZOOM_MAX));
   }
 
   centerOnFleets() {
