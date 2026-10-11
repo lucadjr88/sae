@@ -32,11 +32,12 @@ body {
 .sea-loader__image {
     display: block;
     width: min(52vw, 420px);
-    max-height: 56vh;
+    aspect-ratio: 1; /* Forza il box a essere perfettamente quadrato */
     object-fit: contain;
-    /* Sfumatura graduale dei bordi per fonderla con lo sfondo */
-    -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);
-    mask-image: radial-gradient(circle, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);
+    
+    /* Usa closest-side per fare in modo che il cerchio tocchi perfettamente i bordi del box 
+    -webkit-mask-image: radial-gradient(circle closest-side, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);
+    mask-image: radial-gradient(circle closest-side, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);*/
 }
 
 .sea-loader__spinner {
