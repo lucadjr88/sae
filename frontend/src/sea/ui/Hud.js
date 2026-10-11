@@ -54,21 +54,43 @@ export class Hud extends Emitter {
         //mark.textContent = className === 'zoom-in' ? '+' : '−';
         btn.append(mark);
       }
-      btn.addEventListener('click', () => this.emit(action, className === 'clockwise' || className === 'zoom-in' ? -1 : 1));
+      btn.addEventListener('click', () => this.emit(action, className === 'clockwise' || className === 'zoom-out' ? -1 : 1));
       this.toolbar.append(btn);
     }
     document.body.append(this.toolbar);
     this.status = document.createElement('div');
     this.status.className = 'status';
+    this.status.setAttribute('role', 'button');
+    this.status.setAttribute('tabindex', '0');
+    this.status.setAttribute('aria-label', 'Mostra elenco flotte');
+    this.status.setAttribute('aria-expanded', 'false');
+    this.status.addEventListener('click', () => this.toggleExpanded());
+    this.status.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      this.toggleExpanded();
+    });
     this.list = document.createElement('div');
+    this.list.className = 'fleet-list';
+    root.classList.add('collapsed');
     root.append(this.status, this.list);
     this.renderTimer = setInterval(() => this.render(), 1000);
   }
 
   destroy() {
     clearInterval(this.renderTimer);
+    clearTimeout(this.collapseTimer);
     this.toolbar.remove();
     this.root.replaceChildren();
+  }
+
+  toggleExpanded() {
+    const expanded = this.root.classList.contains('collapsed');
+    this.root.classList.toggle('collapsed', !expanded);
+    this.status.setAttribute('aria-expanded', String(expanded));
+    this.status.setAttribute('aria-label', expanded ? 'Nascondi elenco flotte' : 'Mostra elenco flotte');
+    clearTimeout(this.collapseTimer);
+    if (expanded) this.collapseTimer = setTimeout(() => this.toggleExpanded(), 10000);
   }
 
   nameAt(sector) {

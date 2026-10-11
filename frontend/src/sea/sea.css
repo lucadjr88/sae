@@ -69,6 +69,20 @@ body {
 #hud .status {
     margin-bottom: 8px;
     opacity: 0.85;
+    cursor: pointer;
+}
+
+#hud.collapsed .status {
+    margin-bottom: 0;
+}
+
+#hud.collapsed .fleet-list {
+    display: none;
+}
+
+#hud .status:focus-visible {
+    outline: 2px solid #9be7ff;
+    outline-offset: 2px;
 }
 
 #hud .status.error {
@@ -107,8 +121,6 @@ body {
     column-gap: 8px;
     padding: 6px 12px;
     transform: translateX(-50%);
-    border-radius: 8px;
-    background: rgba(5, 25, 38, 0.72);
 }
 
 .map-controls button {
@@ -151,11 +163,6 @@ body {
     grid-column: 1;
 }
 
-.map-controls button:hover,
-.map-controls button:focus-visible {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 50%;
-}
 
 .map-controls button img {
     width: 60px;
@@ -173,8 +180,8 @@ body {
 }
 
 .map-controls .zoom-out img {
-    width: 40px;
-    height: 40px;
+    width: 30px;
+    height: 30px;
 }
 
 .zoom-mark {
