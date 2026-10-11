@@ -64,13 +64,11 @@ export class MapScene extends Phaser.Scene {
     cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dir > 0 ? 1.1 : 0.9), ZOOM_MIN, ZOOM_MAX));
   }
 
-  centerOnFleets() {
-    const now = Date.now();
-    const pts = [...this.fleets.values()].map(f => fleetPosition(f, now)).filter(Boolean);
-    if (!pts.length) return;
-    const x = pts.reduce((a, p) => a + p.x, 0) / pts.length;
-    const y = pts.reduce((a, p) => a + p.y, 0) / pts.length;
-    const s = sectorToScreen(x, y);
+  centerOnFirstFleet() {
+    const fleet = [...this.fleets.values()].sort((a, b) => a.name.localeCompare(b.name))[0];
+    const pos = fleet && fleetPosition(fleet, Date.now());
+    if (!pos) return;
+    const s = sectorToScreen(pos.x, pos.y);
     this.cameras.main.centerOn(s.x, s.y);
     this.centered = true;
   }
@@ -88,7 +86,7 @@ export class MapScene extends Phaser.Scene {
       this.sprites.delete(id);
       this.fleets.delete(id);
     }
-    if (!this.centered) this.centerOnFleets();
+    if (!this.centered) this.centerOnFirstFleet();
   }
 
   // Ruota di un quarto di giro mantenendo al centro dello schermo lo stesso punto della mappa.
