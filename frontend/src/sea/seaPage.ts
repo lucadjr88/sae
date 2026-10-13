@@ -13,7 +13,7 @@ const profileInput = document.querySelector<HTMLInputElement>('#profile-id');
 const profileError = document.querySelector<HTMLDivElement>('#profile-error');
 const loader = document.querySelector<HTMLDivElement>('#sea-loader');
 const initialProfileId = new URLSearchParams(location.search).get('profileId') ?? '';
-const returnLink = document.querySelector<HTMLAnchorElement>('.sea-home');
+const returnLink = document.querySelector<HTMLAnchorElement>('.sea-topbar__link');
 
 returnLink?.addEventListener('click', event => {
   try {

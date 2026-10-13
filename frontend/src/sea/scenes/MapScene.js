@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import { drawSea, SEA_DARK_HEX } from '../map/drawSea.js';
-import { drawStarbases } from '../map/drawStarbases.js';
+import { drawStarbases, ISLE_WIDTH } from '../map/drawStarbases.js';
 import { sectorToScreen, screenToSector, getRotation, setRotation } from '../map/iso.js';
 import { fleetPosition } from '../model/fleetPosition.js';
-import { starbaseSectorSet } from '../model/starbaseSectors.js';
+import { starbaseSectorKey, starbaseSectorSet } from '../model/starbaseSectors.js';
 import { scaleLabels } from '../map/labels.js';
 import { FleetSprite } from '../entities/FleetSprite.js';
 
@@ -25,6 +25,9 @@ export class MapScene extends Phaser.Scene {
     this.starbases = starbases;
     this.onMapReady = onMapReady;
     this.starbaseSectors = starbaseSectorSet(starbases);
+    this.starbaseWidths = new Map(starbases.map(({ sector, kind }) => [
+      starbaseSectorKey(sector[0], sector[1]), ISLE_WIDTH[kind] ?? ISLE_WIDTH.mrz,
+    ]));
   }
 
   create() {
@@ -78,7 +81,7 @@ export class MapScene extends Phaser.Scene {
     for (const fleet of snapshot.fleets) {
       seen.add(fleet.id);
       this.fleets.set(fleet.id, fleet);
-      if (!this.sprites.has(fleet.id)) this.sprites.set(fleet.id, new FleetSprite(this, fleet, this.starbaseSectors));
+      if (!this.sprites.has(fleet.id)) this.sprites.set(fleet.id, new FleetSprite(this, fleet, this.starbaseSectors, this.starbaseWidths));
     }
     for (const id of [...this.sprites.keys()]) {
       if (seen.has(id)) continue;

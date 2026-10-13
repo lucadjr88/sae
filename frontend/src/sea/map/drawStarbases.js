@@ -3,7 +3,7 @@ import { isleFor } from './isleSprites.js';
 import { makeLabel } from './labels.js';
 
 // Larghezza dell'isola per tipo di starbase.
-const ISLE_WIDTH = { css: 560, faction: 300, mrz: 190 };
+export const ISLE_WIDTH = { css: 800, faction: 400, mrz: 300 };
 const FACTION_COLORS = { MUD: '#ffb86b', ONI: '#ff7b9c', Ustur: '#7fd4ff' };
 const ISLE_DEPTH = -1e5;
 
