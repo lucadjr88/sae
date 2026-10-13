@@ -60,7 +60,7 @@ async function loadFleetsFromCache(profileId: string): Promise<any[]> {
 }
 
 // Fetch fleets associated to a profileId using getProgramAccounts + memcmp
-export async function fetchProfileFleets(profileId: string, profileOffset = 41, persistCache = true, useCacheFallback = true, logRpcDetails = true): Promise<any[]> {
+export async function fetchProfileFleets(profileId: string, profileOffset = 41, persistCache = true, useCacheFallback = true, logRpcDetails = true, onRpc?: (endpoint: any) => void): Promise<any[]> {
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
   const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId).catch(() => []);
   const maxAttempts = Math.max(5, Math.round((Array.isArray(pool) ? pool.length : 0) * 1.5));
@@ -69,6 +69,7 @@ export async function fetchProfileFleets(profileId: string, profileOffset = 41, 
     let pick: any = null;
     try {
       pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 3000, allowStale: attempt > 2 });
+    onRpc?.(pick.endpoint);
     const { connection, release } = pick;
     // call getProgramAccounts with memcmp on owner_profile
     const programPubkey = new PublicKey(SAGE_PROGRAM_ID);

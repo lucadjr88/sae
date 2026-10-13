@@ -12,8 +12,14 @@
       <span class="sea-loader__spinner" aria-hidden="true"></span>
     </div>
     <div id="game"></div>
-    <aside id="hud"></aside>
-    <a class="sea-home" href="/" title="Torna a SAE" aria-label="Torna a SAE">⌂</a>
+    <aside id="hud">
+      <div class="hud-content"></div>
+      <div class="hud-frame" aria-hidden="true"></div>
+    </aside>
+    <header class="sea-topbar">
+      <img class="sea-topbar__logo" src="/sea/assets/Gemini_Generated_Image_3wdg873wdg873wdg_small.png" alt="Star Atlas Explorer" />
+      <a class="sea-topbar__link" href="/">Torna a SAE</a>
+    </header>
     <form id="profile-form" class="profile-form">
       <label for="profile-id">Player Profile ID</label>
       <input id="profile-id" name="profileId" autocomplete="off" required />

@@ -1,6 +1,7 @@
 import { Emitter } from '../util/emitter.js';
 import { fleetPosition } from '../model/fleetPosition.js';
 import { STALE_AFTER_MS } from '../config.js';
+import { shipLook } from '../map/shipSprites.js';
 
 const fmtSector = s => `(${s[0]}, ${s[1]})`;
 
@@ -25,6 +26,7 @@ export class Hud extends Emitter {
   constructor(root, starbases = []) {
     super();
     this.root = root;
+    this.content = root.querySelector('.hud-content');
     this.baseNames = new Map(starbases.map(sb => [sb.sector.join(','), sb.name]));
     this.snapshot = { updatedAt: 0, error: null, fleets: [] };
     this.connection = 'disconnected';
@@ -60,37 +62,16 @@ export class Hud extends Emitter {
     document.body.append(this.toolbar);
     this.status = document.createElement('div');
     this.status.className = 'status';
-    this.status.setAttribute('role', 'button');
-    this.status.setAttribute('tabindex', '0');
-    this.status.setAttribute('aria-label', 'Mostra elenco flotte');
-    this.status.setAttribute('aria-expanded', 'false');
-    this.status.addEventListener('click', () => this.toggleExpanded());
-    this.status.addEventListener('keydown', event => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      event.preventDefault();
-      this.toggleExpanded();
-    });
     this.list = document.createElement('div');
     this.list.className = 'fleet-list';
-    root.classList.add('collapsed');
-    root.append(this.status, this.list);
+    this.content.append(this.status, this.list);
     this.renderTimer = setInterval(() => this.render(), 1000);
   }
 
   destroy() {
     clearInterval(this.renderTimer);
-    clearTimeout(this.collapseTimer);
     this.toolbar.remove();
-    this.root.replaceChildren();
-  }
-
-  toggleExpanded() {
-    const expanded = this.root.classList.contains('collapsed');
-    this.root.classList.toggle('collapsed', !expanded);
-    this.status.setAttribute('aria-expanded', String(expanded));
-    this.status.setAttribute('aria-label', expanded ? 'Nascondi elenco flotte' : 'Mostra elenco flotte');
-    clearTimeout(this.collapseTimer);
-    if (expanded) this.collapseTimer = setTimeout(() => this.toggleExpanded(), 10000);
+    this.content.replaceChildren();
   }
 
   nameAt(sector) {
@@ -120,12 +101,17 @@ export class Hud extends Emitter {
     for (const fleet of [...this.snapshot.fleets].sort((a, b) => a.name.localeCompare(b.name))) {
       const el = document.createElement('div');
       el.className = 'fleet';
+      const icon = document.createElement('img');
+      icon.className = 'ship-icon';
+      icon.src = `/sea/assets/ships_clean/${shipLook(fleet).model}_furled.png`;
+      icon.alt = '';
+      icon.setAttribute('aria-hidden', 'true');
       const name = document.createElement('div');
       name.className = 'name';
       name.textContent = fleet.name;
       const detail = document.createElement('div');
       detail.className = 'detail';
-      el.append(name, detail);
+      el.append(icon, name, detail);
       el.addEventListener('click', () => this.emit('select', fleet.id));
       this.list.append(el);
       this.rows.set(fleet.id, { el, detail, fleet });

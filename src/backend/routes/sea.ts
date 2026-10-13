@@ -56,20 +56,59 @@ function largestSize(counts: Record<string, number>): string {
   return 'small';
 }
 
-async function withRpc<T>(profileId: string, action: (connection: any) => Promise<T>): Promise<T> {
-  const pick = await RpcPoolManager.pickRpcConnection(profileId, { waitForMs: 3000, allowStale: true });
-  const startedAt = Date.now();
-  try {
-    const value = await action(pick.connection);
-    pick.release({ success: true, latencyMs: Date.now() - startedAt });
-    return value;
-  } catch (error) {
-    pick.release({ success: false, errorType: 'error' });
-    throw error;
-  }
+function rpcErrorType(error: unknown): '429' | '503' | 'error' {
+  const value = error as { status?: unknown; value?: { error?: { code?: unknown; message?: unknown } } };
+  const status = typeof value?.status === 'number' ? value.status : undefined;
+  const rpcCode = typeof value?.value?.error?.code === 'number' ? value.value.error.code : undefined;
+  const rpcMessage = typeof value?.value?.error?.message === 'string' ? value.value.error.message : '';
+  const message = `${error instanceof Error ? error.message : String(error ?? '')} ${rpcMessage}`;
+  if (status === 429 || /429|Too Many Requests/i.test(message)) return '429';
+  if (
+    [408, 500, 502, 503, 504].includes(status ?? 0) ||
+    rpcCode === -32603 ||
+    /500|502|503|504|Service Unavailable|Internal JSON-RPC error|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|socket hang up/i.test(message)
+  ) return '503';
+  return 'error';
 }
 
-async function resolveSectors(profileId: string, fleets: any[]): Promise<Map<string, number[]>> {
+async function withRpc<T>(profileId: string, action: (connection: any) => Promise<T>, onRpc?: (endpoint: any) => void): Promise<T> {
+  const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
+  const urls = new Set(pool.map(endpoint => endpoint?.url).filter((url): url is string => typeof url === 'string'));
+  const maxAttempts = Math.min(3, Math.max(1, urls.size));
+  const excludedUrls = new Set<string>();
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | undefined;
+    let released = false;
+    try {
+      pick = await RpcPoolManager.pickRpcConnection(profileId, {
+        waitForMs: 3000,
+        allowStale: true,
+        excludeUrls: excludedUrls,
+      });
+      onRpc?.(pick.endpoint);
+      const startedAt = Date.now();
+      const value = await action(pick.connection);
+      released = true;
+      pick.release({ success: true, latencyMs: Date.now() - startedAt });
+      return value;
+    } catch (error) {
+      const errorType = rpcErrorType(error);
+      if (pick) {
+        const url = pick.endpoint?.url;
+        if (typeof url === 'string') excludedUrls.add(url);
+        if (!released) {
+          released = true;
+          pick.release({ success: false, errorType });
+        }
+      }
+      if (errorType === 'error' || attempt + 1 >= maxAttempts) throw error;
+      await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  throw new Error('No available RPC endpoint');
+}
+
+async function resolveSectors(profileId: string, fleets: any[], onRpc?: (endpoint: any) => void): Promise<Map<string, number[]>> {
   const refs = new Map<string, 'Planet' | 'Starbase'>();
   for (const fleet of fleets) {
     const state = fleet.fleet_state;
@@ -82,7 +121,7 @@ async function resolveSectors(profileId: string, fleets: any[]): Promise<Map<str
     const batch = entries.slice(start, start + 100);
     const infos = await withRpc(profileId, connection => connection.getMultipleAccountsInfo(
       batch.map(([key]) => new PublicKey(key)), 'confirmed'
-    ));
+    ), onRpc);
     batch.forEach(([key, type], index) => {
       const info = infos[index];
       if (!info) return;
@@ -126,18 +165,34 @@ function toSeaFleet(fleet: any, borrowedIds: Set<string>, sectors: Map<string, n
   return result;
 }
 
+function seaRpc(endpoint: any): { name: string; host: string } {
+  let host = 'unknown';
+  try {
+    host = new URL(endpoint?.url).host;
+  } catch {
+    // Keep the panel useful even if an endpoint has a non-standard URL.
+  }
+  return { name: String(endpoint?.name ?? host), host };
+}
+
 async function createSnapshot(profileId: string) {
+  const rpcEndpoints = new Map<string, { name: string; host: string }>();
+  const rememberRpc = (endpoint: any) => {
+    const rpc = seaRpc(endpoint);
+    rpcEndpoints.set(`${rpc.name}|${rpc.host}`, rpc);
+  };
   const [owned, borrowed] = await Promise.all([
-    fetchProfileFleets(profileId, 41, false, false, false),
-    fetchProfileFleets(profileId, 105, false, false, false),
+    fetchProfileFleets(profileId, 41, false, false, false, rememberRpc),
+    fetchProfileFleets(profileId, 105, false, false, false, rememberRpc),
   ]);
   const borrowedIds = new Set(borrowed.map(fleet => fleet.pubkey));
   const fleets = [...new Map([...owned, ...borrowed].map(fleet => [fleet.pubkey, fleet])).values()];
-  const sectors = await resolveSectors(profileId, fleets);
+  const sectors = await resolveSectors(profileId, fleets, rememberRpc);
   return {
     profileId,
     updatedAt: Date.now(),
     error: null,
+    rpcEndpoints: [...rpcEndpoints.values()],
     fleets: fleets.map(fleet => toSeaFleet(fleet, borrowedIds, sectors)),
   };
 }
