@@ -76,11 +76,11 @@ body {
     background: rgb(5, 25, 38);
 
     /* Maschera di dissolvenza rettangolare su tutti e quattro i lati */
-    -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 8%, rgba(0,0,0,1) 92%, rgba(0,0,0,0) 100%),
-                        linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 8%, rgba(0,0,0,1) 92%, rgba(0,0,0,0) 100%);
+    -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0) 0, rgba(0,0,0,1) 50px, rgba(0,0,0,1) calc(100% - 50px), rgba(0,0,0,0) 100%),
+                        linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,1) 15px, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0) 100%);
     -webkit-mask-composite: intersect;
-    mask-image: linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 8%, rgba(0,0,0,1) 92%, rgba(0,0,0,0) 100%),
-                linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 8%, rgba(0,0,0,1) 92%, rgba(0,0,0,0) 100%);
+    mask-image: linear-gradient(to right, rgba(0,0,0,0) 0, rgba(0,0,0,1) 50px, rgba(0,0,0,1) calc(100% - 50px), rgba(0,0,0,0) 100%),
+                linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,1) 15px, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0) 100%);
     mask-composite: intersect;
 
 }
@@ -93,7 +93,7 @@ body {
     border-width: 105px 84px;
     border-style: solid;
     border-color: transparent;
-    border-image: url('/sea/assets/cornice.png') 750 600 / 105px 84px / 0 stretch repeat;
+    border-image: url('/sea/assets/cornice.png') 900 600 / 105px 84px / 0 stretch repeat;
     pointer-events: none;
 }
 
@@ -140,11 +140,283 @@ body {
 }
 
 #hud .fleet .name {
+    display: flex;
+    align-items: center;
+    min-width: 0;
     font-weight: bold;
+}
+
+#hud .fleet-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#hud .fleet-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    padding-left: 8px;
+}
+
+#hud .fleet-action {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: rgba(230, 240, 245, 0.75);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1;
+}
+
+#hud .fleet-action:first-child {
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-family: serif;
+    font-size: 11px;
+    font-style: italic;
+}
+
+#hud .fleet-action:nth-child(2) {
+    font-size: 16px;
+}
+
+#hud .fleet-action:hover {
+    color: #fff;
+}
+
+#hud .fleet-action:focus-visible,
+.fleet-info-close:focus-visible {
+    outline: 2px solid #9be7ff;
+    outline-offset: 2px;
 }
 
 #hud .fleet .detail {
     opacity: 0.8;
+}
+
+.fleet-info-overlay {
+    position: fixed;
+    z-index: 20;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.fleet-info-overlay[hidden] {
+    display: none;
+}
+
+.fleet-info-panel {
+    position: relative;
+    width: min(520px, calc(100vw - 16px));
+    min-height: 300px;
+    max-height: calc(100vh - 16px);
+    overflow: hidden;
+}
+
+.fleet-info-content {
+    box-sizing: border-box;
+    min-height: 300px;
+    max-height: calc(100vh - 16px);
+    padding: 82px 84px;
+    overflow-y: auto;
+    background: rgb(5, 25, 38);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    /* Maschera di dissolvenza rettangolare su tutti e quattro i lati */
+    -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0) 0, rgba(0,0,0,1) 60px, rgba(0,0,0,1) calc(100% - 60px), rgba(0,0,0,0) 100%),
+                        linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,1) 15px, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0) 100%);
+    -webkit-mask-composite: intersect;
+    mask-image: linear-gradient(to right, rgba(0,0,0,0) 0, rgba(0,0,0,1) 60px, rgba(0,0,0,1) calc(100% - 60px), rgba(0,0,0,0) 100%),
+                linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,1) 15px, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0) 100%);
+    mask-composite: intersect;
+}
+
+.fleet-info-content::-webkit-scrollbar {
+    display: none;
+}
+
+.fleet-info-content h2 {
+    margin: 0 0 10px;
+    overflow-wrap: anywhere;
+    font-size: 16px;
+}
+
+.automation-select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 8px;
+    border: 1px solid rgba(230, 240, 245, 0.45);
+    border-radius: 3px;
+    background: rgba(5, 25, 38, 0.95);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.automation-select option {
+    background: rgb(5, 25, 38);
+    color: #e8f1f5;
+}
+
+.automation-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.automation-form[hidden] {
+    display: none;
+}
+
+.automation-column {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+    min-width: 0;
+}
+
+.automation-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.automation-field > span,
+.automation-checkbox > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.automation-field input,
+.automation-field textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 5px 6px;
+    border: 1px solid rgba(230, 240, 245, 0.35);
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    font: inherit;
+}
+
+.automation-field input[readonly],
+.automation-field textarea[readonly] {
+    background: rgba(255, 255, 255, 0.14);
+    color: rgba(232, 241, 245, 0.78);
+}
+
+.automation-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.automation-checkbox input {
+    flex: 0 0 auto;
+    margin: 2px 0 0;
+}
+
+@media (max-width: 600px) {
+    .automation-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.fleet-info-body {
+    display: grid;
+    gap: 10px;
+}
+
+.fleet-info-section {
+    min-width: 0;
+}
+
+.fleet-info-section h3 {
+    margin: 10px 0 4px;
+    font-size: 13px;
+}
+
+.fleet-info-fields {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+}
+
+.fleet-info-field {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 8px;
+    min-width: 0;
+}
+
+.fleet-info-field dt {
+    opacity: 0.72;
+}
+
+.fleet-info-field dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
+.fleet-info-section details {
+    margin-top: 8px;
+}
+
+.fleet-info-section pre {
+    max-height: 140px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 10px;
+}
+
+.fleet-info-close {
+    position: absolute;
+    z-index: 2;
+    top: 62px;
+    right: 70px;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.fleet-info-frame {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    box-sizing: border-box;
+    border-width: 72px 58px;
+    border-style: solid;
+    border-color: transparent;
+    border-image: url('/sea/assets/cornice.png') 900 600 / 72px 58px / 0 stretch repeat;
+    pointer-events: none;
 }
 
 .map-controls {

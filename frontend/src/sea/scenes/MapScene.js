@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { drawSea, SEA_DARK_HEX } from '../map/drawSea.js';
+import { drawSea, SEA_EDGE_HEX } from '../map/drawSea.js';
 import { drawStarbases, ISLE_WIDTH } from '../map/drawStarbases.js';
 import { sectorToScreen, screenToSector, getRotation, setRotation } from '../map/iso.js';
 import { fleetPosition } from '../model/fleetPosition.js';
@@ -48,7 +48,7 @@ export class MapScene extends Phaser.Scene {
 
   setupCamera() {
     const cam = this.cameras.main;
-    cam.setBackgroundColor(SEA_DARK_HEX);
+    cam.setBackgroundColor(SEA_EDGE_HEX);
     cam.setZoom(ZOOM_START);
     cam.centerOn(0, 0);
     this.centered = false;

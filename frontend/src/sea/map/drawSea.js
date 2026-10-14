@@ -5,6 +5,7 @@ const LIGHT = [43, 149, 219];
 const DARK = [10, 58, 99];
 const DOWNSCALE = 12;
 export const SEA_DARK_HEX = 0x0a3a63;
+export const SEA_EDGE_HEX = 0x2b95db;
 
 // Raggi, in settori dal centro: scuro fino a R_DARK, chiaro da R_LIGHT in poi.
 const R_DARK = 12;

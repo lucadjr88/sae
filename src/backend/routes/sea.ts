@@ -30,6 +30,7 @@ type SeaFleet = {
   departure: number;
   arrival: number;
   scanCooldownEnd: number;
+  chainData: Record<string, unknown>;
 };
 
 const snapshotCache = new Map<string, { expiresAt: number; value: any }>();
@@ -151,6 +152,7 @@ function toSeaFleet(fleet: any, borrowedIds: Set<string>, sectors: Map<string, n
     departure: 0,
     arrival: 0,
     scanCooldownEnd: Number(fleet.scan_cooldown_expires_at ?? 0) * 1000,
+    chainData: fleet,
   };
 
   if (state === 'Idle' || state === 'Respawn') result.sector = raw.sector ?? null;

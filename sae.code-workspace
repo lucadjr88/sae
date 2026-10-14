@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../condivisione/logs"
+		},
+		{
+			"path": "../sly"
 		}
 	],
 	"settings": {
