@@ -6,6 +6,7 @@ import { CargoType, CARGO_IDL } from '@staratlas/cargo';
 import { isIP } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import bs58 from 'bs58';
 import nacl from 'tweetnacl';
 import fs from 'fs';
@@ -74,7 +75,7 @@ type SeaFleet = {
 
 const snapshotCache = new Map<string, { expiresAt: number; value: any }>();
 const snapshotPending = new Map<string, Promise<any>>();
-const scanPreparations = new Map<string, {
+type ScanPreparation = {
   action: 'scan' | 'subwarp_start' | 'warp_start' | 'subwarp_exit' | 'warp_exit';
   profileId: string;
   fleetId: string;
@@ -91,7 +92,79 @@ const scanPreparations = new Map<string, {
   blockhash: string;
   lastValidBlockHeight: number;
   expiresAt: number;
-}>();
+};
+const scanPreparations = new Map<string, ScanPreparation>();
+const scanPreparationDirectory = path.join(process.cwd(), 'cache', 'sea-preparations');
+
+function scanPreparationPath(prepareId: string): string {
+  return path.join(scanPreparationDirectory, `${prepareId}.json`);
+}
+
+async function pruneScanPreparations(now: number): Promise<void> {
+  for (const [id, item] of scanPreparations) if (item.expiresAt <= now) scanPreparations.delete(id);
+  let filenames: string[];
+  try {
+    filenames = await fs.promises.readdir(scanPreparationDirectory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  await Promise.all(filenames.filter(filename => filename.endsWith('.json')).map(async filename => {
+    const filePath = path.join(scanPreparationDirectory, filename);
+    try {
+      const item = JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
+      if (Number(item.expiresAt) <= now) await fs.promises.unlink(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn('[sea] could not prune stored preparation', { file: filename, error: String(error) });
+      }
+    }
+  }));
+}
+
+async function storeScanPreparation(prepareId: string, preparation: ScanPreparation): Promise<void> {
+  await fs.promises.mkdir(scanPreparationDirectory, { recursive: true });
+  const destination = scanPreparationPath(prepareId);
+  const temporary = `${destination}.${process.pid}.tmp`;
+  const stored = {
+    ...preparation,
+    transaction: Buffer.from(preparation.transaction.serialize()).toString('base64'),
+  };
+  try {
+    await fs.promises.writeFile(temporary, JSON.stringify(stored), { encoding: 'utf8', mode: 0o600 });
+    await fs.promises.rename(temporary, destination);
+  } catch (error) {
+    await fs.promises.unlink(temporary).catch(() => undefined);
+    throw error;
+  }
+  scanPreparations.set(prepareId, preparation);
+}
+
+async function getScanPreparation(prepareId: string): Promise<ScanPreparation | undefined> {
+  const cached = scanPreparations.get(prepareId);
+  if (cached) return cached;
+  try {
+    const stored = JSON.parse(await fs.promises.readFile(scanPreparationPath(prepareId), 'utf8'));
+    const preparation: ScanPreparation = {
+      ...stored,
+      transaction: VersionedTransaction.deserialize(Buffer.from(stored.transaction, 'base64')),
+    };
+    scanPreparations.set(prepareId, preparation);
+    return preparation;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+async function deleteScanPreparation(prepareId: string): Promise<void> {
+  scanPreparations.delete(prepareId);
+  try {
+    await fs.promises.unlink(scanPreparationPath(prepareId));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
 let starbaseCache: { expiresAt: number; value: any[] } | null = null;
 let starbasePending: Promise<any[]> | null = null;
 
@@ -743,9 +816,9 @@ router.post('/sea/scan/prepare', async (req, res) => {
     let prepareId: string | null = null;
     if (!prepared.simulation.err) {
       const now = Date.now();
-      for (const [id, item] of scanPreparations) if (item.expiresAt <= now) scanPreparations.delete(id);
+      await pruneScanPreparations(now);
       prepareId = randomUUID();
-      scanPreparations.set(prepareId, {
+      await storeScanPreparation(prepareId, {
         action: prepared.action,
         profileId,
         fleetId,
@@ -926,9 +999,9 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
     let prepareId: string | null = null;
     if (!prepared.simulation.err) {
       const now = Date.now();
-      for (const [id, item] of scanPreparations) if (item.expiresAt <= now) scanPreparations.delete(id);
+      await pruneScanPreparations(now);
       prepareId = randomUUID();
-      scanPreparations.set(prepareId, {
+      await storeScanPreparation(prepareId, {
         action: 'subwarp_start',
         profileId,
         fleetId,
@@ -1123,9 +1196,9 @@ router.post('/sea/warp/prepare', async (req, res) => {
     let prepareId: string | null = null;
     if (!prepared.simulation.err) {
       const now = Date.now();
-      for (const [id, item] of scanPreparations) if (item.expiresAt <= now) scanPreparations.delete(id);
+      await pruneScanPreparations(now);
       prepareId = randomUUID();
-      scanPreparations.set(prepareId, {
+      await storeScanPreparation(prepareId, {
         action: 'warp_start', profileId, fleetId, wallet: walletAddress.toBase58(), transaction: prepared.transaction,
         feePolicy: prepared.feePolicy,
         blockhash: prepared.blockhash, lastValidBlockHeight: prepared.lastValidBlockHeight, expiresAt: now + 90_000,
@@ -1292,9 +1365,9 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
     let prepareId: string | null = null;
     if (!prepared.simulation.err) {
       const now = Date.now();
-      for (const [id, item] of scanPreparations) if (item.expiresAt <= now) scanPreparations.delete(id);
+      await pruneScanPreparations(now);
       prepareId = randomUUID();
-      scanPreparations.set(prepareId, {
+      await storeScanPreparation(prepareId, {
         action: exitAction,
         profileId,
         fleetId,
@@ -1340,7 +1413,13 @@ router.post('/sea/scan/submit', async (req, res) => {
   const profileInput = typeof req.body?.profileId === 'string' ? req.body.profileId : '';
   const walletInput = typeof req.body?.wallet === 'string' ? req.body.wallet : '';
   const transactionInput = typeof req.body?.transaction === 'string' ? req.body.transaction : '';
-  const preparation = scanPreparations.get(prepareId);
+  let preparation: ScanPreparation | undefined;
+  try {
+    preparation = await getScanPreparation(prepareId);
+  } catch (error) {
+    console.error('[sea] failed to load stored preparation', { pid: process.pid, prepareId, error: String(error) });
+    return res.status(503).json({ error: 'SCAN_PREPARATION_STORE_UNAVAILABLE' });
+  }
   if (!preparation) {
     console.warn('[sea] transaction preparation not found', { pid: process.pid, prepareId });
     return res.status(410).json({ error: 'SCAN_PREPARATION_NOT_FOUND' });
@@ -1352,7 +1431,7 @@ router.post('/sea/scan/submit', async (req, res) => {
       prepareId,
       expiredByMs: Date.now() - preparation.expiresAt,
     });
-    scanPreparations.delete(prepareId);
+    await deleteScanPreparation(prepareId);
     return res.status(410).json({ error: 'SCAN_PREPARATION_EXPIRED' });
   }
 
@@ -1400,7 +1479,7 @@ router.post('/sea/scan/submit', async (req, res) => {
     });
   }
 
-  scanPreparations.delete(prepareId);
+  await deleteScanPreparation(prepareId);
   let submitRpc = { name: 'unknown', host: 'unknown' };
   try {
     const result = await withRpc(profileId, async connection => {

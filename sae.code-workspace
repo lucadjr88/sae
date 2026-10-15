@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../sly"
+		},
+		{
+			"path": "../condivisione/sae log condivisi"
 		}
 	],
 	"settings": {
