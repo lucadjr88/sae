@@ -1456,14 +1456,25 @@ router.post('/sea/scan/submit', async (req, res) => {
   const preparedMessage = Buffer.from(preparation.transaction.message.serialize());
   const signedMessage = Buffer.from(signedTransaction.message.serialize());
   const requiredSignatures = signedTransaction.message.header.numRequiredSignatures;
-  const signaturesValid = signedTransaction.signatures.slice(0, requiredSignatures).every((signature, index) =>
+  const signatureValidity = signedTransaction.signatures.slice(0, requiredSignatures).map((signature, index) =>
     signature.some(byte => byte !== 0) && nacl.sign.detached.verify(
       signedMessage,
       signature,
       signedTransaction.message.staticAccountKeys[index].toBytes(),
     )
   );
-  if (!preparedMessage.equals(signedMessage) || !signaturesValid) {
+  const messageMatches = preparedMessage.equals(signedMessage);
+  const signaturesValid = signatureValidity.length === requiredSignatures && signatureValidity.every(Boolean);
+  if (!messageMatches || !signaturesValid) {
+    console.warn('[sea] signed transaction validation failed', {
+      pid: process.pid,
+      action: preparation.action,
+      prepareId,
+      messageMatches,
+      requiredSignatures,
+      signatureCount: signedTransaction.signatures.length,
+      validSignatures: signatureValidity.filter(Boolean).length,
+    });
     return res.status(403).json({ error: 'SCAN_SIGNATURE_OR_MESSAGE_INVALID' });
   }
 

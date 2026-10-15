@@ -14,7 +14,7 @@ function installSharedLogFile() {
 
   try {
     fs.mkdirSync(directory, { recursive: true });
-    stream = fs.createWriteStream(path.join(directory, filename), { flags: 'a', mode: 0o600 });
+    stream = fs.createWriteStream(path.join(directory, filename), { flags: 'a', mode: 0o640 });
   } catch (error) {
     process.stderr.write(`[log-context] unable to open shared log file: ${String(error)}\n`);
     return;
