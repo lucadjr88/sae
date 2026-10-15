@@ -211,7 +211,7 @@ function rpcErrorType(error: unknown): '429' | '503' | 'unsupported' | 'error' {
 }
 
 const MAX_WALLET_COMPUTE_UNITS = 1_400_000;
-const MAX_WALLET_PRIORITY_FEE_LAMPORTS = 50_000n;
+const MAX_WALLET_PRIORITY_FEE_LAMPORTS = 5_000n;
 
 type ResolvedTransactionInstruction = {
   programId: PublicKey;

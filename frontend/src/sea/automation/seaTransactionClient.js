@@ -7,12 +7,14 @@ const prepareEndpoints = {
 };
 
 export class SeaTransactionClient {
-  constructor(wallet, fetchImpl = fetch) {
+  constructor(wallet, fetchImpl = fetch, localSigner = null) {
     this.wallet = wallet;
     this.fetch = fetchImpl.bind(globalThis);
+    this.localSigner = localSigner;
   }
 
   async walletAddress() {
+    if (this.localSigner?.unlocked) return this.localSigner.publicKey.toBase58();
     if (!this.wallet?.isConnected) await this.wallet?.connect();
     const address = this.wallet?.publicKey?.toString();
     if (!address) throw new Error('Wallet browser non collegato');
@@ -48,6 +50,10 @@ export class SeaTransactionClient {
     const { VersionedTransaction } = await import('@solana/web3.js');
     const transactionBytes = Uint8Array.from(atob(transaction), character => character.charCodeAt(0));
     const unsigned = VersionedTransaction.deserialize(transactionBytes);
+    if (this.localSigner?.unlocked) {
+      console.info('[SDU] signing locally', { action });
+      return this.submitSigned({ prepareId, profileId, wallet, signed: this.localSigner.sign(unsigned), action });
+    }
     const preparedMessageBytes = unsigned.message.serialize();
     console.info('[SDU] requesting wallet signature', { action });
     let signed;
@@ -116,6 +122,10 @@ export class SeaTransactionClient {
     if (!messageMatches) {
       console.warn('[SDU] wallet returned a different message; submitting for server policy validation', { action, prepareId });
     }
+    return this.submitSigned({ prepareId, profileId, wallet, signed, action });
+  }
+
+  async submitSigned({ prepareId, profileId, wallet, signed, action }) {
     const signedBytes = signed.serialize();
     const signedBase64 = btoa(Array.from(signedBytes, byte => String.fromCharCode(byte)).join(''));
     console.info('[SDU] submitting signed transaction', { action });

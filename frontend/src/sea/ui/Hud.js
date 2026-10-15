@@ -5,6 +5,7 @@ import { buildScanFilterPayload, requestScanFilter, simulateScanFilterResponse }
 import { resolveScanOperation } from '../automation/scanOperation.js';
 import { ScanPolicy } from '../automation/scanPolicy.js';
 import { SeaTransactionClient } from '../automation/seaTransactionClient.js';
+import { LocalSigner } from '../automation/localSigner.js';
 
 const fmtSector = s => `(${s[0]}, ${s[1]})`;
 
@@ -127,7 +128,8 @@ export class Hud extends Emitter {
     super();
     this.root = root;
     this.wallet = wallet ?? window.wallet ?? null;
-    this.transactionClient = new SeaTransactionClient(this.wallet);
+    this.localSigner = new LocalSigner();
+    this.transactionClient = new SeaTransactionClient(this.wallet, fetch, this.localSigner);
     this.content = root.querySelector('.hud-content');
     this.baseNames = new Map(starbases.map(sb => [sb.sector.join(','), sb.name]));
     this.snapshot = { updatedAt: 0, error: null, fleets: [] };
@@ -633,7 +635,7 @@ export class Hud extends Emitter {
   }
 
   async submitPreparedScan(retryExpiredPreparation = true) {
-    if (this.automationSubmissionPending || !this.wallet || !this.automationScanTransaction || !this.automationScanPrepareId || !this.automationFleet) return;
+    if (this.automationSubmissionPending || !(this.wallet || this.localSigner.unlocked) || !this.automationScanTransaction || !this.automationScanPrepareId || !this.automationFleet) return;
     const submittedAction = this.automationPreparedAction;
     const preparedResult = this.automationPreparedResult;
     const scanAction = submittedAction === 'scan';
@@ -806,13 +808,14 @@ export class Hud extends Emitter {
     this.automationSpeedInput = addInput(this.automationLeft, 'Subwarp Speed', subwarpSpeed, true);
     appendAutomationRadioGroup(this.automationLeft, 'Movimento', [['warp', 'Warp'], ['subwarp', 'Subwarp']], 'subwarp', 'movementMode')
       .addEventListener('change', () => this.updateAutomationActionButton());
-    appendAutomationCheckbox(this.automationLeft, 'Usa fee Sly', true, 'useSlyFee')
+    appendAutomationCheckbox(this.automationLeft, 'Usa fee Sly', false, 'useSlyFee')
       .addEventListener('change', () => this.updateFeeControls());
     this.automationPriorityFeeInput = addInput(this.automationLeft, 'Fee base Sly (lamports)', '1', false, 'priorityFeeLamports');
     this.automationPriorityFeeInput.type = 'number';
     this.automationPriorityFeeInput.min = '0';
     this.automationPriorityFeeInput.max = '50000';
     this.automationPriorityFeeInput.step = '1';
+    this.appendLocalSignerControls(this.automationLeft);
     addCheck(this.automationLeft, 'smartRange', true, 'smartRange');
     addCheck(this.automationLeft, 'coeffsdu1', true, 'coeffsdu1');
 
@@ -841,8 +844,74 @@ export class Hud extends Emitter {
     this.automationCooldownInput.addEventListener('input', () => this.updateRecommendedRange());
   }
 
+  // Nessun data-config-key: chiave e password non devono finire nella configurazione salvata.
+  appendLocalSignerControls(parent) {
+    const box = document.createElement('div');
+    box.className = 'automation-signer';
+    const status = document.createElement('div');
+    status.setAttribute('role', 'status');
+    const makeField = (labelText, placeholder) => {
+      const field = document.createElement('label');
+      field.className = 'automation-field';
+      const label = document.createElement('span');
+      label.textContent = labelText;
+      const input = document.createElement('input');
+      input.type = 'password';
+      input.autocomplete = 'off';
+      input.placeholder = placeholder;
+      field.append(label, input);
+      return { field, input };
+    };
+    const secret = makeField('Chiave segreta burner', '[82, 194, ...]');
+    const password = makeField('Password di cifratura', 'minimo 8 caratteri');
+    const makeButton = (text, handler) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'automation-request';
+      button.textContent = text;
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          await handler();
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : 'Operazione non riuscita';
+        } finally {
+          button.disabled = false;
+          refresh();
+        }
+      });
+      return button;
+    };
+    const importButton = makeButton('Salva e sblocca', async () => {
+      await this.localSigner.importKey(secret.input.value.trim(), password.input.value);
+      secret.input.value = '';
+      password.input.value = '';
+    });
+    const unlockButton = makeButton('Sblocca', async () => {
+      await this.localSigner.unlock(password.input.value);
+      password.input.value = '';
+    });
+    const lockButton = makeButton('Blocca', async () => this.localSigner.lock());
+    const forgetButton = makeButton('Rimuovi chiave', async () => this.localSigner.forget());
+    const refresh = () => {
+      const stored = this.localSigner.storedPublicKey();
+      if (this.localSigner.unlocked) status.textContent = `Firma locale attiva · ${this.localSigner.publicKey.toBase58()}`;
+      else if (stored) status.textContent = `Chiave salvata (bloccata) · ${stored}`;
+      else status.textContent = 'Firma locale non configurata · si usa il wallet del browser';
+      secret.field.hidden = Boolean(stored);
+      importButton.hidden = Boolean(stored);
+      unlockButton.hidden = !stored || this.localSigner.unlocked;
+      password.field.hidden = this.localSigner.unlocked;
+      lockButton.hidden = !this.localSigner.unlocked;
+      forgetButton.hidden = !stored;
+    };
+    box.append(status, secret.field, password.field, importButton, unlockButton, lockButton, forgetButton);
+    parent.append(box);
+    refresh();
+  }
+
   updateFeeControls() {
-    const useSlyFee = this.automationForm.querySelector('[data-scan-param="useSlyFee"]')?.checked ?? true;
+    const useSlyFee = this.automationForm.querySelector('[data-scan-param="useSlyFee"]')?.checked ?? false;
     if (this.automationPriorityFeeInput) this.automationPriorityFeeInput.disabled = !useSlyFee;
   }
 
