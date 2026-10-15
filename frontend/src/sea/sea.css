@@ -243,7 +243,7 @@ body {
     box-sizing: border-box;
     min-height: 300px;
     max-height: calc(100vh - 16px);
-    padding: 82px 84px;
+    padding: clamp(24px, 8vh, 82px) clamp(12px, 12vw, 84px);
     overflow-y: auto;
     background: rgb(5, 25, 38);
     scrollbar-width: none;
@@ -287,7 +287,7 @@ body {
 
 .automation-form {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
     gap: 12px;
     margin-top: 14px;
 }
@@ -457,7 +457,7 @@ body {
 
 .automation-field {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
     align-items: center;
     gap: 6px;
     min-width: 0;
