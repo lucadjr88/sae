@@ -70,30 +70,49 @@ export class SeaTransactionClient {
       && preparedMessageBytes.every((byte, index) => byte === signedMessageBytes[index]);
     const preparedKeys = unsigned.message.staticAccountKeys ?? unsigned.message.accountKeys;
     const signedKeys = signed.message.staticAccountKeys ?? signed.message.accountKeys;
-    const accountKeysMatch = preparedKeys.length === signedKeys.length
-      && preparedKeys.every((key, index) => key.equals(signedKeys[index]));
+    const changedAccountKeyIndexes = Array.from({ length: Math.max(preparedKeys.length, signedKeys.length) }, (_, index) => index)
+      .filter(index => !preparedKeys[index]?.equals(signedKeys[index]));
+    const accountKeysMatch = changedAccountKeyIndexes.length === 0;
     const preparedInstructions = unsigned.message.compiledInstructions ?? unsigned.message.instructions ?? [];
     const signedInstructions = signed.message.compiledInstructions ?? signed.message.instructions ?? [];
-    const instructionsMatch = preparedInstructions.length === signedInstructions.length
-      && preparedInstructions.every((instruction, index) => {
-        const signedInstruction = signedInstructions[index];
-        const preparedData = Uint8Array.from(instruction.data);
-        const signedData = Uint8Array.from(signedInstruction.data);
-        return instruction.programIdIndex === signedInstruction.programIdIndex
-          && JSON.stringify(instruction.accountKeyIndexes ?? instruction.accounts) === JSON.stringify(signedInstruction.accountKeyIndexes ?? signedInstruction.accounts)
-          && preparedData.length === signedData.length
-          && preparedData.every((byte, dataIndex) => byte === signedData[dataIndex]);
-      });
-    const firstDifferentByte = preparedMessageBytes.findIndex((byte, index) => byte !== signedMessageBytes[index]);
-    console.info('[SDU] wallet message comparison', {
+    const instructionDifferences = Array.from({ length: Math.max(preparedInstructions.length, signedInstructions.length) }, (_, index) => {
+      const preparedInstruction = preparedInstructions[index];
+      const signedInstruction = signedInstructions[index];
+      if (!preparedInstruction || !signedInstruction) return { index, missing: true };
+      const preparedData = Uint8Array.from(preparedInstruction.data);
+      const signedData = Uint8Array.from(signedInstruction.data);
+      const programIdIndexMatches = preparedInstruction.programIdIndex === signedInstruction.programIdIndex;
+      const accountIndexesMatch = JSON.stringify(preparedInstruction.accountKeyIndexes ?? preparedInstruction.accounts)
+        === JSON.stringify(signedInstruction.accountKeyIndexes ?? signedInstruction.accounts);
+      const dataMatches = preparedData.length === signedData.length
+        && preparedData.every((byte, dataIndex) => byte === signedData[dataIndex]);
+      return programIdIndexMatches && accountIndexesMatch && dataMatches
+        ? null
+        : {
+          index,
+          programIdIndexMatches,
+          accountIndexesMatch,
+          preparedDataLength: preparedData.length,
+          signedDataLength: signedData.length,
+          dataMatches,
+        };
+    }).filter(Boolean);
+    const instructionsMatch = instructionDifferences.length === 0;
+    let firstDifferentByte = 0;
+    while (firstDifferentByte < preparedMessageBytes.length && firstDifferentByte < signedMessageBytes.length
+      && preparedMessageBytes[firstDifferentByte] === signedMessageBytes[firstDifferentByte]) firstDifferentByte += 1;
+    console.info('[SDU] wallet message comparison', JSON.stringify({
       action,
       messageMatches,
       messageBytes: { prepared: preparedMessageBytes.length, signed: signedMessageBytes.length, firstDifferentByte },
       recentBlockhashMatches: unsigned.message.recentBlockhash === signed.message.recentBlockhash,
       accountKeysMatch,
+      accountKeyCounts: { prepared: preparedKeys.length, signed: signedKeys.length },
+      changedAccountKeyIndexes,
       instructionCount: { prepared: preparedInstructions.length, signed: signedInstructions.length },
       instructionsMatch,
-    });
+      instructionDifferences,
+    }));
     if (!messageMatches) {
       console.error('[SDU] wallet changed prepared transaction message; refusing submit', { action, prepareId });
       throw new Error('WALLET_CHANGED_TRANSACTION_MESSAGE');
