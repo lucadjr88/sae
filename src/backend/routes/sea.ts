@@ -293,15 +293,9 @@ function validateWalletTransactionMessage(
 
   let computeUnitLimit: number | undefined;
   let microLamportsPerCu: bigint | undefined;
-  let foundNonBudget = false;
   for (const instruction of signedInstructions) {
-    if (!isComputeBudget(instruction)) {
-      foundNonBudget = true;
-      continue;
-    }
-    if (foundNonBudget || instruction.accounts.length > 0) {
-      return { valid: false, reason: 'INVALID_COMPUTE_BUDGET_POSITION_OR_ACCOUNTS' };
-    }
+    if (!isComputeBudget(instruction)) continue;
+    if (instruction.accounts.length > 0) return { valid: false, reason: 'INVALID_COMPUTE_BUDGET_ACCOUNTS' };
     const decoded = new TransactionInstruction({
       programId: instruction.programId,
       keys: [],
