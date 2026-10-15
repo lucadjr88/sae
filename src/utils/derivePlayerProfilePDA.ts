@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { Connection, PublicKey } from '@solana/web3.js';
+import type { Dirent } from 'node:fs';
+import { PublicKey } from '@solana/web3.js';
 import { updatePlayerProfileRpcStats } from './rpc/prune.js';
 import { getRpcConnectionWithUrl } from './rpc/connection.js';
 
@@ -14,6 +15,42 @@ type ProfilePDAVariant = {
   source: string;
 };
 
+async function findCachedProfileMatches(wallet: PublicKey): Promise<ProfilePDAVariant[]> {
+  const cacheRoot = path.join(process.cwd(), 'cache');
+  let entries: Dirent[];
+  try {
+    entries = await fs.readdir(cacheRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const matches: ProfilePDAVariant[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    let profileId: string;
+    try {
+      profileId = new PublicKey(entry.name).toBase58();
+    } catch {
+      continue;
+    }
+    try {
+      const raw = await fs.readFile(path.join(cacheRoot, profileId, `${profileId}.json`), 'utf8');
+      const metadata = JSON.parse(raw);
+      if (!Array.isArray(metadata?.allowedWallets)) continue;
+      if (!metadata.allowedWallets.some((key: any) => key?.pubkey === wallet.toBase58())) continue;
+      matches.push({
+        label: `cached_profile_found_${matches.length + 1}`,
+        description: `Cached profile authority contains wallet ${wallet.toBase58()}`,
+        profileId,
+        source: 'cached profile authority',
+      });
+    } catch {
+      continue;
+    }
+  }
+  return matches;
+}
+
 // Find player profile by searching on-chain for accounts containing wallet as owner/authority
   const variants: ProfilePDAVariant[] = [];
   //return await findPlayerProfilesForWalletWithRpc(wallet, undefined, undefined);
@@ -25,6 +62,12 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
   let lastError: unknown = null;
   try {
     console.log('[findPlayerProfilesForWalletWithRpc] Start for wallet:', wallet.toBase58());
+    const cachedProfiles = await findCachedProfileMatches(wallet);
+    if (cachedProfiles.length) {
+      console.log('[findPlayerProfilesForWalletWithRpc] Matched cached profile authorities:', cachedProfiles.map(profile => profile.profileId));
+      return cachedProfiles;
+    }
+
     const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
     let endpointsRaw = JSON.parse(raw);
     // Ordina per rapporto plrProfile_success/plrProfile_total decrescente
