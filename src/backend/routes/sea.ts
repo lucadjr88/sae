@@ -1656,6 +1656,7 @@ router.post('/sea/scan/submit', async (req, res) => {
         }
         throw error;
       }
+      console.info('[sea] transaction submitted', { pid: process.pid, action: preparation.action, prepareId, signature, rpc: submitRpc });
       let confirmationStatus = 'confirmed';
       let scanResult: Record<string, unknown> | null = null;
       try {
@@ -1669,7 +1670,32 @@ router.post('/sea/scan/submit', async (req, res) => {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
         if (!/block height exceeded|signature has expired/i.test(message)) throw error;
-        const status = (await connection.getSignatureStatuses([signature], { searchTransactionHistory: true })).value[0];
+        let status: any = null;
+        try {
+          status = (await connection.getSignatureStatuses([signature], { searchTransactionHistory: true })).value[0];
+        } catch {}
+        if (!status) {
+          let statusRpc = { name: 'unknown', host: 'unknown' };
+          try {
+            status = await withRpc(profileId, async statusConnection => {
+              const candidate = (await statusConnection.getSignatureStatuses([signature], { searchTransactionHistory: true })).value[0];
+              if (!candidate) {
+                const error = new Error('SCAN_SIGNATURE_STATUS_NOT_FOUND') as Error & { status: number };
+                error.status = 503;
+                throw error;
+              }
+              return candidate;
+            }, endpoint => { statusRpc = seaRpc(endpoint); });
+            console.info('[sea] signature status recovered from another RPC', {
+              pid: process.pid,
+              action: preparation.action,
+              prepareId,
+              signature,
+              rpc: statusRpc,
+              confirmationStatus: status.confirmationStatus,
+            });
+          } catch {}
+        }
         if (!status) throw new Error(`SCAN_CONFIRMATION_UNKNOWN:${signature}`);
         if (status.err) throw new Error(`SCAN_TRANSACTION_FAILED:${JSON.stringify(status.err)}`);
         const isConfirmed = status.confirmationStatus === 'confirmed'
