@@ -43,21 +43,46 @@ export class SeaTransactionClient {
     return { ...result, action: result.action ?? action };
   }
 
-  async signAndSubmit({ prepareId, profileId, transaction }) {
+  async signAndSubmit({ prepareId, profileId, transaction, action }) {
     const wallet = await this.walletAddress();
     const { VersionedTransaction } = await import('@solana/web3.js');
     const transactionBytes = Uint8Array.from(atob(transaction), character => character.charCodeAt(0));
     const unsigned = VersionedTransaction.deserialize(transactionBytes);
-    const signed = await this.wallet.adapter.signTransaction(unsigned);
+    console.info('[SDU] requesting wallet signature', { action });
+    let signed;
+    try {
+      signed = await this.wallet.adapter.signTransaction(unsigned);
+    } catch (error) {
+      console.error('[SDU] wallet signature failed', {
+        action,
+        name: error?.name,
+        message: error?.message ?? String(error),
+        code: error?.code,
+        logs: error?.logs ?? error?.data?.logs ?? error?.cause?.logs,
+        cause: error?.cause?.message ?? error?.cause,
+      });
+      throw error;
+    }
+    console.info('[SDU] wallet signature received', { action });
     const signedBytes = signed.serialize();
     const signedBase64 = btoa(Array.from(signedBytes, byte => String.fromCharCode(byte)).join(''));
+    console.info('[SDU] submitting signed transaction', { action });
     const response = await this.fetch('/api/sea/scan/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prepareId, profileId, wallet, transaction: signedBase64 }),
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.detail || result.error || `HTTP ${response.status}`);
+    if (!response.ok) {
+      console.error('[SDU] transaction submit rejected', {
+        action,
+        status: response.status,
+        error: result.error,
+        detail: result.detail,
+      });
+      throw new Error(result.detail || result.error || `HTTP ${response.status}`);
+    }
+    console.info('[SDU] transaction submit confirmed', { action, signature: result.signature });
     return result;
   }
 }

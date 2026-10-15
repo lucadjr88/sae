@@ -647,6 +647,7 @@ export class Hud extends Emitter {
         prepareId: this.automationScanPrepareId,
         profileId: this.snapshot.profileId,
         transaction: this.automationScanTransaction,
+        action: submittedAction,
       });
       this.automationSubmissionPending = false;
       this.automationScanPrepareId = null;
@@ -730,7 +731,15 @@ export class Hud extends Emitter {
       this.automationPreparedResult = null;
       this.automationScanSubmitButton.hidden = true;
       this.automationScanResult.textContent = error instanceof Error ? error.message : 'Firma o invio scan non riuscito';
-      console.error('[SDU] scan transaction signing or submit failed', { fleetId: this.automationFleet.id, error });
+      console.error('[SDU] transaction action failed', {
+        fleetId: this.automationFleet.id,
+        action: submittedAction,
+        name: error?.name,
+        message: error?.message ?? String(error),
+        code: error?.code,
+        logs: error?.logs ?? error?.data?.logs ?? error?.cause?.logs,
+        cause: error?.cause?.message ?? error?.cause,
+      });
       const expiredBeforeSend = error instanceof Error && error.message === 'SCAN_TRANSACTION_BLOCKHASH_EXPIRED';
       if (expiredBeforeSend && retryExpiredPreparation && this.automationRunning && runId === this.automationRunId) {
         console.warn('[SDU] prepared transaction expired before send; preparing a fresh transaction');
