@@ -1466,11 +1466,36 @@ router.post('/sea/scan/submit', async (req, res) => {
   const messageMatches = preparedMessage.equals(signedMessage);
   const signaturesValid = signatureValidity.length === requiredSignatures && signatureValidity.every(Boolean);
   if (!messageMatches || !signaturesValid) {
+    const preparedMessageData = preparation.transaction.message as any;
+    const signedMessageData = signedTransaction.message as any;
+    const preparedKeys: PublicKey[] = preparedMessageData.staticAccountKeys ?? preparedMessageData.accountKeys;
+    const signedKeys: PublicKey[] = signedMessageData.staticAccountKeys ?? signedMessageData.accountKeys;
+    const preparedInstructions = preparedMessageData.compiledInstructions ?? preparedMessageData.instructions ?? [];
+    const signedInstructions = signedMessageData.compiledInstructions ?? signedMessageData.instructions ?? [];
+    const accountKeysMatch = preparedKeys.length === signedKeys.length
+      && preparedKeys.every((key, index) => key.equals(signedKeys[index]));
+    const instructionsMatch = preparedInstructions.length === signedInstructions.length
+      && preparedInstructions.every((instruction: any, index: number) => {
+        const signedInstruction = signedInstructions[index];
+        const preparedData = Buffer.from(instruction.data);
+        const signedData = Buffer.from(signedInstruction.data);
+        return instruction.programIdIndex === signedInstruction.programIdIndex
+          && JSON.stringify(instruction.accountKeyIndexes ?? instruction.accounts) === JSON.stringify(signedInstruction.accountKeyIndexes ?? signedInstruction.accounts)
+          && preparedData.equals(signedData);
+      });
+    let firstDifferentByte = 0;
+    while (firstDifferentByte < preparedMessage.length && firstDifferentByte < signedMessage.length
+      && preparedMessage[firstDifferentByte] === signedMessage[firstDifferentByte]) firstDifferentByte += 1;
     console.warn('[sea] signed transaction validation failed', {
       pid: process.pid,
       action: preparation.action,
       prepareId,
       messageMatches,
+      messageBytes: { prepared: preparedMessage.length, signed: signedMessage.length, firstDifferentByte },
+      recentBlockhashMatches: preparedMessageData.recentBlockhash === signedMessageData.recentBlockhash,
+      accountKeysMatch,
+      instructionCount: { prepared: preparedInstructions.length, signed: signedInstructions.length },
+      instructionsMatch,
       requiredSignatures,
       signatureCount: signedTransaction.signatures.length,
       validSignatures: signatureValidity.filter(Boolean).length,
