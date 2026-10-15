@@ -32,8 +32,8 @@ const SIZE_NAMES = ['xxSmall', 'xSmall', 'small', 'medium', 'large', 'capital', 
 const FACTIONS = ['Unaligned', 'MUD', 'ONI', 'Ustur'];
 
 function makePriorityFeePolicy(feeModeInput: unknown, baseFeeInput: unknown, multiplierPercent: number) {
-  const mode = feeModeInput == null ? 'sly' : feeModeInput;
-  if (mode !== 'sly' && mode !== 'wallet') throw new Error('INVALID_FEE_MODE');
+  if (feeModeInput != null && feeModeInput !== 'sly' && feeModeInput !== 'wallet') throw new Error('INVALID_FEE_MODE');
+  const mode: 'sly' | 'wallet' = feeModeInput === 'wallet' ? 'wallet' : 'sly';
   if (mode === 'wallet') {
     return { mode, baseLamports: 0, microLamportsPerCu: 0, estimatedPriorityFeeLamports: 0, instruction: null };
   }
@@ -82,6 +82,12 @@ const scanPreparations = new Map<string, {
   transaction: VersionedTransaction;
   sduTokenAccount?: string;
   sduMint?: string;
+  feePolicy?: {
+    mode: 'sly' | 'wallet';
+    baseLamports: number;
+    microLamportsPerCu: number;
+    estimatedPriorityFeeLamports: number;
+  };
   blockhash: string;
   lastValidBlockHeight: number;
   expiresAt: number;
@@ -747,6 +753,7 @@ router.post('/sea/scan/prepare', async (req, res) => {
         transaction: prepared.transactionObject,
         sduTokenAccount: prepared.sduTokenAccount,
         sduMint: prepared.sduMint,
+        feePolicy: prepared.feePolicy,
         blockhash: prepared.blockhash,
         lastValidBlockHeight: prepared.lastValidBlockHeight,
         expiresAt: now + 90_000,
@@ -926,6 +933,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
         fleetId,
         wallet: walletAddress.toBase58(),
         transaction: prepared.transactionObject,
+        feePolicy: prepared.feePolicy,
         blockhash: prepared.blockhash,
         lastValidBlockHeight: prepared.lastValidBlockHeight,
         expiresAt: now + 90_000,
@@ -1117,6 +1125,7 @@ router.post('/sea/warp/prepare', async (req, res) => {
       prepareId = randomUUID();
       scanPreparations.set(prepareId, {
         action: 'warp_start', profileId, fleetId, wallet: walletAddress.toBase58(), transaction: prepared.transaction,
+        feePolicy: prepared.feePolicy,
         blockhash: prepared.blockhash, lastValidBlockHeight: prepared.lastValidBlockHeight, expiresAt: now + 90_000,
       });
     }
@@ -1287,6 +1296,7 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
         fleetId,
         wallet: walletAddress.toBase58(),
         transaction: prepared.transactionObject,
+        feePolicy: prepared.feePolicy,
         blockhash: prepared.blockhash,
         lastValidBlockHeight: prepared.lastValidBlockHeight,
         expiresAt: now + 90_000,
@@ -1402,13 +1412,15 @@ router.post('/sea/scan/submit', async (req, res) => {
         }
         confirmationStatus = status.confirmationStatus ?? (status.confirmations === null ? 'finalized' : 'confirmed');
       }
-      if (preparation.action === 'scan') {
-        try {
-          const transactionInfo: any = await connection.getTransaction(signature, {
-            commitment: 'confirmed',
-            maxSupportedTransactionVersion: 0,
-          });
-          if (!transactionInfo?.meta) throw new Error('SCAN_TRANSACTION_METADATA_UNAVAILABLE');
+      let networkFeeLamports: number | null = null;
+      try {
+        const transactionInfo: any = await connection.getTransaction(signature, {
+          commitment: 'confirmed',
+          maxSupportedTransactionVersion: 0,
+        });
+        if (!transactionInfo?.meta) throw new Error('TRANSACTION_METADATA_UNAVAILABLE');
+        networkFeeLamports = Number(transactionInfo.meta.fee);
+        if (preparation.action === 'scan') {
           const accountKeys: PublicKey[] = transactionInfo.transaction.message.staticAccountKeys
             ?? transactionInfo.transaction.message.accountKeys;
           const sduAccountIndex = accountKeys.findIndex(key => key.toBase58() === preparation.sduTokenAccount);
@@ -1431,17 +1443,26 @@ router.post('/sea/scan/submit', async (req, res) => {
             sduBalanceAfter: Number(postAmount) / (10 ** decimals),
             probabilityPct: probabilityMatch ? Number(probabilityMatch[1]) * 100 : null,
           };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
-          console.warn('[sea] scan confirmed but result metadata unavailable', {
-            profileId,
-            fleetId: preparation.fleetId,
-            signature,
-            error: message.replace(/https?:\/\/\S+/g, '<rpc-url>'),
-          });
         }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+        console.warn('[sea] transaction fee/result metadata unavailable', {
+          profileId,
+          fleetId: preparation.fleetId,
+          signature,
+          error: message.replace(/https?:\/\/\S+/g, '<rpc-url>'),
+        });
       }
-      return { signature, action: preparation.action, confirmationStatus, scanResult };
+      const fee = {
+        mode: preparation.feePolicy?.mode ?? 'wallet',
+        baseLamports: preparation.feePolicy?.baseLamports ?? null,
+        microLamportsPerCu: preparation.feePolicy?.microLamportsPerCu ?? null,
+        estimatedPriorityFeeLamports: preparation.feePolicy?.estimatedPriorityFeeLamports ?? null,
+        networkFeeLamports,
+        networkFeeSol: networkFeeLamports === null ? null : networkFeeLamports / 1_000_000_000,
+      };
+      console.info('[sea] network fee charged', { profileId, fleetId: preparation.fleetId, signature, ...fee });
+      return { signature, action: preparation.action, confirmationStatus, fee, scanResult };
     });
     console.info('[sea] scan transaction confirmed', { profileId, fleetId: preparation.fleetId, signature: result.signature });
     return res.json(result);

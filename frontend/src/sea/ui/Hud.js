@@ -654,6 +654,7 @@ export class Hud extends Emitter {
       this.automationPreparedResult = null;
       this.automationScanSubmitButton.hidden = true;
       console.info('[SDU] on-chain action confirmed', { fleetId: this.automationFleet.id, action: result.action, signature: result.signature });
+      console.info('[SDU] transaction fee', { fleetId: this.automationFleet.id, signature: result.signature, ...result.fee });
       this.automationScanResult.textContent = JSON.stringify(result, null, 2);
       if (result.action === 'scan') {
         this.automationLastScanSummary = this.formatScanResult(result.scanResult);

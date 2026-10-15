@@ -66,26 +66,15 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
 });
       try {
         console.log('[findPlayerProfilesForWalletWithRpc] Selected RPC:', selectedUrl);
-        console.log('[findPlayerProfilesForWalletWithRpc] Calling getProgramAccounts with filter:', {
+        console.log('[findPlayerProfilesForWalletWithRpc] Scanning profile key entries:', {
           programId: programPubkey.toBase58(),
-          offset: 30,
-          wallet: wallet.toBase58()
+          wallet: wallet.toBase58(),
         });
         let accountsWithWallet: Awaited<ReturnType<typeof connection.getProgramAccounts>> = [];
         let respondedInTime = true;
         try {
           accountsWithWallet = await Promise.race([
-            connection.getProgramAccounts(programPubkey, {
-              filters: [
-                {
-                  memcmp: {
-                    offset: 30, // ProfileKey array starts at offset 30
-                    bytes: wallet.toBase58()
-                  }
-                }
-              ],
-              commitment: 'confirmed'
-            }),
+            connection.getProgramAccounts(programPubkey, { commitment: 'confirmed' }),
             new Promise((_, reject) => setTimeout(() => {
               respondedInTime = false;
               reject(new Error('getProgramAccounts timeout'));
@@ -98,17 +87,32 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
         // Aggiorna solo le stats, la logica di retry rimane invariata
         await updatePlayerProfileRpcStats(selectedUrl, respondedInTime);
         if (respondedInTime) {
-          console.log('[findPlayerProfilesForWalletWithRpc] getProgramAccounts result count:', accountsWithWallet.length);
-          if (accountsWithWallet.length > 0) {
-            accountsWithWallet.forEach((acc, idx) => {
-              console.log(`[findPlayerProfilesForWalletWithRpc] Found profile ${idx + 1}:`, acc.pubkey.toBase58());
+          for (const account of accountsWithWallet) {
+            const data = Buffer.from(account.account.data);
+            if (data.length < 30) continue;
+            const keyCount = data.readUInt16LE(28);
+            const availableKeyCount = Math.min(keyCount, Math.floor((data.length - 30) / 80));
+            let foundWallet = false;
+            for (let keyIndex = 0; keyIndex < availableKeyCount; keyIndex += 1) {
+              const keyOffset = 30 + keyIndex * 80;
+              if (data.subarray(keyOffset, keyOffset + 32).equals(wallet.toBuffer())) {
+                foundWallet = true;
+                break;
+              }
+            }
+            if (foundWallet) {
+              const profileId = account.pubkey.toBase58();
+              console.log('[findPlayerProfilesForWalletWithRpc] Found profile:', profileId);
               variants.push({
-                label: `profile_found_${idx + 1}`,
-                description: `Profile account found containing wallet ${wallet.toBase58()} in data`,
-                profileId: acc.pubkey.toBase58(),
-                source: 'on-chain search at offset 30'
+                label: `profile_found_${variants.length + 1}`,
+                description: `Profile account contains wallet ${wallet.toBase58()} in its ProfileKey entries`,
+                profileId,
+                source: 'on-chain ProfileKey scan',
               });
-            });
+            }
+          }
+          console.log('[findPlayerProfilesForWalletWithRpc] Matching profiles:', variants.length);
+          if (variants.length > 0) {
             return variants;
           }
         }
