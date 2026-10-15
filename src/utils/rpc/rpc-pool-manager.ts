@@ -127,6 +127,8 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
           metrics.recordProcessed(ep.url);
           if (r.latencyMs) metrics.recordLatency(ep.url, r.latencyMs);
           concurrency.increaseMaxConcurrent(ep.url);
+        } else if (r?.errorType === 'unsupported') {
+          return;
         } else {
           const is429 = r?.errorType === '429';
           const is503 = r?.errorType === '503';
@@ -177,6 +179,8 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
           metrics.recordProcessed(ep.url);
           if (r.latencyMs) metrics.recordLatency(ep.url, r.latencyMs);
           concurrency.increaseMaxConcurrent(ep.url);
+        } else if (r?.errorType === 'unsupported') {
+          return;
         } else {
           const is429 = r?.errorType === '429';
           health.recordFailure(ep.url);

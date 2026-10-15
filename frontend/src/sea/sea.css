@@ -186,6 +186,22 @@ body {
     font-size: 16px;
 }
 
+#hud .fleet-action.automation-icon.is-running {
+    color: #55d98a;
+}
+
+#hud .fleet-action.automation-icon.is-faulted {
+    color: #ff756d;
+}
+
+#hud .fleet-action.automation-icon.is-stopped {
+    color: #ff756d;
+}
+
+#hud .fleet-action.automation-icon.is-unavailable {
+    color: #929da3;
+}
+
 #hud .fleet-action:hover {
     color: #fff;
 }
@@ -280,6 +296,158 @@ body {
     display: none;
 }
 
+.automation-status {
+    min-height: 16px;
+    margin-top: 8px;
+    color: rgba(232, 241, 245, 0.72);
+    font-size: 11px;
+}
+
+.automation-save,
+.automation-request,
+.automation-toggle {
+    min-height: 32px;
+    margin-top: 10px;
+    padding: 5px 10px;
+    border: 1px solid rgba(230, 240, 245, 0.4);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.automation-save[hidden],
+.automation-request[hidden],
+.automation-toggle[hidden] {
+    display: none;
+}
+
+.automation-save:disabled,
+.automation-request:disabled,
+.automation-toggle:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.automation-request:disabled {
+    cursor: wait;
+}
+
+.automation-result {
+    min-height: 16px;
+    margin-top: 6px;
+    overflow-wrap: anywhere;
+    color: #d6e8d3;
+    font-size: 12px;
+}
+
+.automation-scan-preview {
+    min-height: 32px;
+    margin-top: 8px;
+    padding: 5px 10px;
+    border: 1px solid rgba(230, 240, 245, 0.4);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.automation-scan-submit {
+    min-height: 32px;
+    margin-top: 8px;
+    padding: 5px 10px;
+    border: 1px solid rgba(214, 232, 211, 0.55);
+    border-radius: 3px;
+    background: rgba(103, 150, 98, 0.2);
+    color: #e8f1e5;
+    font: inherit;
+    cursor: pointer;
+}
+
+.automation-scan-submit[hidden] {
+    display: none;
+}
+
+.automation-scan-submit:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+.automation-scan-preview[hidden] {
+    display: none;
+}
+
+.automation-scan-preview:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+.automation-scan-result {
+    max-height: 140px;
+    overflow: auto;
+    margin: 6px 0 0;
+    color: rgba(232, 241, 245, 0.8);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 10px;
+}
+
+.automation-scan-result[hidden] {
+    display: none;
+}
+
+.wallet-modal {
+    position: fixed;
+    z-index: 30;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 14px;
+    background: rgba(0, 0, 0, 0.65);
+}
+
+.wallet-modal-box {
+    box-sizing: border-box;
+    width: min(340px, 100%);
+    padding: 18px;
+    border: 1px solid rgba(230, 240, 245, 0.35);
+    border-radius: 4px;
+    background: rgb(5, 25, 38);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+.wallet-modal-title {
+    margin-bottom: 14px;
+    font-weight: bold;
+}
+
+.wallet-modal-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid rgba(230, 240, 245, 0.25);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.wallet-modal-option-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.wallet-modal-empty {
+    color: #ff9b8a;
+}
+
 .automation-column {
     display: grid;
     align-content: start;
@@ -293,6 +461,10 @@ body {
     align-items: center;
     gap: 6px;
     min-width: 0;
+}
+
+.automation-field[hidden] {
+    display: none;
 }
 
 .automation-field > span,
@@ -330,6 +502,27 @@ body {
 .automation-checkbox input {
     flex: 0 0 auto;
     margin: 2px 0 0;
+}
+
+.automation-radio-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.automation-radio-group legend {
+    float: left;
+    margin-right: auto;
+}
+
+.automation-radio-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 @media (max-width: 600px) {

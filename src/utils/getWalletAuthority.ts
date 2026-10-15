@@ -4,7 +4,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 
 // Estrae tutte le chiavi (allowed wallets) e salva in cache come da flusso
-export async function getWalletAuthorityUtil(profileId: string): Promise<{allowedWallets: {pubkey: string, permissions: string}[]}> {
+export async function getWalletAuthorityUtil(profileId: string): Promise<{allowedWallets: {index: number, pubkey: string, scope: string, permissions: string}[]}> {
   const buf = await fetchSolanaAccountInfo(profileId);
   if (!buf || buf.length < 30) return { allowedWallets: [] };
   const discriminator = Buffer.from([184,101,165,188,95,63,127,188]);
@@ -15,8 +15,11 @@ export async function getWalletAuthorityUtil(profileId: string): Promise<{allowe
   for (let i = 0; i < numKeys; i++) {
     const key = buf.slice(offset, offset+32);
     const permissions = buf.slice(offset+72, offset+80);
+    const scope = buf.slice(offset+32, offset+64);
     allowedWallets.push({
+      index: i,
       pubkey: bs58.encode(key),
+      scope: bs58.encode(scope),
       permissions: permissions.toString('hex')
     });
     offset += 32+32+8+8;

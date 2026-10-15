@@ -3,6 +3,7 @@ import bs58 from 'bs58';
 import { FleetFeed } from './data/FleetFeed.js';
 import { classifyStarbases } from './model/starbaseKind.js';
 import { Hud } from './ui/Hud.js';
+import { wallet } from '../services/wallet.js';
 import { BootScene } from './scenes/BootScene.js';
 import { MapScene } from './scenes/MapScene.js';
 import { setRotation } from './map/iso.js';
@@ -39,7 +40,7 @@ async function startMap(profileId: string) {
   }).catch(() => []));
   setRotation(Number(new URLSearchParams(location.search).get('rot')) || 0);
   const feed = new FleetFeed({ profileId, pollMs: 15000 });
-  const hud = new Hud(document.querySelector<HTMLElement>('#hud'), starbases);
+  const hud = new Hud(document.querySelector<HTMLElement>('#hud'), starbases, wallet);
   feed.on('snapshot', snapshot => hud.setSnapshot(snapshot));
   feed.on('status', status => hud.setConnection(status));
   let resolveMapReady: () => void = () => {};
