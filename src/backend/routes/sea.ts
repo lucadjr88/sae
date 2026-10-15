@@ -758,6 +758,7 @@ router.post('/sea/scan/prepare', async (req, res) => {
         lastValidBlockHeight: prepared.lastValidBlockHeight,
         expiresAt: now + 90_000,
       });
+      console.info('[sea] transaction prepared', { pid: process.pid, action: prepared.action, prepareId });
     }
     return res.json({
       fleetId: prepared.fleetId,
@@ -938,6 +939,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
         lastValidBlockHeight: prepared.lastValidBlockHeight,
         expiresAt: now + 90_000,
       });
+      console.info('[sea] transaction prepared', { pid: process.pid, action: 'subwarp_start', prepareId });
     }
     return res.json({
       fleetId: prepared.fleetId,
@@ -1128,6 +1130,7 @@ router.post('/sea/warp/prepare', async (req, res) => {
         feePolicy: prepared.feePolicy,
         blockhash: prepared.blockhash, lastValidBlockHeight: prepared.lastValidBlockHeight, expiresAt: now + 90_000,
       });
+      console.info('[sea] transaction prepared', { pid: process.pid, action: 'warp_start', prepareId });
     }
     const distance = Math.hypot(waypoint[0] - current[0], waypoint[1] - current[1]);
     return res.json({
@@ -1301,6 +1304,7 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
         lastValidBlockHeight: prepared.lastValidBlockHeight,
         expiresAt: now + 90_000,
       });
+      console.info('[sea] transaction prepared', { pid: process.pid, action: exitAction, prepareId });
     }
     return res.json({
       fleetId,
@@ -1329,7 +1333,17 @@ router.post('/sea/scan/submit', async (req, res) => {
   const walletInput = typeof req.body?.wallet === 'string' ? req.body.wallet : '';
   const transactionInput = typeof req.body?.transaction === 'string' ? req.body.transaction : '';
   const preparation = scanPreparations.get(prepareId);
-  if (!preparation || preparation.expiresAt <= Date.now()) {
+  if (!preparation) {
+    console.warn('[sea] transaction preparation not found', { pid: process.pid, prepareId });
+    return res.status(410).json({ error: 'SCAN_PREPARATION_NOT_FOUND' });
+  }
+  if (preparation.expiresAt <= Date.now()) {
+    console.warn('[sea] transaction preparation expired', {
+      pid: process.pid,
+      action: preparation.action,
+      prepareId,
+      expiredByMs: Date.now() - preparation.expiresAt,
+    });
     scanPreparations.delete(prepareId);
     return res.status(410).json({ error: 'SCAN_PREPARATION_EXPIRED' });
   }
