@@ -933,6 +933,11 @@ export class Hud extends Emitter {
       this.refreshAutomationState();
       return;
     }
+    if (this.localSigner.storedPublicKey() && !this.localSigner.unlocked) {
+      this.automationStatus.textContent = 'Chiave locale salvata ma bloccata · inserisci la password e premi Sblocca';
+      return;
+    }
+    console.info('[SDU] signer mode', { mode: this.localSigner.unlocked ? 'local' : 'wallet' });
     this.automationRunning = true;
     const runId = ++this.automationRunId;
     this.automationInitialScanPending = true;
