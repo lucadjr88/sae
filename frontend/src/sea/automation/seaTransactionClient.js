@@ -114,8 +114,7 @@ export class SeaTransactionClient {
       instructionDifferences,
     }));
     if (!messageMatches) {
-      console.error('[SDU] wallet changed prepared transaction message; refusing submit', { action, prepareId });
-      throw new Error('WALLET_CHANGED_TRANSACTION_MESSAGE');
+      console.warn('[SDU] wallet returned a different message; submitting for server policy validation', { action, prepareId });
     }
     const signedBytes = signed.serialize();
     const signedBase64 = btoa(Array.from(signedBytes, byte => String.fromCharCode(byte)).join(''));

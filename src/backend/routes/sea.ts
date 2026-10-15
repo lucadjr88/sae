@@ -1,6 +1,6 @@
 import express from 'express';
 import anchor from '@coral-xyz/anchor';
-import { ComputeBudgetProgram, PublicKey, SYSVAR_INSTRUCTIONS_PUBKEY, SYSVAR_SLOT_HASHES_PUBKEY, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import { ComputeBudgetInstruction, ComputeBudgetProgram, PublicKey, SYSVAR_INSTRUCTIONS_PUBKEY, SYSVAR_SLOT_HASHES_PUBKEY, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { CargoType, CARGO_IDL } from '@staratlas/cargo';
 import { isIP } from 'node:net';
@@ -208,6 +208,141 @@ function rpcErrorType(error: unknown): '429' | '503' | 'unsupported' | 'error' {
     /500|502|503|504|Service Unavailable|Internal JSON-RPC error|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|socket hang up/i.test(message)
   ) return '503';
   return 'error';
+}
+
+const MAX_WALLET_COMPUTE_UNITS = 1_400_000;
+const MAX_WALLET_PRIORITY_FEE_LAMPORTS = 50_000n;
+
+type ResolvedTransactionInstruction = {
+  programId: PublicKey;
+  accounts: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>;
+  data: Buffer;
+};
+
+function getResolvedInstructions(transaction: VersionedTransaction): ResolvedTransactionInstruction[] | null {
+  const message = transaction.message as any;
+  if ((message.addressTableLookups?.length ?? 0) > 0) return null;
+  const accountKeys: PublicKey[] = message.staticAccountKeys ?? message.accountKeys ?? [];
+  const header = message.header;
+  const compiledInstructions = message.compiledInstructions ?? message.instructions ?? [];
+  const getAccount = (index: number) => {
+    const pubkey = accountKeys[index];
+    if (!pubkey) return null;
+    const isSigner = index < header.numRequiredSignatures;
+    const isWritable = isSigner
+      ? index < header.numRequiredSignatures - header.numReadonlySignedAccounts
+      : index < accountKeys.length - header.numReadonlyUnsignedAccounts;
+    return { pubkey, isSigner, isWritable };
+  };
+
+  const resolved: ResolvedTransactionInstruction[] = [];
+  for (const instruction of compiledInstructions) {
+    const programId = accountKeys[instruction.programIdIndex];
+    const indexes: number[] = instruction.accountKeyIndexes ?? instruction.accounts ?? [];
+    const accounts = indexes.map(getAccount);
+    if (!programId || accounts.some(account => !account)) return null;
+    resolved.push({
+      programId,
+      accounts: accounts as ResolvedTransactionInstruction['accounts'],
+      data: Buffer.from(instruction.data),
+    });
+  }
+  return resolved;
+}
+
+function validateWalletTransactionMessage(
+  prepared: VersionedTransaction,
+  signed: VersionedTransaction,
+  feePolicy: ScanPreparation['feePolicy'],
+): { valid: boolean; reason: string; computeUnitLimit?: number; microLamportsPerCu?: string } {
+  const preparedMessage = prepared.message as any;
+  const signedMessage = signed.message as any;
+  if (preparedMessage.recentBlockhash !== signedMessage.recentBlockhash) {
+    return { valid: false, reason: 'RECENT_BLOCKHASH_CHANGED' };
+  }
+  if (preparedMessage.header.numRequiredSignatures !== signedMessage.header.numRequiredSignatures) {
+    return { valid: false, reason: 'REQUIRED_SIGNATURE_COUNT_CHANGED' };
+  }
+  const preparedKeys: PublicKey[] = preparedMessage.staticAccountKeys ?? preparedMessage.accountKeys ?? [];
+  const signedKeys: PublicKey[] = signedMessage.staticAccountKeys ?? signedMessage.accountKeys ?? [];
+  const signerKeys = (keys: PublicKey[], required: number) => keys.slice(0, required).map(key => key.toBase58()).sort();
+  if (JSON.stringify(signerKeys(preparedKeys, preparedMessage.header.numRequiredSignatures))
+    !== JSON.stringify(signerKeys(signedKeys, signedMessage.header.numRequiredSignatures))) {
+    return { valid: false, reason: 'SIGNER_SET_CHANGED' };
+  }
+  const preparedInstructions = getResolvedInstructions(prepared);
+  const signedInstructions = getResolvedInstructions(signed);
+  if (!preparedInstructions || !signedInstructions) return { valid: false, reason: 'ADDRESS_LOOKUP_TABLES_NOT_ALLOWED' };
+
+  const isComputeBudget = (instruction: ResolvedTransactionInstruction) => instruction.programId.equals(ComputeBudgetProgram.programId);
+  const preparedCore = preparedInstructions.filter(instruction => !isComputeBudget(instruction));
+  const signedCore = signedInstructions.filter(instruction => !isComputeBudget(instruction));
+  const coreMatches = preparedCore.length === signedCore.length && preparedCore.every((instruction, index) => {
+    const signedInstruction = signedCore[index];
+    return instruction.programId.equals(signedInstruction.programId)
+      && instruction.data.equals(signedInstruction.data)
+      && instruction.accounts.length === signedInstruction.accounts.length
+      && instruction.accounts.every((account, accountIndex) => {
+        const signedAccount = signedInstruction.accounts[accountIndex];
+        return account.pubkey.equals(signedAccount.pubkey)
+          && account.isSigner === signedAccount.isSigner
+          && account.isWritable === signedAccount.isWritable;
+      });
+  });
+  if (!coreMatches) return { valid: false, reason: 'SAGE_INSTRUCTION_CHANGED' };
+
+  let computeUnitLimit: number | undefined;
+  let microLamportsPerCu: bigint | undefined;
+  let foundNonBudget = false;
+  for (const instruction of signedInstructions) {
+    if (!isComputeBudget(instruction)) {
+      foundNonBudget = true;
+      continue;
+    }
+    if (foundNonBudget || instruction.accounts.length > 0) {
+      return { valid: false, reason: 'INVALID_COMPUTE_BUDGET_POSITION_OR_ACCOUNTS' };
+    }
+    const decoded = new TransactionInstruction({
+      programId: instruction.programId,
+      keys: [],
+      data: instruction.data,
+    });
+    let instructionType: ReturnType<typeof ComputeBudgetInstruction.decodeInstructionType>;
+    try {
+      instructionType = ComputeBudgetInstruction.decodeInstructionType(decoded);
+    } catch {
+      return { valid: false, reason: 'UNKNOWN_COMPUTE_BUDGET_INSTRUCTION' };
+    }
+    if (instructionType === 'SetComputeUnitLimit') {
+      if (computeUnitLimit !== undefined) return { valid: false, reason: 'DUPLICATE_COMPUTE_UNIT_LIMIT' };
+      computeUnitLimit = ComputeBudgetInstruction.decodeSetComputeUnitLimit(decoded).units;
+      if (computeUnitLimit < 1 || computeUnitLimit > MAX_WALLET_COMPUTE_UNITS) {
+        return { valid: false, reason: 'COMPUTE_UNIT_LIMIT_OUT_OF_RANGE' };
+      }
+    } else if (instructionType === 'SetComputeUnitPrice') {
+      if (microLamportsPerCu !== undefined) return { valid: false, reason: 'DUPLICATE_COMPUTE_UNIT_PRICE' };
+      microLamportsPerCu = BigInt(ComputeBudgetInstruction.decodeSetComputeUnitPrice(decoded).microLamports);
+    } else {
+      return { valid: false, reason: 'COMPUTE_BUDGET_INSTRUCTION_NOT_ALLOWED' };
+    }
+  }
+
+  const expectedPrice = BigInt(feePolicy?.microLamportsPerCu ?? 0);
+  const submittedPrice = microLamportsPerCu ?? 0n;
+  if (feePolicy?.mode === 'sly' && submittedPrice !== expectedPrice) {
+    return { valid: false, reason: 'SLY_PRIORITY_FEE_CHANGED' };
+  }
+  const feeComputeUnitLimit = BigInt(computeUnitLimit ?? MAX_WALLET_COMPUTE_UNITS);
+  const priorityFeeLamports = (submittedPrice * feeComputeUnitLimit + 999_999n) / 1_000_000n;
+  if (priorityFeeLamports > MAX_WALLET_PRIORITY_FEE_LAMPORTS) {
+    return { valid: false, reason: 'WALLET_PRIORITY_FEE_TOO_HIGH' };
+  }
+  return {
+    valid: true,
+    reason: 'OK',
+    computeUnitLimit,
+    microLamportsPerCu: microLamportsPerCu?.toString(),
+  };
 }
 
 function nextWarpWaypoint(maxWarpDistance: number, start: [number, number], end: [number, number]): [number, number] {
@@ -1466,42 +1601,28 @@ router.post('/sea/scan/submit', async (req, res) => {
   );
   const messageMatches = preparedMessage.equals(signedMessage);
   const signaturesValid = signatureValidity.length === requiredSignatures && signatureValidity.every(Boolean);
-  if (!messageMatches || !signaturesValid) {
-    const preparedMessageData = preparation.transaction.message as any;
-    const signedMessageData = signedTransaction.message as any;
-    const preparedKeys: PublicKey[] = preparedMessageData.staticAccountKeys ?? preparedMessageData.accountKeys;
-    const signedKeys: PublicKey[] = signedMessageData.staticAccountKeys ?? signedMessageData.accountKeys;
-    const preparedInstructions = preparedMessageData.compiledInstructions ?? preparedMessageData.instructions ?? [];
-    const signedInstructions = signedMessageData.compiledInstructions ?? signedMessageData.instructions ?? [];
-    const accountKeysMatch = preparedKeys.length === signedKeys.length
-      && preparedKeys.every((key, index) => key.equals(signedKeys[index]));
-    const instructionsMatch = preparedInstructions.length === signedInstructions.length
-      && preparedInstructions.every((instruction: any, index: number) => {
-        const signedInstruction = signedInstructions[index];
-        const preparedData = Buffer.from(instruction.data);
-        const signedData = Buffer.from(signedInstruction.data);
-        return instruction.programIdIndex === signedInstruction.programIdIndex
-          && JSON.stringify(instruction.accountKeyIndexes ?? instruction.accounts) === JSON.stringify(signedInstruction.accountKeyIndexes ?? signedInstruction.accounts)
-          && preparedData.equals(signedData);
-      });
-    let firstDifferentByte = 0;
-    while (firstDifferentByte < preparedMessage.length && firstDifferentByte < signedMessage.length
-      && preparedMessage[firstDifferentByte] === signedMessage[firstDifferentByte]) firstDifferentByte += 1;
+  const messageValidation = validateWalletTransactionMessage(preparation.transaction, signedTransaction, preparation.feePolicy);
+  if (!signaturesValid || !messageValidation.valid) {
     console.warn('[sea] signed transaction validation failed', {
       pid: process.pid,
       action: preparation.action,
       prepareId,
       messageMatches,
-      messageBytes: { prepared: preparedMessage.length, signed: signedMessage.length, firstDifferentByte },
-      recentBlockhashMatches: preparedMessageData.recentBlockhash === signedMessageData.recentBlockhash,
-      accountKeysMatch,
-      instructionCount: { prepared: preparedInstructions.length, signed: signedInstructions.length },
-      instructionsMatch,
+      messageValidation,
       requiredSignatures,
       signatureCount: signedTransaction.signatures.length,
       validSignatures: signatureValidity.filter(Boolean).length,
     });
-    return res.status(403).json({ error: 'SCAN_SIGNATURE_OR_MESSAGE_INVALID' });
+    return res.status(403).json({ error: 'SCAN_SIGNATURE_OR_MESSAGE_INVALID', detail: messageValidation.reason });
+  }
+  if (!messageMatches) {
+    console.info('[sea] accepted wallet compute-budget normalization', {
+      pid: process.pid,
+      action: preparation.action,
+      prepareId,
+      computeUnitLimit: messageValidation.computeUnitLimit,
+      microLamportsPerCu: messageValidation.microLamportsPerCu,
+    });
   }
 
   const { allowedWallets } = await getWalletAuthorityUtil(profileId);
