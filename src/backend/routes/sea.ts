@@ -1173,6 +1173,7 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
     return res.status(400).json({ error: 'INVALID_MOVEMENT_EXIT_INPUT' });
   }
 
+  let prepareRpc = { name: 'unknown', host: 'unknown' };
   try {
     const snapshot = await getSnapshot(profileId);
     const fleet = snapshot.fleets.find((item: SeaFleet) => item.id === fleetId);
@@ -1287,7 +1288,7 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
           unitsConsumed: simulation.value.unitsConsumed ?? null,
         },
       };
-    });
+    }, endpoint => { prepareRpc = seaRpc(endpoint); });
     let prepareId: string | null = null;
     if (!prepared.simulation.err) {
       const now = Date.now();
@@ -1304,7 +1305,14 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
         lastValidBlockHeight: prepared.lastValidBlockHeight,
         expiresAt: now + 90_000,
       });
-      console.info('[sea] transaction prepared', { pid: process.pid, action: exitAction, prepareId });
+      console.info('[sea] transaction prepared', {
+        pid: process.pid,
+        action: exitAction,
+        prepareId,
+        rpc: prepareRpc,
+        blockhash: prepared.blockhash,
+        lastValidBlockHeight: prepared.lastValidBlockHeight,
+      });
     }
     return res.json({
       fleetId,
@@ -1393,14 +1401,30 @@ router.post('/sea/scan/submit', async (req, res) => {
   }
 
   scanPreparations.delete(prepareId);
+  let submitRpc = { name: 'unknown', host: 'unknown' };
   try {
     const result = await withRpc(profileId, async connection => {
-      const currentBlockHeight = await connection.getBlockHeight('confirmed');
-      if (currentBlockHeight > preparation.lastValidBlockHeight) throw new Error('SCAN_TRANSACTION_BLOCKHASH_EXPIRED');
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        maxRetries: 3,
-        preflightCommitment: 'confirmed',
+      console.info('[sea] submitting signed transaction', {
+        pid: process.pid,
+        action: preparation.action,
+        prepareId,
+        rpc: submitRpc,
+        lastValidBlockHeight: preparation.lastValidBlockHeight,
       });
+      let signature: string;
+      try {
+        signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+          maxRetries: 3,
+          preflightCommitment: 'confirmed',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+        if (/blockhash (not found|expired)|block height exceeded/i.test(message)) {
+          console.warn('[sea] RPC preflight rejected expired blockhash', { pid: process.pid, action: preparation.action, prepareId, rpc: submitRpc });
+          throw new Error('SCAN_TRANSACTION_BLOCKHASH_EXPIRED');
+        }
+        throw error;
+      }
       let confirmationStatus = 'confirmed';
       let scanResult: Record<string, unknown> | null = null;
       try {
@@ -1477,7 +1501,7 @@ router.post('/sea/scan/submit', async (req, res) => {
       };
       console.info('[sea] network fee charged', { profileId, fleetId: preparation.fleetId, signature, ...fee });
       return { signature, action: preparation.action, confirmationStatus, fee, scanResult };
-    });
+    }, endpoint => { submitRpc = seaRpc(endpoint); });
     console.info('[sea] scan transaction confirmed', { profileId, fleetId: preparation.fleetId, signature: result.signature });
     return res.json(result);
   } catch (error) {
