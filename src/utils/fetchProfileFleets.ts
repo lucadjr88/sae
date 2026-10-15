@@ -21,6 +21,9 @@ function getRpcRetryInfo(error: unknown): { errorType: '429' | '503' | 'error'; 
   if (status === 401 || /\b401\b|Unauthorized/i.test(message)) {
     return { errorType: '503', retryable: true };
   }
+  if (status === 402 || /\b402\b|Payment Required|Out of CU/i.test(message)) {
+    return { errorType: '503', retryable: true };
+  }
 
   const looksLikeRetryableRpcError =
     status === 408 ||

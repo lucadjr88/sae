@@ -200,6 +200,7 @@ function rpcErrorType(error: unknown): '429' | '503' | 'unsupported' | 'error' {
       && /Connection\.getProgramAccounts/.test(stack))
   ) return 'unsupported';
   if (status === 429 || /429|Too Many Requests/i.test(message)) return '429';
+  if (status === 402 || /\b402\b|Payment Required|Out of CU/i.test(message)) return '503';
   if (status === 401 || status === 403 || /\b(?:401|403)\b|Unauthorized|Forbidden/i.test(message)) return '503';
   if (
     [408, 500, 502, 503, 504].includes(status ?? 0) ||
