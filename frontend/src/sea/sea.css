@@ -2,7 +2,8 @@ html,
 body {
     margin: 0;
     height: 100%;
-    background: #0d141c; /* Sfondo unificato con l'immagine */
+    background: #0d141c;
+    /* Sfondo unificato con l'immagine */
     overflow: hidden;
     font: 13px sans-serif;
     color: #e8f1f5;
@@ -22,7 +23,8 @@ body {
     align-items: center;
     justify-content: center;
     gap: 22px;
-    background: #0d141c; /* Sfondo unificato con l'immagine */
+    background: #0d141c;
+    /* Sfondo unificato con l'immagine */
 }
 
 #sea-loader[hidden] {
@@ -32,9 +34,10 @@ body {
 .sea-loader__image {
     display: block;
     width: min(52vw, 420px);
-    aspect-ratio: 1; /* Forza il box a essere perfettamente quadrato */
+    aspect-ratio: 1;
+    /* Forza il box a essere perfettamente quadrato */
     object-fit: contain;
-    
+
     /* Usa closest-side per fare in modo che il cerchio tocchi perfettamente i bordi del box 
     -webkit-mask-image: radial-gradient(circle closest-side, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);
     mask-image: radial-gradient(circle closest-side, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);*/
@@ -71,16 +74,19 @@ body {
 #hud .hud-content {
     grid-area: 1 / 1;
     box-sizing: border-box;
-    padding: 70px;
+    padding-left: 65px;
+    padding-right: 70px;
+    padding-top: 25px;
+    padding-bottom: 25px;
     /* Sfondo solido pulito */
     background: rgb(5, 25, 38);
 
     /* Maschera di dissolvenza rettangolare su tutti e quattro i lati */
-    -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0) 0, rgba(0,0,0,1) 50px, rgba(0,0,0,1) calc(100% - 50px), rgba(0,0,0,0) 100%),
-                        linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,1) 15px, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0) 100%);
+    -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 50px, rgba(0, 0, 0, 1) calc(100% - 50px), rgba(0, 0, 0, 0) 100%),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 15px, rgba(0, 0, 0, 1) calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
     -webkit-mask-composite: intersect;
-    mask-image: linear-gradient(to right, rgba(0,0,0,0) 0, rgba(0,0,0,1) 50px, rgba(0,0,0,1) calc(100% - 50px), rgba(0,0,0,0) 100%),
-                linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,1) 15px, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0) 100%);
+    mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 50px, rgba(0, 0, 0, 1) calc(100% - 50px), rgba(0, 0, 0, 0) 100%),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 15px, rgba(0, 0, 0, 1) calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
     mask-composite: intersect;
 
 }
@@ -98,7 +104,8 @@ body {
 }
 
 #hud .status {
-    padding-left: 10px;
+    display: flex;
+    justify-content: center;
     margin-bottom: 8px;
     opacity: 0.85;
 }
@@ -249,11 +256,11 @@ body {
     scrollbar-width: none;
     -ms-overflow-style: none;
     /* Maschera di dissolvenza rettangolare su tutti e quattro i lati */
-    -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0) 0, rgba(0,0,0,1) 60px, rgba(0,0,0,1) calc(100% - 60px), rgba(0,0,0,0) 100%),
-                        linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,1) 15px, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0) 100%);
+    -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 60px, rgba(0, 0, 0, 1) calc(100% - 60px), rgba(0, 0, 0, 0) 100%),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 15px, rgba(0, 0, 0, 1) calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
     -webkit-mask-composite: intersect;
-    mask-image: linear-gradient(to right, rgba(0,0,0,0) 0, rgba(0,0,0,1) 60px, rgba(0,0,0,1) calc(100% - 60px), rgba(0,0,0,0) 100%),
-                linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,1) 15px, rgba(0,0,0,1) calc(100% - 18px), rgba(0,0,0,0) 100%);
+    mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 60px, rgba(0, 0, 0, 1) calc(100% - 60px), rgba(0, 0, 0, 0) 100%),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 15px, rgba(0, 0, 0, 1) calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
     mask-composite: intersect;
 }
 
@@ -467,8 +474,8 @@ body {
     display: none;
 }
 
-.automation-field > span,
-.automation-checkbox > span {
+.automation-field>span,
+.automation-checkbox>span {
     min-width: 0;
     overflow-wrap: anywhere;
 }
@@ -525,11 +532,6 @@ body {
     gap: 4px;
 }
 
-@media (max-width: 600px) {
-    .automation-form {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
 
 .fleet-info-body {
     display: grid;
@@ -762,4 +764,46 @@ body {
 
 #profile-error {
     color: #ff9b8a;
+}
+
+/* ########################################## MOBILE ############################## */
+
+@media (max-width: 600px) {
+    #hud {
+        right: 6px;
+        left: 6px;
+        width: auto;
+        min-width: 0;
+        cursor: pointer;
+
+    }
+
+
+    /* Cornice più sottile su mobile per lasciare spazio alla mappa */
+    #hud .hud-frame {
+        border-width: 45px 36px;
+        /* Spessore ridotto proporzionalmente */
+        border-image: url('/sea/assets/cornice.png') 900 600 / 45px 36px / 0 stretch repeat;
+    }
+
+    #hud .hud-content {
+        padding: 10px 30px 10px 17px;
+                    /* Maschera di dissolvenza rettangolare su tutti e quattro i lati */
+    -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 20px, rgba(0, 0, 0, 1) calc(100% - 20px), rgba(0, 0, 0, 0) 100%),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 15px, rgba(0, 0, 0, 1) calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
+    -webkit-mask-composite: intersect;
+            mask-image: linear-gradient(to right, #0000 0, #000 20px calc(100% - 20px), #0000), linear-gradient(to bottom, #0000 0, #000 10px calc(100% - 10px), #0000);
+            mask-composite: intersect;
+    }
+
+
+    .automation-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+
+
+
+
+
 }
