@@ -723,6 +723,19 @@ body {
     object-fit: contain;
 }
 
+.sea-topbar__controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+.sea-topbar__info {
+    width: 35px;
+}
+
+.sea-topbar__settings {
+    width: 35px;
+}
+
 .sea-topbar__link {
     color: #e8f1f5;
     text-decoration: none;

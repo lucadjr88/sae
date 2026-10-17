@@ -26,6 +26,7 @@ export default defineConfig({
         'pages/instructions': path.resolve(__dirname, 'pages/instructions.html'),
         'pages/terms': path.resolve(__dirname, 'pages/terms.html'),
         'pages/sea': path.resolve(__dirname, 'pages/sea.html'),
+        'pages/abouth': path.resolve(__dirname, 'pages/abouth.html'),
       },
     },
   },

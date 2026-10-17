@@ -1,30 +1,38 @@
 <!doctype html>
 <html lang="it">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SEA | Star Atlas Explorer</title>
-    <script type="module" src="/src/sea/seaPage.ts"></script>
-  </head>
-  <body>
-    <div id="sea-loader" class="sea-loader" role="status" aria-label="Caricamento">
-      <img class="sea-loader__image" src="/sea/assets/Gemini_Generated_Image_3wdg873wdg873wdg_small.png" alt="" />
-      <span class="sea-loader__spinner" aria-hidden="true"></span>
-    </div>
-    <div id="game"></div>
-    <aside id="hud">
-      <div class="hud-content"></div>
-      <div class="hud-frame" aria-hidden="true"></div>
-    </aside>
-    <header class="sea-topbar">
-      <img class="sea-topbar__logo" src="/sea/assets/Gemini_Generated_Image_3wdg873wdg873wdg_small.png" alt="Star Atlas Explorer" />
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEA | Star Atlas Explorer</title>
+  <script type="module" src="/src/sea/seaPage.ts"></script>
+</head>
+
+<body>
+  <div id="sea-loader" class="sea-loader" role="status" aria-label="Caricamento">
+    <img class="sea-loader__image" src="/sea/assets/Gemini_Generated_Image_3wdg873wdg873wdg_small.png" alt="" />
+    <span class="sea-loader__spinner" aria-hidden="true"></span>
+  </div>
+  <div id="game"></div>
+  <aside id="hud">
+    <div class="hud-content"></div>
+    <div class="hud-frame" aria-hidden="true"></div>
+  </aside>
+  <header class="sea-topbar">
+    <img class="sea-topbar__logo" src="/sea/assets/Gemini_Generated_Image_3wdg873wdg873wdg_small.png"
+      alt="Star Atlas Explorer" />
+    <div class="sea-topbar__controls">
+      <img class="sea-topbar__settings" src="/sea/assets/chiave_inglese.png" alt="Settings" />
+      <img class="sea-topbar__info" src="/sea/assets/info.png" alt="About..." onclick="location.href='/pages/abouth.html'" />
       <a class="sea-topbar__link" href="/">Torna a SAE</a>
-    </header>
-    <form id="profile-form" class="profile-form">
-      <label for="profile-id">Player Profile ID</label>
-      <input id="profile-id" name="profileId" autocomplete="off" required />
-      <button type="submit">Apri mappa</button>
-      <div id="profile-error" role="alert"></div>
-    </form>
-  </body>
+    </div>
+  </header>
+  <form id="profile-form" class="profile-form">
+    <label for="profile-id">Player Profile ID</label>
+    <input id="profile-id" name="profileId" autocomplete="off" required />
+    <button type="submit">Apri mappa</button>
+    <div id="profile-error" role="alert"></div>
+  </form>
+</body>
+
 </html>
