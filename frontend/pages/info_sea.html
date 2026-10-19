@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Info Sea Atlas</title>
+
+</head>
+
+<body style="background-color: antiquewhite;">
+  <header>
+    <img class="back-arrow" src="/sea/assets/back_arrow.png" onclick="history.back()" />
+    <img class="header-image" src="/sea/assets/Gemini_Generated_Image_3wdg873wdg873wdg_small.png"/>
+  </header>
+  <main>
+    <!-- Menu di navigazione cliccabile con attributi data-file -->
+    <div class="info-sea-sidebar">
+      <p><strong><span class="nav-link" data-file="about_sea.html">About Sea Atlas</span></strong></p>
+      <p><strong><span class="nav-link" data-file="privacy_sea.html">Privacy Policy</span></strong></p>
+      <p><strong><span class="nav-link" data-file="terms_sea.html">Terms of Service</span></strong></p>
+      <p><strong><span class="nav-link" data-file="credits_sea.html">Credits</span></strong></p>
+      <p><strong><span class="nav-link" data-file="contact_sea.html">Contact</span></strong></p>
+    </div>
+
+    <!-- Il contenitore dove verrà caricato dinamicamente il testo -->
+    <div id="container" >
+      Caricamento in corso...
+    </div>
+
+  </main>
+
+<script type="module" src="/src/sea/info_sea.ts"></script>
+
+</html>

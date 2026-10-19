@@ -14,16 +14,22 @@
     <span class="sea-loader__spinner" aria-hidden="true"></span>
   </div>
   <div id="game"></div>
-  <aside id="hud">
-    <div class="hud-content"></div>
+<aside id="hud" class="minimized">
     <div class="hud-frame" aria-hidden="true"></div>
-  </aside>
+    
+    <!-- Icona della nave singola visibile solo a riquadro chiuso -->
+    <div class="mini-ship-icon"></div>
+
+    <div class="hud-content">
+        <!-- Tutta la lista delle flotte -->
+    </div>
+</aside>
   <header class="sea-topbar">
     <img class="sea-topbar__logo" src="/sea/assets/Gemini_Generated_Image_3wdg873wdg873wdg_small.png"
       alt="Star Atlas Explorer" />
     <div class="sea-topbar__controls">
       <img class="sea-topbar__settings" src="/sea/assets/chiave_inglese.png" alt="Settings" />
-      <img class="sea-topbar__info" src="/sea/assets/info.png" alt="About..." onclick="location.href='/pages/abouth.html'" />
+      <img class="sea-topbar__info" src="/sea/assets/info.png" alt="About..." onclick="location.href='/pages/info_sea.html'" />
       <a class="sea-topbar__link" href="/">Torna a SAE</a>
     </div>
   </header>
@@ -34,5 +40,22 @@
     <div id="profile-error" role="alert"></div>
   </form>
 </body>
+<script>  
+document.addEventListener('DOMContentLoaded', () => {
+  const hud = document.getElementById('hud');
 
+  if (hud) {
+    hud.addEventListener('click', (e) => {
+      // Se è minimizzato, lo espandiamo
+      if (hud.classList.contains('minimized')) {
+        hud.classList.remove('minimized');
+        e.stopPropagation(); // Evita conflitti di click
+      } else {
+        hud.classList.add('minimized');
+        e.stopPropagation(); // Evita conflitti di click
+      }
+    });
+  }
+});
+</script>
 </html>
