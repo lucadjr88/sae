@@ -79,7 +79,7 @@ body {
     padding-top: 25px;
     padding-bottom: 25px;
     /* Sfondo solido pulito */
-    background: rgb(5, 25, 38);
+    background: #231c09;
 
     /* Maschera di dissolvenza rettangolare su tutti e quattro i lati */
     -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 50px, rgba(0, 0, 0, 1) calc(100% - 50px), rgba(0, 0, 0, 0) 100%),
@@ -253,14 +253,14 @@ body {
     max-height: calc(100vh - 16px);
     padding: clamp(24px, 8vh, 82px) clamp(12px, 12vw, 84px);
     overflow-y: auto;
-    background: rgb(5, 25, 38);
+    background: #231c09;
     scrollbar-width: none;
     -ms-overflow-style: none;
     /* Maschera di dissolvenza rettangolare su tutti e quattro i lati */
     -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 60px, rgba(0, 0, 0, 1) calc(100% - 60px), rgba(0, 0, 0, 0) 100%),
         linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 15px, rgba(0, 0, 0, 1) calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
     -webkit-mask-composite: intersect;
-    mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 60px, rgba(0, 0, 0, 1) calc(100% - 60px), rgba(0, 0, 0, 0) 100%),
+    mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 30px, rgba(0, 0, 0, 1) calc(100% - 30px), rgba(0, 0, 0, 0) 100%),
         linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 15px, rgba(0, 0, 0, 1) calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
     mask-composite: intersect;
 }
@@ -716,7 +716,7 @@ body {
     box-sizing: border-box;
     height: 64px;
     padding: 0 20px;
-    background: rgb(5, 25, 38);
+    background: #876604;
 }
 
 .sea-topbar__logo {
@@ -829,7 +829,7 @@ body {
 
   /* --- STATO ESPANSO (Aperto al click) --- */
   #hud:not(.minimized) {
-    top: 60px;
+    top: 70px;
     right: 6px;
     left: 6px;
     width: auto;
@@ -837,7 +837,7 @@ body {
     max-height: 80vh;
     overflow-y: auto;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1000;
+    z-index: 1;
   }
 
   /* La tua cornice normale quando è aperto */
@@ -861,6 +861,9 @@ body {
     display: none; /* Nasconde la nave singola quando il pannello è aperto */
   }
 
+  .fleet-info-panel {
+    z-index: 1000; /* Assicura che il pannello delle informazioni della flotta sia sopra altri elementi */
+  }
 
 
 
