@@ -611,7 +611,7 @@ body {
     border-width: 72px 58px;
     border-style: solid;
     border-color: transparent;
-    border-image: url('/sea/assets/cornice.png') 900 600 / 72px 58px / 0 stretch repeat;
+    border-image: url('/sea/assets/cornice2.png') 900 600 / 72px 58px / 0 stretch repeat;
     pointer-events: none;
 }
 
@@ -780,6 +780,51 @@ body {
     color: #ff9b8a;
 }
 
+#settings {
+    position: fixed;
+    top: 50%;
+    right: 0%;
+    transform: translate(-50%, -50%);
+    display: grid;
+    box-sizing: border-box;
+    overflow-y: hidden;
+    overflow-x: hidden;
+}
+
+#settings .settings-content {
+    grid-area: 1 / 1;
+    box-sizing: border-box;
+    padding: 200px;
+    /* Sfondo solido pulito */
+    background: #231c09;
+
+    /* Maschera di dissolvenza rettangolare su tutti e quattro i lati */
+    -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 50px, rgba(0, 0, 0, 1) calc(100% - 50px), rgba(0, 0, 0, 0) 100%),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 15px, rgba(0, 0, 0, 1) calc(100% - 18px), rgba(0, 0, 0, 0) 100%);
+    -webkit-mask-composite: intersect;
+    mask-image: linear-gradient(to right, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 75px, rgba(0, 0, 0, 1) calc(100% - 75px), rgba(0, 0, 0, 0) 100%),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 1) 60px, rgba(0, 0, 0, 1) calc(100% - 60px), rgba(0, 0, 0, 0) 100%);
+    mask-composite: intersect;
+
+}
+
+#settings .settings-frame {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    box-sizing: border-box;
+    border-width: 105px 84px;
+    border-style: solid;
+    border-color: transparent;
+    border-image: url('/sea/assets/cornice_corda_quadrato.png') 900 600 / 105px 84px / 0 stretch repeat;
+    pointer-events: none;
+    
+}
+
+
+
+
+
 /* ########################################## MOBILE ############################## */
 
 @media (max-width: 600px) {
@@ -865,6 +910,9 @@ body {
     z-index: 1000; /* Assicura che il pannello delle informazioni della flotta sia sopra altri elementi */
   }
 
+  .fleet-info-content {
+  max-height: 80vh; /* Limita l'altezza del contenuto del pannello delle informazioni della flotta */
+}
 
 
 }
