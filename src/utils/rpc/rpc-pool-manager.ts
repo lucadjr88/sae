@@ -37,10 +37,14 @@ export function resetPoolCache(profileId?: string) {
   }
 }
 
-// Carica pool da cache (in memoria -> disco), se non esiste crea con prune
+// Carica pool da cache (in memoria -> disco), se non esiste restituisce direttamente l'intero pool senza test di prune bloccanti all'avvio
 export async function loadOrCreateRpcPool(profileId: string, persist = true): Promise<any[]> {
   if (!persist) {
-    if (!transientPool) transientPool = await prune.pruneEndpoints();
+    if (!transientPool) {
+      const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
+      const endpointsRaw = JSON.parse(raw);
+      transientPool = Array.isArray(endpointsRaw) ? endpointsRaw : Object.values(endpointsRaw);
+    }
     return transientPool;
   }
   if (poolCache[profileId]) {
@@ -55,14 +59,16 @@ export async function loadOrCreateRpcPool(profileId: string, persist = true): Pr
     console.log(`[rpc-pool-manager] Caricato pool da cache/${profileId}/rpc-pool.json (${parsed.length} endpoint)`);
     return parsed;
   } catch {
-    // Non esiste: crea con prune
-    console.log(`[rpc-pool-manager] Pool non trovato per ${profileId}, eseguo prune...`);
-    const valid = await prune.pruneEndpoints();
+    // Non esiste: carica direttamente la lista completa senza test di prune bloccanti
+    console.log(`[rpc-pool-manager] Pool non trovato per ${profileId}, carico tutti gli endpoint configurati.`);
+    const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
+    const endpointsRaw = JSON.parse(raw);
+    const endpoints = Array.isArray(endpointsRaw) ? endpointsRaw : Object.values(endpointsRaw);
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(file, JSON.stringify(valid, null, 2));
-    poolCache[profileId] = valid;
-    console.log(`[rpc-pool-manager] Pool pruned creato in cache/${profileId}/rpc-pool.json (${valid.length} endpoint)`);
-    return valid;
+    await fs.writeFile(file, JSON.stringify(endpoints, null, 2));
+    poolCache[profileId] = endpoints;
+    console.log(`[rpc-pool-manager] Pool salvato in cache/${profileId}/rpc-pool.json (${endpoints.length} endpoint)`);
+    return endpoints;
   }
 }
 

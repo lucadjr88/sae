@@ -781,6 +781,7 @@ body {
 }
 
 #settings {
+    visibility: hidden;
     position: fixed;
     top: 50%;
     right: 0%;
