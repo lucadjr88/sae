@@ -386,6 +386,12 @@ function warpFuelRequired(start: [number, number], end: [number, number], maxWar
   return total;
 }
 
+async function logRpcAttempt(profileId: string, endpointName: string, url: string, attempt: number, maxAttempts: number, errorType?: string, errorMessage?: string) {
+  const line = `[${new Date().toISOString()}] [RPC-ATTEMPT] profile: ${profileId} | endpoint: ${endpointName} (${url}) | attempt: ${attempt + 1}/${maxAttempts} | errorType: ${errorType ?? 'success'} | msg: ${errorMessage ?? 'none'}`;
+  console.debug(line);
+}
+
+
 async function withRpc<T>(profileId: string, action: (connection: any) => Promise<T>, onRpc?: (endpoint: any) => void): Promise<T> {
   const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
   const urls = new Set(pool.map(endpoint => endpoint?.url).filter((url): url is string => typeof url === 'string'));
@@ -406,6 +412,8 @@ async function withRpc<T>(profileId: string, action: (connection: any) => Promis
       released = true;
       pick.release({ success: true, latencyMs: Date.now() - startedAt });
       return value;
+      onRpc?.(pick.endpoint);
+      await logRpcAttempt(profileId, pick.endpoint?.name ?? 'unknown', pick.endpoint?.url ?? 'unknown', attempt, maxAttempts);
     } catch (error) {
       const errorType = rpcErrorType(error);
       if (pick) {
@@ -417,6 +425,13 @@ async function withRpc<T>(profileId: string, action: (connection: any) => Promis
         }
       }
       if (errorType === 'error' || attempt + 1 >= maxAttempts) throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (pick) {
+        const url = pick.endpoint?.url;
+        await logRpcAttempt(profileId, pick.endpoint?.name ?? 'unknown', url ?? 'unknown', attempt, maxAttempts, errorType, errorMessage);
+      } else {
+        await logRpcAttempt(profileId, 'unknown', 'unknown', attempt, maxAttempts, errorType, errorMessage);
+      }
       if (errorType !== 'unsupported') {
         if (attempt + 1 >= 3) throw error;
         await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
