@@ -100,6 +100,12 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
   const excludedUrls = opts?.excludeUrls ?? new Set<string>();
   const availableCandidates = candidates.filter(ep => !excludedUrls.has(ep.url));
   if (availableCandidates.length > 0) candidates = availableCandidates;
+  // Ordina candidati per punteggio (score) decrescente: punteggio più alto = priorità massima
+  candidates = [...candidates].sort((a, b) => {
+    const scoreA = typeof (health as any).getScore === 'function' ? (health as any).getScore(a.url) : 100;
+    const scoreB = typeof (health as any).getScore === 'function' ? (health as any).getScore(b.url) : 100;
+    return scoreB - scoreA;
+  });
   // Ordina candidati per tasso 429 crescente negli ultimi 2 min: meno 429 = priorità più alta
   const WINDOW_429_MS = 2 * 60 * 1000;
   candidates = [...candidates].sort((a, b) =>
