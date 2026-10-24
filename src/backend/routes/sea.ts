@@ -722,6 +722,23 @@ router.get('/sea/fleet-resources', async (req, res) => {
         const balance = await connection.getTokenAccountBalance(tokenAccount, 'confirmed');
         return Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
       };
+      const multipleAccounts = await connection.getMultipleAccountsInfo([fuelToken, foodToken], 'confirmed');
+      const fuelAccountInfo = multipleAccounts[0];
+      const foodAccountInfo = multipleAccounts[1];
+
+      let fuelCurrent = 0;
+      if (fuelAccountInfo) {
+        if (!fuelAccountInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('INVALID_TOKEN_ACCOUNT_OWNER');
+        const balance = await connection.getTokenAccountBalance(fuelToken, 'confirmed');
+        fuelCurrent = Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
+      }
+
+      let foodCurrent = 0;
+      if (foodAccountInfo) {
+        if (!foodAccountInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('INVALID_TOKEN_ACCOUNT_OWNER');
+        const balance = await connection.getTokenAccountBalance(foodToken, 'confirmed');
+        foodCurrent = Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
+      }
       const [fuelCurrent, foodCurrent] = await Promise.all([
         balanceForTokenAccount(fuelToken),
         balanceForTokenAccount(foodToken),
