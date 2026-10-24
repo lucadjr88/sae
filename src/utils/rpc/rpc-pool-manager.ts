@@ -124,7 +124,8 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
       rrCursorByProfile[profileId] = (i + 1) % candidates.length;
       const { connection } = await getRpcConnectionWithUrl({
         rpcUrl: ep.url,
-        commitment: 'confirmed'
+        commitment: 'confirmed',
+        headers: ep.headers
       });
       const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string }) => {
         concurrency.release(ep.url);
@@ -171,7 +172,8 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
       rrCursorByProfile[profileId] = (startIndex + 1) % candidates.length;
       const { connection } = await getRpcConnectionWithUrl({
         rpcUrl: ep.url,
-        commitment: 'confirmed'
+        commitment: 'confirmed',
+        headers: ep.headers
       });
       const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string }) => {
         // ensure release doesn't call release twice since we didn't acquire

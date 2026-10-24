@@ -15,14 +15,15 @@ type RpcEndpoint = {
 };
 
 type PrunedRpcStats = Record<string, string>;
-async function postGetSlot(url: string, timeout: number) {
+async function postGetSlot(url: string, timeout: number, headers?: Record<string, string>) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
   try {
+    const hdrs: Record<string, string> = { 'Content-Type': 'application/json', ...(headers || {}) };
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: hdrs,
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
@@ -42,14 +43,15 @@ async function postGetSlot(url: string, timeout: number) {
   }
 }
 
-async function postGetLatestBlockhash(url: string, timeout: number) {
+async function postGetLatestBlockhash(url: string, timeout: number, headers?: Record<string, string>) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
 
   try {
+    const hdrs: Record<string, string> = { 'Content-Type': 'application/json', ...(headers || {}) };
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: hdrs,
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
@@ -183,9 +185,9 @@ export async function getSingleHealthyRpc(): Promise<string | null> {
     try {
       // Eseguiamo 3 richieste getSlot in parallelo
       const stressTest = await Promise.all([
-        postGetSlot(ep.url, 3000),
-        postGetSlot(ep.url, 3000),
-        postGetSlot(ep.url, 3000)
+        postGetSlot(ep.url, 3000, ep.headers as Record<string, string>),
+        postGetSlot(ep.url, 3000, ep.headers as Record<string, string>),
+        postGetSlot(ep.url, 3000, ep.headers as Record<string, string>)
       ]);
 
       // Verifichiamo che TUTTE abbiano avuto successo (HTTP 200 e nessun errore JSON-RPC)
@@ -222,7 +224,7 @@ export async function pruneEndpoints(criteria: { unhealthy?: boolean, minFailure
   // Chiamate parallele HTTP POST getLatestBlockhash
   const probes = await Promise.allSettled(endpoints.map(async (ep: any) => {
     try {
-      const probe = await postGetLatestBlockhash(ep.url, 4000);
+      const probe = await postGetLatestBlockhash(ep.url, 4000, ep.headers as Record<string, string>);
       const blockhash = probe.data?.result?.value?.blockhash;
       const lastValidBlockHeight = probe.data?.result?.value?.lastValidBlockHeight;
       const isHealthy =

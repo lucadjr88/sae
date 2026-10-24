@@ -655,6 +655,31 @@ router.get('/sea/snapshot', async (req, res) => {
     return res.status(503).json({ profileId, updatedAt: 0, error: 'SEA_SNAPSHOT_UNAVAILABLE', fleets: [] });
   }
 });
+router.get('/sea/ws-endpoints', async (req, res) => {
+  const input = req.query.profileId;
+  const profileId = typeof input === 'string' ? input : 'default';
+  try {
+    const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
+    const endpoints = pool
+      .map((ep: any) => {
+        let wsUrl = ep.ws;
+        if (!wsUrl && typeof ep.url === 'string') {
+          if (ep.url.startsWith('https://')) wsUrl = ep.url.replace('https://', 'wss://');
+          else if (ep.url.startsWith('http://')) wsUrl = ep.url.replace('http://', 'ws://');
+        }
+        return {
+          name: ep.name,
+          url: ep.url,
+          ws: wsUrl,
+          headers: ep.headers
+        };
+      })
+      .filter((ep: any) => typeof ep.ws === 'string' && ep.ws.length > 0);
+    return res.json({ endpoints });
+  } catch (e) {
+    return res.json({ endpoints: [] });
+  }
+});
 
 router.get('/sea/fleet-resources', async (req, res) => {
   const profileInput = req.query.profileId;

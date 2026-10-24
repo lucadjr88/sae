@@ -96,12 +96,11 @@ body {
     z-index: 1;
     inset: 0;
     box-sizing: border-box;
-    border-width: 105px 84px;
+    border-width: 30px 60px;
     border-style: solid;
     border-color: transparent;
-    border-image: url('/sea/assets/cornice.png') 900 600 / 105px 84px / 0 stretch repeat;
+    border-image: url('/sea/assets/cornice.png') 900 600 / 50px 84px / 0 stretch repeat;
     pointer-events: none;
-    
 }
 
 #hud .status {
