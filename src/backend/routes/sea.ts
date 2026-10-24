@@ -684,6 +684,46 @@ router.get('/sea/ws-endpoints', async (req, res) => {
   }
 });
 
+async function fetchFleetResourcesFromChain(connection: any, chainData: any) {
+  const gameId = new PublicKey(chainData.game_id);
+  const fuelTank = new PublicKey(chainData.fuel_tank);
+  const cargoHold = new PublicKey(chainData.cargo_hold);
+  const gameInfo = await connection.getAccountInfo(gameId, 'confirmed');
+  if (!gameInfo || !gameInfo.owner.equals(SAGE_PROGRAM_ID)) throw new Error('INVALID_GAME_ACCOUNT');
+  const game = coder.accounts.decode('Game', gameInfo.data);
+  const fuelToken = getAssociatedTokenAddressSync(game.mints.fuel, fuelTank, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+  const foodToken = getAssociatedTokenAddressSync(game.mints.food, cargoHold, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+  const multipleAccounts = await connection.getMultipleAccountsInfo([fuelToken, foodToken], 'confirmed');
+  const fuelAccountInfo = multipleAccounts[0];
+  const foodAccountInfo = multipleAccounts[1];
+
+  let fuelCurrent = 0;
+  if (fuelAccountInfo) {
+    if (!fuelAccountInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('INVALID_TOKEN_ACCOUNT_OWNER');
+    const balance = await connection.getTokenAccountBalance(fuelToken, 'confirmed');
+    fuelCurrent = Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
+  }
+
+  let foodCurrent = 0;
+  if (foodAccountInfo) {
+    if (!foodAccountInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('INVALID_TOKEN_ACCOUNT_OWNER');
+    const balance = await connection.getTokenAccountBalance(foodToken, 'confirmed');
+    foodCurrent = Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
+  }
+
+  const fuelCapacity = Number(chainData.stats?.cargo_stats?.fuel_capacity ?? 0);
+  return {
+    fleetId: '',
+    fuelCurrent,
+    fuelCapacity,
+    fuelCurrentPct: fuelCapacity > 0 ? (fuelCurrent / fuelCapacity) * 100 : 0,
+    foodCurrent,
+    observedAt: Date.now(),
+  };
+}
+
+
 router.get('/sea/fleet-resources', async (req, res) => {
   const profileInput = req.query.profileId;
   const fleetInput = req.query.fleetId;
@@ -731,6 +771,13 @@ router.get('/sea/fleet-resources', async (req, res) => {
       if (foodAccountInfo) {
         if (!foodAccountInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('INVALID_TOKEN_ACCOUNT_OWNER');
         const balance = await connection.getTokenAccountBalance(foodToken, 'confirmed');
+    const result = await withRpc(profileId, async connection => {
+      const resData = await fetchFleetResourcesFromChain(connection, fleet.chainData);
+      return {
+        ...resData,
+        fleetId,
+      };
+    });
         foodCurrent = Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
       }
       // balance already fetched via multipleAccounts above
