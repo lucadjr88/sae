@@ -421,6 +421,9 @@ async function withRpc<T>(profileId: string, action: (connection: any) => Promis
         if (attempt + 1 >= 3) throw error;
         await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
       }
+      if (errorType === '503' || errorType === '429') {
+        await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+      }
     }
   }
   throw new Error('No available RPC endpoint');
