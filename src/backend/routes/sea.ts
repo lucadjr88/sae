@@ -715,13 +715,7 @@ router.get('/sea/fleet-resources', async (req, res) => {
       const game = coder.accounts.decode('Game', gameInfo.data);
       const fuelToken = getAssociatedTokenAddressSync(game.mints.fuel, fuelTank, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
       const foodToken = getAssociatedTokenAddressSync(game.mints.food, cargoHold, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
-      const balanceForTokenAccount = async (tokenAccount: PublicKey) => {
-        const accountInfo = await connection.getAccountInfo(tokenAccount, 'confirmed');
-        if (!accountInfo) return 0;
-        if (!accountInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('INVALID_TOKEN_ACCOUNT_OWNER');
-        const balance = await connection.getTokenAccountBalance(tokenAccount, 'confirmed');
-        return Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
-      };
+
       const multipleAccounts = await connection.getMultipleAccountsInfo([fuelToken, foodToken], 'confirmed');
       const fuelAccountInfo = multipleAccounts[0];
       const foodAccountInfo = multipleAccounts[1];
@@ -739,10 +733,9 @@ router.get('/sea/fleet-resources', async (req, res) => {
         const balance = await connection.getTokenAccountBalance(foodToken, 'confirmed');
         foodCurrent = Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
       }
-      const [fuelCurrent, foodCurrent] = await Promise.all([
-        balanceForTokenAccount(fuelToken),
-        balanceForTokenAccount(foodToken),
-      ]);
+      // balance already fetched via multipleAccounts above
+
+
       const fuelCapacity = Number(chainData.stats?.cargo_stats?.fuel_capacity ?? 0);
       return {
         fleetId,
@@ -843,10 +836,7 @@ router.post('/sea/scan/prepare', async (req, res) => {
       const cargoSeqId = Number(cargoStats.seqId.toString());
       const [sduCargoType] = CargoType.findAddress(cargoProgram as any, statsDefinition, trackerData.sduMint, cargoSeqId);
       const [resourceCargoType] = CargoType.findAddress(cargoProgram as any, statsDefinition, game.mints.food, cargoSeqId);
-      await Promise.all([
-        cargoProgram.account.cargoType.fetch(sduCargoType),
-        cargoProgram.account.cargoType.fetch(resourceCargoType),
-      ]);
+
 
       const findPointsCategory = (categoryKey: PublicKey) => Object.values(game.points as any)
         .find((item: any) => item.category.equals(categoryKey));
