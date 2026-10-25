@@ -16,6 +16,7 @@ import rentalRouter from './backend/routes/rental.js';
 import sduRouter from './backend/routes/sdu.js';
 import seaRouter from './backend/routes/sea.js';
 import { startNonInvasiveMetricsLogger } from './utils/rpc/metrics.js';
+import clientLogRouter from './backend/routes/client-log.js';
 
 installProcessLogContext();
 
@@ -41,6 +42,7 @@ app.use('/api', assetsRouter);
 app.use('/api', rentalRouter);
 app.use('/api', sduRouter);
 app.use('/api', seaRouter);
+app.use('/api', clientLogRouter);
 
 // Serve frontend static files at /
 app.use('/', frontendRouter);

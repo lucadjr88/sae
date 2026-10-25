@@ -37,6 +37,12 @@ import {
   mobileWalletAdapter
 } from '@/services/mobile_wallet';
 
+import { installClientLogInterceptor } from '@/utils/client-log.js';
+
+// Invia i log del browser (console.log/debug/warn/error) al backend
+// affinché vengano raccolti nella cartella condivisa insieme ai log server.
+installClientLogInterceptor();
+
 declare global {
   interface Window {
     wallet: any;
