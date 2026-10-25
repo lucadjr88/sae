@@ -122,6 +122,37 @@ function appendAutomationRadioGroup(parent, labelText, options, selected, param)
   return field;
 }
 
+function appendSettingsInput(parent, labelText, value = '', readOnly = false, param = '') {
+  const field = document.createElement('div');
+  field.className = 'settings-field';
+  const label = document.createElement('span');
+  label.textContent = labelText;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = value == null ? '' : String(value);
+  input.readOnly = readOnly;
+  input.dataset.configKey = param || `field:${labelText}`;
+  if (param) input.dataset.scanParam = param;
+  field.append(label, input);
+  parent.append(field);
+  return input;
+}
+
+function appendSettingsCheckbox(parent, labelText, checked = false, param = '') {
+  const field = document.createElement('label');
+  field.className = 'settings-checkbox';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = checked;
+  input.dataset.configKey = param || `field:${labelText}`;
+  if (param) input.dataset.scanParam = param;
+  const label = document.createElement('span');
+  label.textContent = labelText;
+  field.append(input, label);
+  parent.append(field);
+  return input;
+}
+
 // Eventi: 'select' (fleetId). Usa solo textContent: i nomi flotta sono dati esterni.
 export class Hud extends Emitter {
   constructor(root, starbases = [], wallet = null) {
@@ -293,6 +324,34 @@ export class Hud extends Emitter {
       if (event.key === 'Escape') this.closeAutomation();
     });
     document.body.append(this.automationOverlay);
+
+    // --- Settings overlay (parametri globali, non per-flotta) ---
+    this.settingsEl = document.getElementById('settings');
+    this.settingsClose = document.createElement('button');
+    this.settingsClose.className = 'settings-close';
+    this.settingsClose.type = 'button';
+    this.settingsClose.setAttribute('aria-label', 'Chiudi impostazioni');
+    this.settingsClose.textContent = '\\u00d7';
+    this.settingsFormEl = this.settingsEl.querySelector('.settings-form');
+    this.settingsLeft = document.createElement('div');
+    this.settingsLeft.className = 'settings-column';
+    this.settingsRight = document.createElement('div');
+    this.settingsRight.className = 'settings-column';
+    this.settingsFormEl.append(this.settingsLeft, this.settingsRight);
+
+    const settingsBtn = document.querySelector('.sea-topbar__settings');
+    if (settingsBtn) {
+      settingsBtn.style.cursor = 'pointer';
+      settingsBtn.addEventListener('click', () => this.openSettings());
+    }
+    this.settingsClose.addEventListener('click', () => this.closeSettings());
+    this.settingsEl.addEventListener('click', event => {
+      if (event.target === this.settingsEl) this.closeSettings();
+    });
+    this.settingsEl.addEventListener('keydown', event => {
+      if (event.key === 'Escape') this.closeSettings();
+    });
+
     this.toolbar = document.createElement('div');
     this.toolbar.className = 'map-controls';
     this.toolbar.setAttribute('role', 'toolbar');
@@ -336,6 +395,7 @@ export class Hud extends Emitter {
     this.toolbar.remove();
     this.infoOverlay.remove();
     this.automationOverlay.remove();
+    this.settingsEl.hidden = true;
     this.content.replaceChildren();
   }
 
@@ -499,7 +559,7 @@ export class Hud extends Emitter {
         requestType,
       });
       console.info(`[SDU] scan-filter payload\n${JSON.stringify(payload, null, 2)}`);
-      const simulate = this.automationForm.querySelector('[data-scan-param="simulateScanFilter"]')?.checked;
+      const simulate = this.settingsSimulateScanFilter?.checked ?? false;
       this.automationRequestButton.disabled = true;
       this.automationResult.textContent = 'Selezione destinazione…';
       this.automationScanTransaction = null;
@@ -508,9 +568,9 @@ export class Hud extends Emitter {
       const result = simulate
         ? simulateScanFilterResponse(payload)
         : await requestScanFilter({
-          host: this.automationForm.querySelector('[data-scan-param="apiHost"]')?.value,
-          port: this.automationForm.querySelector('[data-scan-param="apiPort"]')?.value,
-          timeoutSeconds: this.automationForm.querySelector('[data-scan-param="requestTimeout"]')?.value,
+          host: this.settingsApiHost?.value,
+          port: this.settingsApiPort?.value,
+          timeoutSeconds: this.settingsRequestTimeout?.value,
           payload,
         });
       this.automationDestination = { x: Number(result.x), y: Number(result.y), sb: result.sb ?? null };
@@ -568,8 +628,8 @@ export class Hud extends Emitter {
         starbase: action === 'subwarp_start' || action === 'warp_start'
           ? destination.sb || this.automationForm.querySelector('[data-scan-param="sbCoords"]')?.value
           : undefined,
-        feeMode: this.automationForm.querySelector('[data-scan-param="useSlyFee"]')?.checked ? 'sly' : 'wallet',
-        priorityFeeLamports: this.automationPriorityFeeInput?.value ?? '1',
+        feeMode: this.settingsUseSlyFee?.checked ? 'sly' : 'wallet',
+        priorityFeeLamports: this.settingsPriorityFeeInput?.value ?? '1',
       });
       this.automationScanTransaction = result.transaction;
       this.automationPreparedResult = result;
@@ -821,7 +881,6 @@ export class Hud extends Emitter {
     const addInput = (parent, label, value = '', readOnly = false, param = '') => appendAutomationInput(parent, label, value, readOnly, param);
     const addCheck = (parent, label, checked = false, param = '') => appendAutomationCheckbox(parent, label, checked, param);
 
-    addInput(this.automationLeft, 'IP API', '127.0.0.1', false, 'apiHost');
     addInput(this.automationLeft, 'Nome Flotta', fleet.name, true, 'nomeFlotta');
     addCheck(this.automationLeft, 'doubleSB', false, 'doubleSB');
     const baseCoordsInput = addInput(this.automationLeft, 'Starbase base', '-14,-16', false, 'sbCoords');
@@ -834,25 +893,13 @@ export class Hud extends Emitter {
     addInput(this.automationLeft, 'Fuel minimo', '30', false, 'fuel_min');
     addInput(this.automationLeft, 'Fuel max', '40', false, 'fuel_max');
     this.automationCooldownInput = addInput(this.automationLeft, 'Cooldown', '300', false, 'scanCooldown');
-    addCheck(this.automationLeft, 'Onchain mode');
-    addCheck(this.automationLeft, 'Simula scan-filter locale', true, 'simulateScanFilter');
     addInput(this.automationLeft, 'Safety mult', '1.15');
-    addInput(this.automationLeft, 'Onchain URL', 'http://127.0.0.1:3010/intent');
     this.automationSpeedInput = addInput(this.automationLeft, 'Subwarp Speed', subwarpSpeed, true);
     appendAutomationRadioGroup(this.automationLeft, 'Movimento', [['warp', 'Warp'], ['subwarp', 'Subwarp']], 'subwarp', 'movementMode')
       .addEventListener('change', () => this.updateAutomationActionButton());
-    appendAutomationCheckbox(this.automationLeft, 'Usa fee Sly', false, 'useSlyFee')
-      .addEventListener('change', () => this.updateFeeControls());
-    this.automationPriorityFeeInput = addInput(this.automationLeft, 'Fee base Sly (lamports)', '1', false, 'priorityFeeLamports');
-    this.automationPriorityFeeInput.type = 'number';
-    this.automationPriorityFeeInput.min = '0';
-    this.automationPriorityFeeInput.max = '50000';
-    this.automationPriorityFeeInput.step = '1';
-    this.appendLocalSignerControls(this.automationLeft);
     addCheck(this.automationLeft, 'smartRange', true, 'smartRange');
     addCheck(this.automationLeft, 'coeffsdu1', true, 'coeffsdu1');
 
-    addInput(this.automationRight, 'Porta API', '3000', false, 'apiPort');
     addInput(this.automationRight, 'Id Flotta', fleet.id, true, 'idFlotta');
     addInput(this.automationRight, 'Seconda SB', '-14,-16', false, 'secondaSB');
     this.automationRangeInput = addInput(this.automationRight, 'Range consigliato', 'N/A', true);
@@ -863,9 +910,6 @@ export class Hud extends Emitter {
     addInput(this.automationRight, 'Scan cost on-chain', hasScanCost ? scanCost : 'N/D', true);
     addInput(this.automationRight, 'Food min', hasScanCost && scanCost === 0 ? '0' : '10', hasScanCost && scanCost === 0, 'food_min');
     addInput(this.automationRight, 'Timeout API', '10', false, 'requestTimeout');
-    addCheck(this.automationRight, 'Fallback legacy', true);
-    addCheck(this.automationRight, 'Test senza status click', true);
-    addCheck(this.automationRight, 'Safety checks', true);
     addInput(this.automationRight, 'Fuel/unit', '0.65');
     addInput(this.automationRight, 'Fuel reserve %', '2');
     addCheck(this.automationRight, 'coeffcount1', true, 'coeffcount1');
@@ -943,9 +987,69 @@ export class Hud extends Emitter {
     refresh();
   }
 
+  populateSettingsForm() {
+    this.settingsLeft.replaceChildren();
+    this.settingsRight.replaceChildren();
+    const addInput = (parent, label, value = '', readOnly = false, param = '') => appendSettingsInput(parent, label, value, readOnly, param);
+    const addCheck = (parent, label, checked = false, param = '') => appendSettingsCheckbox(parent, label, checked, param);
+
+    this.settingsApiHost = addInput(this.settingsLeft, 'IP API', '127.0.0.1', false, 'apiHost');
+    addCheck(this.settingsLeft, 'Onchain mode');
+    this.settingsSimulateScanFilter = addCheck(this.settingsLeft, 'Simula scan-filter locale', true, 'simulateScanFilter');
+    addInput(this.settingsLeft, 'Onchain URL', 'http://127.0.0.1:3010/intent');
+    this.settingsUseSlyFee = addCheck(this.settingsLeft, 'Usa fee Sly', false, 'useSlyFee');
+    this.settingsPriorityFeeInput = addInput(this.settingsLeft, 'Fee base Sly (lamports)', '1', false, 'priorityFeeLamports');
+    this.settingsPriorityFeeInput.type = 'number';
+    this.settingsPriorityFeeInput.min = '0';
+    this.settingsPriorityFeeInput.max = '50000';
+    this.settingsPriorityFeeInput.step = '1';
+    this.appendLocalSignerControls(this.settingsLeft);
+    this.settingsUseSlyFee.addEventListener('change', () => this.updateFeeControls());
+
+    this.settingsApiPort = addInput(this.settingsRight, 'Porta API', '3000', false, 'apiPort');
+    this.settingsRequestTimeout = addInput(this.settingsRight, 'Timeout API', '10', false, 'requestTimeout');
+    addCheck(this.settingsRight, 'Fallback legacy', true);
+    addCheck(this.settingsRight, 'Test senza status click', true);
+    addCheck(this.settingsRight, 'Safety checks', true);
+
+    this.loadSettings();
+  }
+
+  loadSettings() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('sae:sea-settings') || '{}');
+      for (const control of this.settingsFormEl.querySelectorAll('[data-config-key]')) {
+        if (control.readOnly || !(control.dataset.configKey in saved)) continue;
+        if (control instanceof HTMLInputElement && control.type === 'radio') control.checked = control.value === String(saved[control.dataset.configKey]);
+        else if (control instanceof HTMLInputElement && control.type === 'checkbox') control.checked = Boolean(saved[control.dataset.configKey]);
+        else control.value = String(saved[control.dataset.configKey]);
+      }
+      this.updateFeeControls();
+    } catch {
+      console.error('[Settings] configurazione globale non valida');
+    }
+  }
+
+  saveSettings() {
+    const config = {};
+    for (const control of this.settingsFormEl.querySelectorAll('[data-config-key]')) {
+      if (control.readOnly) continue;
+      if (control instanceof HTMLInputElement && control.type === 'radio' && !control.checked) continue;
+      config[control.dataset.configKey] = control instanceof HTMLInputElement && control.type === 'checkbox'
+        ? control.checked
+        : control.value;
+    }
+    try {
+      localStorage.setItem('sae:sea-settings', JSON.stringify(config));
+      console.info('[Settings] configurazione globale salvata', { savedFields: Object.keys(config).length });
+    } catch (error) {
+      console.error('[Settings] salvataggio configurazione globale fallito', error);
+    }
+  }
+
   updateFeeControls() {
-    const useSlyFee = this.automationForm.querySelector('[data-scan-param="useSlyFee"]')?.checked ?? false;
-    if (this.automationPriorityFeeInput) this.automationPriorityFeeInput.disabled = !useSlyFee;
+    const useSlyFee = this.settingsUseSlyFee?.checked ?? false;
+    if (this.settingsPriorityFeeInput) this.settingsPriorityFeeInput.disabled = !useSlyFee;
   }
 
   updateRecommendedRange() {
@@ -958,6 +1062,17 @@ export class Hud extends Emitter {
 
   closeAutomation() {
     this.automationOverlay.hidden = true;
+  }
+
+  openSettings() {
+    this.settingsEl.hidden = false;
+    this.populateSettingsForm();
+    this.settingsClose.focus();
+  }
+
+  closeSettings() {
+    this.saveSettings();
+    this.settingsEl.hidden = true;
   }
 
   startAutomation() {
