@@ -261,9 +261,35 @@ export function manualProfileEntryListener() {
             startManualProfileAnalysis(profileId);
             return;
           }
-          getWalletConnection({ publicKey: profileId }, undefined, false);
+          // L'input non è un Player Profile ID noto: trattalo come Wallet Public Key
+          // e risolvi i profili associati on-chain.
+          return fetch(`/api/debug/player-profile-id?wallet=${encodeURIComponent(profileId)}`)
+            .then(r => r.json())
+            .then(result => {
+              const variants = Array.isArray(result?.variants) ? result.variants : [];
+              const usable = variants.filter((v: any) => v && v.profileId);
+
+              if (usable.length === 1) {
+                // Un solo profilo trovato: selezionalo automaticamente
+                const resolved = usable[0].profileId;
+                saveProfileIdToCache(resolved);
+                startManualProfileAnalysis(resolved);
+                return;
+              }
+
+              if (usable.length > 1) {
+                // Più profili: mostra la lista all'utente per la scelta
+                showProfileSelection(usable, buttonsContainer);
+                return;
+              }
+
+              // Nessun profilo trovato per questo wallet
+              showProfileSelectionError(buttonsContainer);
+            });
         })
-        .catch(() => getWalletConnection({ publicKey: profileId }, undefined, false));
+        .catch(() => {
+          showProfileSelectionError(buttonsContainer);
+        });
     });
   }
 }
@@ -278,4 +304,49 @@ function startManualProfileAnalysis(profileId: string) {
       console.log('[manualProfileEntryListener] Calling analyzeFees with profileId:', profileId);
       analyzeFees(profileId);
   }
+}
+
+/** Mostra la lista di profili associati a un wallet, per scelta dell'utente. */
+function showProfileSelection(variants: any[], buttonsContainer: HTMLDivElement) {
+  buttonsContainer.querySelector('#loading')?.remove();
+  const resultsDiv = buttonsContainer.querySelector('#results') as HTMLDivElement | null;
+  if (!resultsDiv) return;
+
+  resultsDiv.innerHTML = '';
+  const title = document.createElement('div');
+  title.style.marginBottom = '12px';
+  title.style.fontWeight = 'bold';
+  title.textContent = 'Scegli il profilo giocatore associato a questo wallet:';
+  resultsDiv.appendChild(title);
+
+  const list = document.createElement('div');
+  list.style.display = 'flex';
+  list.style.flexDirection = 'column';
+  list.style.gap = '8px';
+
+  variants.forEach((v: any) => {
+    const pid = v.profileId || '';
+    const faction = v.profileFaction ? ` [${v.profileFaction}]` : '';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = `${pid}${faction}`;
+    btn.style.padding = '8px 12px';
+    btn.style.textAlign = 'left';
+    btn.style.cursor = 'pointer';
+    btn.addEventListener('click', () => {
+      saveProfileIdToCache(pid);
+      startManualProfileAnalysis(pid);
+    });
+    list.appendChild(btn);
+  });
+
+  resultsDiv.appendChild(list);
+}
+
+/** Mostra un errore quando nessun profilo è trovato per il wallet inserito. */
+function showProfileSelectionError(buttonsContainer: HTMLDivElement) {
+  buttonsContainer.querySelector('#loading')?.remove();
+  const resultsDiv = buttonsContainer.querySelector('#results') as HTMLDivElement | null;
+  if (!resultsDiv) return;
+  resultsDiv.innerHTML = '<div style="color:#ef4444; padding:12px;">Nessun profilo giocatore trovato per questo wallet.</div>';
 }
