@@ -1112,6 +1112,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
     return res.status(400).json({ error: 'INVALID_SUBWARP_PREPARE_INPUT' });
   }
 
+  let scanRpc = { name: 'unknown', host: 'unknown' };
   try {
     const snapshot = await getSnapshot(profileId);
     const fleet = snapshot.fleets.find((item: SeaFleet) => item.id === fleetId);
@@ -1147,7 +1148,13 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
     const fuelRequiredRoundTrip = (distanceOutbound + distanceReturn) * (fuelRate / 100);
 
     const prepared = await withRpc(profileId, async connection => {
-      const decodedGame = await coder.accounts.decode('Game', (await connection.getAccountInfo(gameId, 'confirmed'))!.data) as any;
+      const gameInfo = await connection.getAccountInfo(gameId, 'confirmed');
+      if (!gameInfo) {
+        const err = new Error(`GAME_ACCOUNT_NOT_FOUND:${gameId.toBase58()}`);
+        (err as any).status = 503;
+        throw err;
+      }
+      const decodedGame = await coder.accounts.decode('Game', gameInfo.data) as any;
       const fuelToken = getAssociatedTokenAddressSync(decodedGame.mints.fuel, fuelTank, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
       const fuelInfo = await connection.getAccountInfo(fuelToken, 'confirmed');
       if (!fuelInfo || !fuelInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('FLEET_FUEL_ACCOUNT_NOT_FOUND');
@@ -1222,7 +1229,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
           unitsConsumed: simulation.value.unitsConsumed ?? null,
         },
       };
-    });
+    }, (endpoint) => { scanRpc = seaRpc(endpoint); });
     let prepareId: string | null = null;
     if (!prepared.simulation.err) {
       const now = Date.now();
@@ -1265,6 +1272,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
       fleetId,
       wallet: walletAddress.toBase58(),
       error: message.replace(/https?:\/\/\S+/g, '<rpc-url>'),
+      rpc: scanRpc,
     });
     return res.status(503).json({ error: 'SEA_SUBWARP_PREPARATION_FAILED', detail: message.split(':')[0] });
   }
