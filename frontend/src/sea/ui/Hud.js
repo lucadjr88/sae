@@ -427,6 +427,11 @@ export class Hud extends Emitter {
       console.debug('[SDU] fleet resources cached, skipping fetch', { fleetId: fleet.id });
       if (requestId !== this.automationRequestId) return;
       const resources = this.automationResources;
+      for (const key of ['fuelCurrent', 'fuelCapacity', 'fuelCurrentPct', 'foodCurrent']) {
+        if (typeof resources[key] !== 'number' || !Number.isFinite(resources[key])) {
+          throw new Error(`INVALID_FLEET_RESOURCES_CACHE:${key}`);
+        }
+      }
       this.observeAutomationFuel(resources);
       this.automationRequestButton.disabled = this.automationRunning;
       this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
@@ -440,6 +445,12 @@ export class Hud extends Emitter {
       const response = await fetch(`/api/sea/fleet-resources?${query}`);
       const resources = await response.json();
       if (!response.ok) throw new Error(resources.error || 'resource lookup failed');
+      // Validazione difensiva: i campi numerici devono essere presenti e finiti
+      for (const key of ['fuelCurrent', 'fuelCapacity', 'fuelCurrentPct', 'foodCurrent']) {
+        if (typeof resources[key] !== 'number' || !Number.isFinite(resources[key])) {
+          throw new Error(`INVALID_FLEET_RESOURCES:${key}`);
+        }
+      }
       if (requestId !== this.automationRequestId) return;
       this.automationResources = resources;
       this.automationResourcesLoadedFor = fleet.id;
