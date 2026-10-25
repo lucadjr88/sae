@@ -198,6 +198,8 @@ export class Hud extends Emitter {
     this.automationStatus.className = 'automation-status';
     this.automationStatus.setAttribute('role', 'status');
     this.automationRequestId = 0;
+    this.automationResourcesLoadedFor = null;
+    this.automationResourcesLoadedAt = 0;
     this.automationLeft = document.createElement('div');
     this.automationLeft.className = 'automation-column';
     this.automationRight = document.createElement('div');
@@ -414,6 +416,24 @@ export class Hud extends Emitter {
   }
 
   async loadAutomationResources(fleet, requestId) {
+    const now = Date.now();
+    // Evita chiamate duplicate per lo stesso fleetId entro una soglia breve:
+    // i dati on-chain (fuel/food) cambiano lentamente, riusare la cache evita RPC inutili.
+    if (
+      this.automationResourcesLoadedFor === fleet.id &&
+      this.automationResources &&
+      now - this.automationResourcesLoadedAt < 30_000
+    ) {
+      console.debug('[SDU] fleet resources cached, skipping fetch', { fleetId: fleet.id });
+      if (requestId !== this.automationRequestId) return;
+      const resources = this.automationResources;
+      this.observeAutomationFuel(resources);
+      this.automationRequestButton.disabled = this.automationRunning;
+      this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
+      this.refreshAutomationState();
+      return true;
+    }
+
     try {
       const query = new URLSearchParams({ profileId: this.snapshot.profileId, fleetId: fleet.id });
       console.debug('[SDU] loading fleet resources', { fleetId: fleet.id });
@@ -422,10 +442,12 @@ export class Hud extends Emitter {
       if (!response.ok) throw new Error(resources.error || 'resource lookup failed');
       if (requestId !== this.automationRequestId) return;
       this.automationResources = resources;
+      this.automationResourcesLoadedFor = fleet.id;
+      this.automationResourcesLoadedAt = now;
       this.observeAutomationFuel(resources);
       console.debug('[SDU] fleet resources loaded', resources);
       this.automationRequestButton.disabled = this.automationRunning;
-      this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
+      this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fleetCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
       this.refreshAutomationState();
       return true;
     } catch (error) {

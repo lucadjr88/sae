@@ -683,7 +683,7 @@ router.get('/sea/ws-endpoints', async (req, res) => {
         let wsUrl = ep.ws;
         if (!wsUrl && typeof ep.url === 'string') {
           if (ep.url.startsWith('https://')) wsUrl = ep.url.replace('https://', 'wss://');
-          else if (ep.url.startsWith('http://')) wsUrl = ep.url.replace('http://', 'ws://');
+          else if (ep.url.startsWith('http://')) wsUrl = ep.url.replace('http://', 'wss://');
         }
         return {
           name: ep.name,

@@ -61,7 +61,10 @@ export class FleetFeed extends Emitter {
 
     this.isConnecting = true;
     const ep = this.wsEndpoints[this.wsIndex];
-    const wsUrl = ep.ws;
+    let wsUrl = ep.ws;
+    if (location.protocol === 'https:' && wsUrl.startsWith('ws://')) {
+      wsUrl = wsUrl.replace('ws://', 'wss://');
+    }
 
     try {
       console.log(`[FleetFeed] Connessione WebSocket in corso su: ${ep.name || wsUrl}`);
