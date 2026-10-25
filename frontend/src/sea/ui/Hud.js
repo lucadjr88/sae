@@ -1003,6 +1003,7 @@ export class Hud extends Emitter {
     this.settingsPriorityFeeInput.min = '0';
     this.settingsPriorityFeeInput.max = '50000';
     this.settingsPriorityFeeInput.step = '1';
+    this.settingsPriorityFeeInput.maxLength = 5;
     this.appendLocalSignerControls(this.settingsLeft);
     this.settingsUseSlyFee.addEventListener('change', () => this.updateFeeControls());
 
@@ -1011,6 +1012,26 @@ export class Hud extends Emitter {
     addCheck(this.settingsRight, 'Fallback legacy', true);
     addCheck(this.settingsRight, 'Test senza status click', true);
     addCheck(this.settingsRight, 'Safety checks', true);
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'settings-actions';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'settings-btn';
+    saveBtn.textContent = 'Salva';
+
+    this.settingsSaveButton = saveBtn;
+    this.settingsSaveButton.addEventListener('click', () => this.saveSettings());
+
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'settings-btn';
+    clearBtn.textContent = 'Cancella';
+    clearBtn.addEventListener('click', () => this.clearSettings());
+
+    actionsRow.append(saveBtn, clearBtn);
+    this.settingsFormEl.append(actionsRow);
 
     this.loadSettings();
   }
@@ -1044,6 +1065,17 @@ export class Hud extends Emitter {
       console.info('[Settings] configurazione globale salvata', { savedFields: Object.keys(config).length });
     } catch (error) {
       console.error('[Settings] salvataggio configurazione globale fallito', error);
+    }
+  }
+
+  clearSettings() {
+    if (!confirm('Eliminare i parametri globali? Saranno ripristinati i valori di default.')) return;
+    try {
+      localStorage.removeItem('sae:sea-settings');
+      this.populateSettingsForm();
+      console.info('[Settings] configurazione globale eliminata');
+    } catch (error) {
+      console.error('[Settings] cancellazione configurazione fallita', error);
     }
   }
 
