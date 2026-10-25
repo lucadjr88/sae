@@ -205,7 +205,7 @@ function rpcErrorType(error: unknown): '429' | '503' | 'unsupported' | 'error' {
   if (
     [408, 500, 502, 503, 504].includes(status ?? 0) ||
     rpcCode === -32603 ||
-    /500|502|503|504|Service Unavailable|Internal JSON-RPC error|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|socket hang up/i.test(message)
+    /500|502|503|504|Service Unavailable|Internal JSON-RPC error|timeout|timed out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_|getaddrinfo|network unreachable|connection refused|request to https?:\/\/|fetch failed|socket hang up/i.test(message)
   ) return '503';
   return 'error';
 }
