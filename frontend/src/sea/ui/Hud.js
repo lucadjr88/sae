@@ -518,7 +518,7 @@ export class Hud extends Emitter {
       this.observeAutomationFuel(resources);
       console.debug('[SDU] fleet resources loaded', resources);
       this.automationRequestButton.disabled = this.automationRunning;
-      this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fleetCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
+      this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
       this.refreshAutomationState();
       return true;
     } catch (error) {

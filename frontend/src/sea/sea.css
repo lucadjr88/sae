@@ -847,7 +847,7 @@ body {
     border-width: 105px 84px;
     border-style: solid;
     border-color: transparent;
-    border-image: url('/sea/assets/cornice_corda_quadrato.png') 900 600 / 105px 84px / 0 stretch repeat;
+    border-image: url('/sea/assets/cornice_corda_quadrato.png') 900 600 / 140px 90px / 0 stretch repeat;
     pointer-events: none;
 
 }
