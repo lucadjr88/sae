@@ -846,6 +846,33 @@ export class Hud extends Emitter {
           return;
         }
       }
+      // Se il backend rifiuta l'exit perché la flotta è già Idle su chain
+      // (snapshot frontend obsoleto: il movimento è già concluso), trattiamo il
+      // movimento come completato e passiamo alla fase di scansione, coerente
+      // con la logica di riferimento SLY (operateFleet: moving && chain == Idle
+      // => aggiorna stato a Idle e procedi con lo scan).
+      const movementExitCompletedOnChain =
+        movementExit &&
+        error instanceof Error &&
+        error.message === 'FLEET_NOT_IN_MOVEMENT';
+      if (
+        movementExitCompletedOnChain &&
+        this.automationRunning &&
+        runId === this.automationRunId
+      ) {
+        console.warn(
+          '[SDU] movement exit rejected: fleet already Idle on chain; proceeding to scan',
+          { fleetId: this.automationFleet.id, action: submittedAction }
+        );
+        this.automationAwaitingMovementExit = false;
+        this.automationNeedsScanAfterMovement = true;
+        this.automationInitialScanPending = true;
+        this.automationInitialScanReady = false;
+        this.automationStatus.textContent =
+          'Movimento già completato su chain · avvio scansione';
+        await this.beginInitialAutomationScan(runId);
+        return;
+      }
       if ((scanAction || movementStart || movementExit) && this.automationRunning && runId === this.automationRunId) this.failAutomation();
     } finally {
       this.automationSubmissionPending = false;
