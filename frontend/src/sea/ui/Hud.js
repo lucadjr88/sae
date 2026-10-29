@@ -695,6 +695,7 @@ export class Hud extends Emitter {
           { fleetId: fleet.id, action }
         );
         this.automationAwaitingMovementExit = false;
+        this.automationResumeAfterExit = false;
         this.automationNeedsScanAfterMovement = true;
         this.automationInitialScanPending = true;
         this.automationInitialScanReady = false;
@@ -1231,9 +1232,18 @@ export class Hud extends Emitter {
     }
     this.automationFleet = fleet;
     if (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp') {
-      this.automationResumeAfterExit = true;
-      this.waitForMovementArrival(fleet, runId);
-      return;
+      if (this.automationNeedsScanAfterMovement && !this.automationResumeAfterExit) {
+        // Il movimento è già confermato su chain (exit o timeout): ignoriamo lo snapshot obsoleto e procediamo con lo scan
+        this.automationAwaitingMovementExit = false;
+        this.automationNeedsScanAfterMovement = true;
+        this.automationInitialScanPending = true;
+        this.automationInitialScanReady = false;
+        this.automationDestination = null;
+      } else {
+        this.automationResumeAfterExit = true;
+        this.waitForMovementArrival(fleet, runId);
+        return;
+      }
     }
     if (fleet.state !== 'Idle' || !fleet.sector) {
       console.error('[SDU] initial scan stopped: unsupported fleet state', { fleetId: fleet.id, state: fleet.state });
