@@ -278,6 +278,7 @@ export class Hud extends Emitter {
     this.automationActionPending = false;
     this.automationNeedsScanAfterMovement = false;
     this.automationPostScanReady = false;
+    this.automationLastKnownSector = null;
     this.automationRunId = 0;
     this.automationFleetStates = new Map();
     this.fleetScanSummaries = new Map();
@@ -817,6 +818,7 @@ export class Hud extends Emitter {
         await this.beginInitialAutomationScan(runId, preparedResult);
       } else if (movementStart && this.automationRunning && runId === this.automationRunId) {
         const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet.id);
+        this.automationLastKnownSector = fleet?.sector ?? null;
         const expectedState = submittedAction === 'warp_start' ? 'MoveWarp' : 'MoveSubwarp';
         const target = preparedResult?.coordinates ?? this.automationDestination;
         const targetX = target?.[0] ?? target?.x ?? '?';
@@ -1200,7 +1202,7 @@ export class Hud extends Emitter {
         this.automationNeedsScanAfterMovement = true;
         this.automationInitialScanPending = true;
         this.automationInitialScanReady = false;
-        const coords = preparedResult?.coordinates ?? fleet.sector;
+        const coords = preparedResult?.coordinates ?? fleet.sector ?? this.automationLastKnownSector;
         if (!coords) {
           console.error('[SDU] initial scan stopped: no coordinates available', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector });
           this.failAutomation();
@@ -1389,6 +1391,7 @@ export class Hud extends Emitter {
     this.automationAwaitingMovementStart = false;
     this.automationNeedsScanAfterMovement = false;
     this.automationPostScanReady = false;
+    this.automationLastKnownSector = null;
     if (wasRunning) this.automationFaulted = false;
     if (this.automationToggleButton) {
       this.automationToggleButton.textContent = 'Avvia automazione';
@@ -1408,6 +1411,7 @@ export class Hud extends Emitter {
     this.automationAwaitingMovementStart = false;
     this.automationNeedsScanAfterMovement = false;
     this.automationPostScanReady = false;
+    this.automationLastKnownSector = null;
     this.automationRunId += 1;
     clearTimeout(this.automationRunTimer);
     this.automationRunTimer = null;
