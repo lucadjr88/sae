@@ -722,7 +722,7 @@ export class Hud extends Emitter {
       return false;
     } finally {
       this.automationScanButton.disabled = this.automationRunning;
-    }
+    }}
     return false;
   }
 
