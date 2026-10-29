@@ -1200,7 +1200,11 @@ export class Hud extends Emitter {
         this.automationNeedsScanAfterMovement = true;
         this.automationInitialScanPending = true;
         this.automationInitialScanReady = false;
-        this.automationDestination = null;
+        this.automationDestination = { x: fleet.sector[0], y: fleet.sector[1], sb: null };
+        this.updateAutomationActionButton();
+        this.automationStatus.textContent = 'Preparo la scan iniziale sulla posizione corrente';
+        await this.runAutomationAction(runId);
+        return;
       } else {
         this.automationResumeAfterExit = true;
         this.waitForMovementArrival(fleet, runId);
@@ -1306,7 +1310,13 @@ export class Hud extends Emitter {
     }
     this.automationFleet = fleet;
     const movementMode = this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp';
-    const operation = resolveScanOperation(fleet, this.automationDestination, movementMode);
+    let operation = resolveScanOperation(fleet, this.automationDestination, movementMode);
+    // Se il movimento è già confermato su chain (exit o start), lo snapshot può
+    // essere obsoleto (MoveSubwarp/MoveWarp): forziamo la scan per non attendere
+    // invano l'aggiornamento chain o l'arrivo di un movimento già concluso.
+    if (this.automationNeedsScanAfterMovement && !this.automationResumeAfterExit) {
+      operation = { status: 'ready', action: 'scan' };
+    }
     if (operation.status === 'waiting') {
       this.waitForMovementArrival(fleet, runId);
       return;
