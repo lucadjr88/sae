@@ -814,7 +814,7 @@ export class Hud extends Emitter {
         this.automationInitialScanReady = false;
         this.automationDestination = null;
         console.info('[SDU] movement exit confirmed on-chain · starting local scan', { fleetId: this.automationFleet.id, action: result.action });
-        await this.beginInitialAutomationScan(runId);
+        await this.beginInitialAutomationScan(runId, preparedResult);
       } else if (movementStart && this.automationRunning && runId === this.automationRunId) {
         const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet.id);
         const expectedState = submittedAction === 'warp_start' ? 'MoveWarp' : 'MoveSubwarp';
@@ -1184,7 +1184,7 @@ export class Hud extends Emitter {
     this.beginInitialAutomationScan(runId);
   }
 
-  async beginInitialAutomationScan(runId) {
+  async beginInitialAutomationScan(runId, preparedResult = null) {
     if (!this.automationRunning || runId !== this.automationRunId) return;
     const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
     if (!fleet) {
@@ -1200,7 +1200,13 @@ export class Hud extends Emitter {
         this.automationNeedsScanAfterMovement = true;
         this.automationInitialScanPending = true;
         this.automationInitialScanReady = false;
-        this.automationDestination = { x: fleet.sector[0], y: fleet.sector[1], sb: null };
+        const coords = preparedResult?.coordinates ?? fleet.sector;
+        if (!coords) {
+          console.error('[SDU] initial scan stopped: no coordinates available', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector });
+          this.failAutomation();
+          return;
+        }
+        this.automationDestination = { x: coords[0], y: coords[1], sb: null };
         this.updateAutomationActionButton();
         this.automationStatus.textContent = 'Preparo la scan iniziale sulla posizione corrente';
         await this.runAutomationAction(runId);
