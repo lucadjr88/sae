@@ -433,7 +433,7 @@ async function withRpc<T>(profileId: string, action: (connection: any) => Promis
         await logRpcAttempt(profileId, 'unknown', 'unknown', attempt, maxAttempts, errorType, errorMessage);
       }
       if (errorType !== 'unsupported') {
-        if (attempt + 1 >= 3) throw error;
+        if (attempt + 1 >= maxAttempts) throw error;
         await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
       }
       if (errorType === '503' || errorType === '429') {

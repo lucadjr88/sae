@@ -617,8 +617,10 @@ export class Hud extends Emitter {
     this.automationScanButton.disabled = true;
     this.automationScanResult.hidden = false;
     this.automationScanResult.textContent = 'Connessione wallet e simulazione…';
-    try {
-      const result = await this.transactionClient.prepareAction({
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+      try {
+        const result = await this.transactionClient.prepareAction({
         profileId: this.snapshot.profileId,
         fleetId: fleet.id,
         destination: action.endsWith('_exit') && fleet.to
@@ -682,6 +684,38 @@ export class Hud extends Emitter {
       this.automationPreparedResult = null;
       this.automationScanPrepareId = null;
       this.automationScanSubmitButton.hidden = true;
+      const movementExit = action === 'subwarp_exit' || action === 'warp_exit';
+      const movementExitCompletedOnChain =
+        movementExit && error instanceof Error && error.message === 'FLEET_NOT_IN_MOVEMENT';
+      if (movementExitCompletedOnChain && this.automationRunning) {
+        console.warn(
+          '[SDU] movement exit rejected during preparation: fleet already Idle on chain; proceeding to scan',
+          { fleetId: fleet.id, action }
+        );
+        this.automationAwaitingMovementExit = false;
+        this.automationNeedsScanAfterMovement = true;
+        this.automationInitialScanPending = true;
+        this.automationInitialScanReady = false;
+        this.automationScanResult.textContent = 'Movimento già completato su chain · avvio scansione';
+        await this.beginInitialAutomationScan(this.automationRunId);
+        return false;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      const isRpcTemporary = /503|Service Unavailable|429|Too Many Requests|fetch failed|socket hang up|ECONNREFUSED|ENOTFOUND|getaddrinfo|timeout|timed out|failed to get info about account/i.test(message);
+      if (
+        isRpcTemporary &&
+        attempt + 1 < maxRetries &&
+        this.automationRunning &&
+        this.automationInitialScanPending
+      ) {
+        console.warn(
+          '[SDU] RPC temporary error during scan preparation, retrying',
+          { attempt: attempt + 1, maxRetries, fleetId: fleet.id, message }
+        );
+        this.automationScanResult.textContent = `Errore RPC temporaneo, riprovo (${attempt + 1}/${maxRetries})…`;
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        continue;
+      }
       this.automationScanResult.textContent = error instanceof Error ? error.message : 'Preparazione scan non riuscita';
       console.error('[SDU] scan preparation failed', { fleetId: fleet.id, coordinates: [destination.x, destination.y], error });
       if (this.automationInitialScanPending && this.automationRunning) this.failAutomation();
@@ -689,6 +723,7 @@ export class Hud extends Emitter {
     } finally {
       this.automationScanButton.disabled = this.automationRunning;
     }
+    return false;
   }
 
   updateAutomationActionButton() {
