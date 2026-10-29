@@ -274,6 +274,8 @@ export class Hud extends Emitter {
     this.automationWaitingForEta = false;
     this.automationAwaitingMovementStart = false;
     this.automationAwaitingMovementExit = false;
+    this.automationExitTimeout = null;
+    this.automationMovementStartTimeout = null;
     this.automationSubmissionPending = false;
     this.automationActionPending = false;
     this.automationNeedsScanAfterMovement = false;
@@ -821,12 +823,26 @@ export class Hud extends Emitter {
           this.beginInitialAutomationScan(runId);
         } else {
           clearTimeout(this.automationRunTimer);
+          clearTimeout(this.automationExitTimeout);
           this.automationRunTimer = null;
           this.automationWaitingForEta = false;
           this.automationResumeAfterExit = true;
           this.automationAwaitingMovementExit = true;
           this.automationStatus.textContent = 'Uscita confermata · attendo stato Idle on-chain';
           console.info('[SDU] movement exit confirmed; waiting for Idle snapshot', { fleetId: this.automationFleet.id, action: result.action });
+          this.automationExitTimeout = setTimeout(() => {
+            this.automationExitTimeout = null;
+            if (this.automationRunning && runId === this.automationRunId) {
+              console.warn('[SDU] movement exit timeout (30s): forcing scan despite missing Idle snapshot', { fleetId: this.automationFleet.id, action: result.action });
+              this.automationResumeAfterExit = false;
+              this.automationAwaitingMovementExit = false;
+              this.automationNeedsScanAfterMovement = true;
+              this.automationInitialScanPending = true;
+              this.automationInitialScanReady = false;
+              this.automationDestination = null;
+              this.beginInitialAutomationScan(runId);
+            }
+          }, 30000);
         }
       } else if (movementStart && this.automationRunning && runId === this.automationRunId) {
         const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet.id);
@@ -849,8 +865,18 @@ export class Hud extends Emitter {
           this.automationAwaitingMovementStart = false;
           this.waitForMovementArrival(fleet, runId);
         } else {
+          clearTimeout(this.automationMovementStartTimeout);
           this.automationAwaitingMovementStart = true;
           this.automationStatus.textContent = `${expectedState} confermato · attendo snapshot chain`;
+          this.automationMovementStartTimeout = setTimeout(() => {
+            this.automationMovementStartTimeout = null;
+            if (this.automationRunning && runId === this.automationRunId && this.automationAwaitingMovementStart) {
+              console.warn('[SDU] movement start timeout (30s): no snapshot confirming fleet movement', { fleetId: this.automationFleet.id, action: submittedAction });
+              this.automationAwaitingMovementStart = false;
+              this.automationResumeAfterExit = false;
+              this.failAutomation();
+            }
+          }, 30000);
         }
       } else {
         this.stopAutomation();
@@ -1362,7 +1388,11 @@ export class Hud extends Emitter {
     this.automationRunning = false;
     this.automationRunId += 1;
     clearTimeout(this.automationRunTimer);
+    clearTimeout(this.automationExitTimeout);
+    clearTimeout(this.automationMovementStartTimeout);
     this.automationRunTimer = null;
+    this.automationExitTimeout = null;
+    this.automationMovementStartTimeout = null;
     this.automationInitialScanPending = false;
     this.automationInitialScanReady = false;
     this.automationResumeAfterExit = false;
@@ -1389,7 +1419,11 @@ export class Hud extends Emitter {
     this.automationNeedsScanAfterMovement = false;
     this.automationRunId += 1;
     clearTimeout(this.automationRunTimer);
+    clearTimeout(this.automationExitTimeout);
+    clearTimeout(this.automationMovementStartTimeout);
     this.automationRunTimer = null;
+    this.automationExitTimeout = null;
+    this.automationMovementStartTimeout = null;
     if (this.automationFleet) this.setAutomationFleetState(this.automationFleet.id, 'faulted');
     this.automationStatus.textContent = 'Automazione bloccata per errore · premi Arresta per sbloccare';
     this.refreshAutomationState();
@@ -1500,6 +1534,8 @@ export class Hud extends Emitter {
       || (this.automationPreparedAction === 'warp_start' && updatedAutomationFleet?.state === 'MoveWarp');
     if (this.automationRunning && this.automationAwaitingMovementStart) {
       if (expectedMovement) {
+        clearTimeout(this.automationMovementStartTimeout);
+        this.automationMovementStartTimeout = null;
         this.automationAwaitingMovementStart = false;
         this.automationResumeAfterExit = true;
         this.waitForMovementArrival(updatedAutomationFleet, this.automationRunId);
@@ -1515,6 +1551,8 @@ export class Hud extends Emitter {
       }
     } else if (this.automationRunning && this.automationAwaitingMovementExit) {
       if (updatedAutomationFleet?.state === 'Idle' && updatedAutomationFleet.sector) {
+        clearTimeout(this.automationExitTimeout);
+        this.automationExitTimeout = null;
         this.automationAwaitingMovementExit = false;
         this.automationResumeAfterExit = false;
         this.automationNeedsScanAfterMovement = true;
