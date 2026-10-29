@@ -277,6 +277,7 @@ export class Hud extends Emitter {
     this.automationSubmissionPending = false;
     this.automationActionPending = false;
     this.automationNeedsScanAfterMovement = false;
+    this.automationPostScanReady = false;
     this.automationRunId = 0;
     this.automationFleetStates = new Map();
     this.fleetScanSummaries = new Map();
@@ -800,6 +801,7 @@ export class Hud extends Emitter {
         this.automationInitialScanPending = false;
         this.automationInitialScanReady = false;
         this.automationNeedsScanAfterMovement = false;
+        this.automationPostScanReady = true;
         this.automationDestination = null;
         this.automationStatus.textContent = 'Scan confermata · selezione destinazione…';
         await this.continueAutomationAfterInitialScan(runId);
@@ -1275,12 +1277,13 @@ export class Hud extends Emitter {
   async continueAutomationAfterInitialScan(runId) {
     if (!this.automationRunning || runId !== this.automationRunId) return;
     const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
-    if (!fleet || fleet.state !== 'Idle' || !fleet.sector) {
+    if (!fleet || (!this.automationPostScanReady && fleet.state !== 'Idle') || !fleet.sector) {
       console.error('[SDU] post-scan destination request blocked: fleet is not Idle', { fleetId: fleet?.id, state: fleet?.state });
       this.failAutomation();
       return;
     }
     this.automationFleet = fleet;
+    this.automationPostScanReady = false;
     if (!await this.loadAutomationResources(fleet, this.automationRequestId)) {
       if (this.automationRunning && runId === this.automationRunId) this.failAutomation();
       return;
@@ -1369,6 +1372,7 @@ export class Hud extends Emitter {
     this.automationWaitingForEta = false;
     this.automationAwaitingMovementStart = false;
     this.automationNeedsScanAfterMovement = false;
+    this.automationPostScanReady = false;
     if (wasRunning) this.automationFaulted = false;
     if (this.automationToggleButton) {
       this.automationToggleButton.textContent = 'Avvia automazione';
@@ -1387,6 +1391,7 @@ export class Hud extends Emitter {
     this.automationWaitingForEta = false;
     this.automationAwaitingMovementStart = false;
     this.automationNeedsScanAfterMovement = false;
+    this.automationPostScanReady = false;
     this.automationRunId += 1;
     clearTimeout(this.automationRunTimer);
     this.automationRunTimer = null;
