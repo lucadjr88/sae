@@ -1,71 +1,55 @@
 ---
-description: "Use when working on Star Atlas SAGE decoding/orchestration tasks in this repository. Enforces minimal diffs, terse output, no build/test without user approval, and readonly usage of external knowledge repositories."
+description: "Use when working on Star Atlas SAGE decoding/orchestration tasks in this repository. Enforces minimal diffs, terse output, fast searches, no build/test without user approval, and readonly usage of external knowledge repositories."
 applyTo: "**"
 ---
 
 # Copilot Instructions: SAGE, Rental, and Decoders
 
 ## 0) Default Execution Style
-- Minimalism first: prefer the smallest correct diff and the fewest touched files.
-- Change only what is required for the request; avoid speculative cleanup/refactors.
-- Keep code, comments, and explanations as short as possible.
-- Never run `build`, `test`, or other verification commands unless the user explicitly asks for them.
-- If verification could help, ask the user first.
-- Use as few tokens as practical in every response.
+- Minimalism first: smallest correct diff, fewest touched files, zero speculative refactors.
+- Keep code, comments, and explanations terse; use as few tokens as practical.
+- Never run `build`, `test`, or verification commands unless explicitly requested; ask first if needed.
 
 ## 1) Project Domain and SSOT
-- Domain: Star Atlas SAGE and related rental/crafting decoding and orchestration.
-- Runtime scope: backend decoding, transaction orchestration, cache-aware analysis; no speculative UI rewrites.
-- Stack: TypeScript (ESM), Rust (borsh-backed decoding), Solana web3.js, Anchor, Carbon decoders, StarAtlasMeta-related references.
-- Single source of truth (SSOT): Rust decoding logic and official decoder/account layouts.
-- Rule: Do not reimplement Borsh decoding logic in TypeScript if Rust/official decoder source already defines it.
+- Domain: Star Atlas SAGE, rental/crafting backend decoding, transaction orchestration, cache-aware analysis (no speculative UI rewrites).
+- Stack: TypeScript (ESM), Rust (borsh), Solana web3.js, Anchor, Carbon decoders, StarAtlasMeta.
+- SSOT: Rust decoding logic and official decoder/account layouts.
+- Rule: Never reimplement Borsh decoding in TypeScript if Rust/official decoders already define it.
 
 ## 2) Architecture and Integration Rules
-- Keep TS focused on orchestration, I/O boundaries, API shaping, and aggregation.
-- Keep binary decoding, discriminator mapping, and layout truth aligned to Rust + official IDL/decoder sources.
-- Favor deterministic mapping layers from raw chain data to typed domain objects.
-- Preserve public exports and existing module contracts unless explicitly requested.
-- For Anchor integration, keep account names and instruction mapping strictly consistent with IDL.
+- TS scope: orchestration, I/O boundaries, API shaping, aggregation.
+- Rust/IDL scope: binary decoding, discriminator mapping, layout truth.
+- Favor deterministic mapping from raw chain data to typed domain objects.
+- Preserve public exports, module contracts, and strict IDL account/instruction alignment unless requested otherwise.
 
 ## 3) Safety and Change Boundaries
-- Never modify `dist/` artifacts.
-- Never hardcode private keys or secrets (tests/mocks excluded when explicitly requested).
-- Avoid destructive operations on cache/log/build folders unless explicitly requested.
-- No speculative refactors, logic rewrites, or workaround behavior changes without user request.
-- Keep edits scoped to the minimal necessary files/lines.
+- Never modify `dist/` artifacts or hardcode secrets/private keys.
+- Never delete/wipe cache, log, or build folders unless explicitly requested.
+- Scope edits strictly to the minimal necessary lines.
 
 ## 4) External Knowledge Repositories (Read-Only)
-- Knowledge root: `/home/luca/Scaricati/staratlasRepo/**`.
-- Read-only policy: treat every file in this path as reference material.
-- Allowed operations: read, search, compare, summarize, extract APIs/contracts/caveats.
-- Forbidden operations: create, edit, rename, move, delete within the knowledge root.
-- Write boundary: implementation changes must target `/home/luca/sae/**` unless the user explicitly authorizes otherwise.
-- Pre-write guard: validate destination path is outside the knowledge root before every write/edit action.
+- Read-only roots: `/home/luca/Scaricati/staratlasRepo/**`, `/home/luca/sdu-map/**`, `/home/luca/condivisione/**`, `/home/luca/sly/**`.
+- Allowed: read, fast search, compare, extract APIs/contracts.
+- Forbidden: create, edit, rename, move, or delete anywhere inside read-only roots.
+- Write boundary: target `/home/luca/sae/**` only, unless explicitly authorized. Validate destination path before every write.
 
 ## 5) Coding Conventions
-- Prefer short, focused functions and explicit data flow.
-- Prefer plain objects/maps where they improve clarity; use classes only when justified by lifecycle/state behavior.
-- Keep comments minimal and high-value.
-- Use single-line comments only.
-- Keep vertical spacing compact and consistent.
-- Keep files reasonably sized and maintainable; split by responsibility when complexity grows.
+- Short, focused functions; explicit data flow; compact vertical spacing.
+- Prefer plain objects/maps over classes unless lifecycle/state requires it.
+- Comments: minimal, high-value, single-line (`//`) only.
 
 ## 6) Decoder Quality Rules
-- Keep instruction/account mappings aligned with official Carbon decoders and IDLs.
-- Preserve canonical seed derivations and PDA conventions.
-- Validate numeric precision boundaries (BN/u64/i64) and signedness assumptions.
-- Document non-obvious field assumptions near the mapping layer.
-- Prefer explicit type guards/parsers at chain-data boundaries.
+- Align instruction/account mappings, PDA seeds, and layouts strictly with official Carbon decoders and IDLs.
+- Validate numeric precision boundaries (`BN`/`u64`/`i64`) and signedness.
+- Use explicit type guards/parsers at chain-data boundaries; document non-obvious field assumptions near the mapping layer.
 
-## 7) Operational Rules
-- Use patch-style, minimal diffs by default.
-- Never execute `build`, `test`, or validation commands proactively; ask the user first.
+## 7) Operational & Search Rules
+- Use patch-style, minimal diffs.
+- Search performance: NEVER run unfiltered `grep -rn` or `find` across directories.
+- Prefer `rg` (ripgrep) or native IDE search tools. If `grep` is unavoidable, always pass `--exclude-dir={node_modules,venv,.venv,target,dist,build,.git,__pycache__}` and `--exclude="*.{db,sqlite,sqlite3,log,bin}"`.
 - Keep terminals separated for long-running services vs one-off scripts.
-- When restarting the backend is explicitly requested, use the exact command provided by the user/project conventions.
-- Do not chain commands that could unintentionally kill unrelated running processes.
+- Use exact user-provided commands for backend restarts; never chain commands that risk killing unrelated processes.
 
 ## 8) Communication Style
-- Assume expert audience (Solana, SAGE, Anchor, Rust, Borsh).
-- Be direct, technical, and minimal.
-- Prefer terse answers: concrete findings, risks, and exact file-level changes only.
-- Avoid long explanations when a short answer is sufficient.
+- Audience: Expert (Solana, SAGE, Anchor, Rust, Borsh).
+- Output: Direct, technical, minimal. State concrete findings, risks, and exact file changes only.

@@ -551,14 +551,25 @@ export class Hud extends Emitter {
       }
       if (fleet.state !== 'Idle' || !fleet.sector) throw new Error('Flotta non pronta per una richiesta di destinazione');
       const previousCell = fleet.sector;
-      const requestType = this.scanPolicy.takeRequestType();
-      if (requestType === 'area') console.info('[SDU] one-shot area request selected', { fleetId: fleet.id });
+      const strikeThresholdRaw = this.automationForm.querySelector('[data-scan-param="pause_strike_iniziale"]')?.value;
+      const minimumPctRaw = this.automationForm.querySelector('[data-scan-param="percentuale_minima"]')?.value;
+      const strikeBeforeRequest = this.scanPolicy.pauseStrike;
+      const requestType = this.scanPolicy.takeRequestType(strikeThresholdRaw);
+      const resetCounts = this.scanPolicy.takeResetCounts();
+      if (requestType === 'area') {
+        console.info('[SDU] area request selected', {
+          fleetId: fleet.id,
+          pauseStrike: strikeBeforeRequest,
+          strikeThreshold: strikeThresholdRaw,
+        });
+      }
       const payload = buildScanFilterPayload({
         form: this.automationForm,
         fleet,
         currentCoords: previousCell,
         resources: this.automationResources,
         requestType,
+        resetCounts,
       });
       console.info(`[SDU] scan-filter payload\n${JSON.stringify(payload, null, 2)}`);
       const simulate = this.settingsSimulateScanFilter?.checked ?? false;
@@ -568,18 +579,29 @@ export class Hud extends Emitter {
       this.automationScanResult.hidden = true;
       console.debug('[SDU] destination selection started', { fleetId: fleet.id, simulate });
       const result = simulate
-        ? simulateScanFilterResponse(payload)
+        ? simulateScanFilterResponse(payload, strikeBeforeRequest)
         : await requestScanFilter({
           host: this.settingsApiHost?.value,
           port: this.settingsApiPort?.value,
           timeoutSeconds: this.settingsRequestTimeout?.value,
           payload,
         });
+      const currentStrike = this.scanPolicy.completeSelection({
+        requestType,
+        minimumPct: minimumPctRaw,
+      });
+      const parsedThreshold = Number.parseInt(String(strikeThresholdRaw ?? '').trim(), 10);
+      const thresholdDisplay = Number.isFinite(parsedThreshold) ? parsedThreshold : 5;
+      console.info('[SDU] pause_strike updated', {
+        fleetId: fleet.id,
+        requestType,
+        strike: `${currentStrike}/${thresholdDisplay}`,
+      });
       this.automationDestination = { x: Number(result.x), y: Number(result.y), sb: result.sb ?? null };
       this.updateAutomationActionButton();
       this.automationScanResult.hidden = true;
       if (simulate) console.debug('[SDU] simulated scan-filter response', result);
-      const destinationSummary = `Destinazione ${result.x},${result.y}${result.sb ? ` · SB ${result.sb}` : ''}${result['%'] == null ? '' : ` · API ${result['%']}%`}${result.source === 'simulated' ? ' · simulata' : ''}`;
+      const destinationSummary = `Destinazione ${result.x},${result.y} [${requestType}]${result.sb ? ` · SB ${result.sb}` : ''}${result['%'] == null ? '' : ` · API ${result['%']}%`} · strike ${currentStrike}/${thresholdDisplay}${result.source === 'simulated' ? ' · simulata' : ''}`;
       this.automationResult.textContent = [this.automationLastScanSummary, destinationSummary].filter(Boolean).join(' · ');
       return true;
     } catch (error) {
@@ -791,6 +813,7 @@ export class Hud extends Emitter {
       console.info('[SDU] transaction fee', { fleetId: this.automationFleet.id, signature: result.signature, ...result.fee });
       this.automationScanResult.textContent = JSON.stringify(result, null, 2);
       if (result.action === 'scan') {
+        this.scanPolicy.observeScanResult(result.scanResult?.probabilityPct);
         this.automationLastScanSummary = this.formatScanResult(result.scanResult);
         const fleetScanSummary = this.formatFleetScanStatus(result.scanResult);
         if (fleetScanSummary) this.fleetScanSummaries.set(this.automationFleet.id, fleetScanSummary);
@@ -967,8 +990,8 @@ export class Hud extends Emitter {
     addInput(this.automationRight, 'Fuel reserve %', '2');
     addCheck(this.automationRight, 'coeffcount1', true, 'coeffcount1');
     addCheck(this.automationRight, 'coeffgrowing1', true, 'coeffgrowing1');
-    addInput(this.automationRight, '% minima (pause strike)', '10');
-    addInput(this.automationRight, 'Strike soglia', '5');
+    addInput(this.automationRight, '% minima (pause strike)', '10', false, 'percentuale_minima');
+    addInput(this.automationRight, 'Strike soglia', '5', false, 'pause_strike_iniziale');
     this.updateRecommendedRange();
     this.updateFeeControls();
     this.automationCooldownInput.addEventListener('input', () => this.updateRecommendedRange());
@@ -1469,11 +1492,19 @@ export class Hud extends Emitter {
   loadAutomationConfig(fleet) {
     try {
       const saved = JSON.parse(localStorage.getItem(this.automationConfigKey(fleet)) || '{}');
+      const legacyKeyMap = {
+        percentuale_minima: 'field:% minima (pause strike)',
+        pause_strike_iniziale: 'field:Strike soglia',
+      };
       for (const control of this.automationForm.querySelectorAll('[data-config-key]')) {
-        if (control.readOnly || !(control.dataset.configKey in saved)) continue;
-        if (control instanceof HTMLInputElement && control.type === 'radio') control.checked = control.value === String(saved[control.dataset.configKey]);
-        else if (control instanceof HTMLInputElement && control.type === 'checkbox') control.checked = Boolean(saved[control.dataset.configKey]);
-        else control.value = String(saved[control.dataset.configKey]);
+        if (control.readOnly) continue;
+        const key = control.dataset.configKey in saved
+          ? control.dataset.configKey
+          : legacyKeyMap[control.dataset.configKey];
+        if (!key || !(key in saved)) continue;
+        if (control instanceof HTMLInputElement && control.type === 'radio') control.checked = control.value === String(saved[key]);
+        else if (control instanceof HTMLInputElement && control.type === 'checkbox') control.checked = Boolean(saved[key]);
+        else control.value = String(saved[key]);
       }
       this.updateRecommendedRange();
       this.updateFeeControls();

@@ -1,3 +1,13 @@
+function parseThreshold(value) {
+  const parsed = Number.parseInt(String(value ?? '').trim(), 10);
+  return Number.isFinite(parsed) ? parsed : 5;
+}
+
+function parseMinimumPct(value) {
+  const parsed = Number(String(value ?? '').trim().replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export class ScanPolicy {
   constructor() {
     this.reset();
@@ -6,6 +16,9 @@ export class ScanPolicy {
   reset() {
     this.previousFuelPct = null;
     this.forceAreaNext = false;
+    this.pauseStrike = 0;
+    this.resetCountsNext = false;
+    this.lastScannedPct = null;
   }
 
   observeFuel(currentFuelPct, fuelMinimum) {
@@ -24,9 +37,39 @@ export class ScanPolicy {
     return { previousFuelPct: previous, currentFuelPct: current };
   }
 
-  takeRequestType() {
-    const requestType = this.forceAreaNext ? 'area' : 'cell';
+  observeScanResult(probabilityPct) {
+    const parsed = Number(probabilityPct);
+    this.lastScannedPct = Number.isFinite(parsed) ? parsed : null;
+    return this.lastScannedPct;
+  }
+
+  takeRequestType(strikeThreshold = 5) {
+    const forceArea = this.forceAreaNext;
     this.forceAreaNext = false;
-    return requestType;
+    const threshold = parseThreshold(strikeThreshold);
+    return forceArea || this.pauseStrike >= threshold ? 'area' : 'cell';
+  }
+
+  takeResetCounts() {
+    const resetCounts = this.resetCountsNext;
+    this.resetCountsNext = false;
+    return resetCounts;
+  }
+
+  completeSelection({ requestType = 'cell', minimumPct = 0, scannedPct } = {}) {
+    const effectiveScannedPct = scannedPct !== undefined
+      ? (Number.isFinite(Number(scannedPct)) ? Number(scannedPct) : null)
+      : this.lastScannedPct;
+    this.lastScannedPct = null;
+
+    if (requestType === 'area') {
+      this.pauseStrike = 0;
+      return this.pauseStrike;
+    }
+
+    const minPct = parseMinimumPct(minimumPct);
+    const belowThreshold = effectiveScannedPct !== null && minPct > 0 && effectiveScannedPct < minPct;
+    this.pauseStrike = belowThreshold ? this.pauseStrike + 1 : 0;
+    return this.pauseStrike;
   }
 }

@@ -20,6 +20,13 @@ function valueOf(form, name) {
     : control?.value.trim() ?? '';
 }
 
+function formatNumericForPayload(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '';
+  if (Number.isInteger(numeric)) return String(numeric);
+  return numeric.toFixed(2).replace(/\.?0+$/, '');
+}
+
 export function buildScanFilterPayload({ form, fleet, currentCoords, resources, requestType = 'cell', resetCounts = false }) {
   if (!fleet?.name || !fleet?.id) throw new Error('Nome e ID flotta sono obbligatori');
   if (!resources || !Number.isFinite(Number(resources.fuelCurrentPct))) throw new Error('Fuel on-chain non disponibile');
@@ -49,11 +56,11 @@ export function buildScanFilterPayload({ form, fleet, currentCoords, resources, 
     secondaSB: secondSB,
     rangeSB: valueOf(form, 'rangeSB'),
     smartRange: valueOf(form, 'smartRange'),
-    fuel: String(resources.fuelCurrentPct),
+    fuel: formatNumericForPayload(resources.fuelCurrentPct),
     fuel_min: valueOf(form, 'fuel_min'),
     fuel_range_min: valueOf(form, 'fuel_range_min'),
     fuel_max: valueOf(form, 'fuel_max'),
-    food: String(resources.foodCurrent),
+    food: formatNumericForPayload(resources.foodCurrent),
     food_min: valueOf(form, 'food_min'),
     maxareaFromFleet: valueOf(form, 'maxareaFromFleet'),
     coeffcount1: valueOf(form, 'coeffcount1'),
