@@ -68,8 +68,13 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
       return cachedProfiles;
     }
 
-    const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
-    let endpointsRaw = JSON.parse(raw);
+    let endpointsRaw: any = [];
+    try {
+      const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
+      endpointsRaw = JSON.parse(raw);
+    } catch {
+      endpointsRaw = [{ name: 'Default RPC', url: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com' }];
+    }
     // Ordina per rapporto plrProfile_success/plrProfile_total decrescente
     let endpointObjs: any[] = [];
     if (Array.isArray(endpointsRaw)) {

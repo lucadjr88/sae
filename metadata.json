@@ -1,0 +1,8 @@
+{
+  "name": "Star Atlas Explorer",
+  "description": "Dashboard and analytics for Star Atlas on-chain game operations. Track your fleet and economy data in real-time.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

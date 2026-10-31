@@ -154,6 +154,8 @@ export function displayFeeResults(data: DisplayData, fleetNames: Record<string, 
 
 
     // Click on toggle tab to show sidebar
+    const oldToggle = document.getElementById('sidebar-toggle-tab');
+    if (oldToggle) oldToggle.remove();
     const sidebarToggle = document.createElement('div');
     sidebarToggle.id = 'sidebar-toggle-tab';
     sidebarToggle.className = 'sidebar-toggle-tab';

@@ -165,11 +165,16 @@ async function updatePrunedRpcStats(endpoints: RpcEndpoint[], healthyUrls: Set<s
 
 export async function getSingleHealthyRpc(): Promise<string | null> {
   const poolPath = path.resolve('utility/rpc-pool-complete.json');
-  const raw = await fs.readFile(poolPath, 'utf8');
-  const parsed = JSON.parse(raw);
-  const endpoints: RpcEndpoint[] = Array.isArray(parsed)
-    ? parsed
-    : (parsed && typeof parsed === 'object' ? Object.values(parsed) as RpcEndpoint[] : []);
+  let endpoints: RpcEndpoint[] = [];
+  try {
+    const raw = await fs.readFile(poolPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    endpoints = Array.isArray(parsed)
+      ? parsed
+      : (parsed && typeof parsed === 'object' ? Object.values(parsed) as RpcEndpoint[] : []);
+  } catch {
+    endpoints = [{ name: 'Default RPC', url: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com' }];
+  }
 
   if (endpoints.length === 0) {
     return null;
@@ -212,13 +217,17 @@ export async function getSingleHealthyRpc(): Promise<string | null> {
 
 
 export async function pruneEndpoints(criteria: { unhealthy?: boolean, minFailures?: number } = {}): Promise<any[]> {
-  const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
-  let endpointsRaw = JSON.parse(raw);
   let endpoints: any[] = [];
-  if (Array.isArray(endpointsRaw)) {
-    endpoints = endpointsRaw;
-  } else if (endpointsRaw && typeof endpointsRaw === 'object') {
-    endpoints = Object.values(endpointsRaw);
+  try {
+    const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
+    const endpointsRaw = JSON.parse(raw);
+    if (Array.isArray(endpointsRaw)) {
+      endpoints = endpointsRaw;
+    } else if (endpointsRaw && typeof endpointsRaw === 'object') {
+      endpoints = Object.values(endpointsRaw);
+    }
+  } catch {
+    endpoints = [{ name: 'Default RPC', url: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', pruned: 1, total: 1 }];
   }
   console.log(`[prune] Testing ${endpoints.length} endpoints...`);
   // Chiamate parallele HTTP POST getLatestBlockhash

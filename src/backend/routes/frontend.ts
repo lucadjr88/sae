@@ -12,11 +12,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 
-// Serve frontend: use dist/ in production, src/ in development
-const isDev = process.argv.includes('tsx');
-const frontendPath = isDev
-  ? path.join(__dirname, '../../../frontend/src')
-  : path.join(__dirname, '../../');
+import fs from 'fs';
+
+// Serve frontend: use dist/ if available, fallback to frontend/
+const distPath = path.join(process.cwd(), 'dist');
+const frontendPath = fs.existsSync(path.join(distPath, 'index.html'))
+  ? distPath
+  : path.join(process.cwd(), 'frontend');
 
 // Aggiungi header CSP permissivo per SPA
 router.use((req, res, next) => {

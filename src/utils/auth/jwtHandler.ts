@@ -10,7 +10,11 @@ export interface JwtPayload {
 const getSecret = (): string => {
   const secret = process.env.JWT_SECRET;
   if (!secret || secret.length < 32) {
-    throw new Error('JWT_SECRET must be set in environment and be at least 32 bytes');
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET must be set in environment and be at least 32 bytes');
+    }
+    console.warn('[JWT] Warning: JWT_SECRET is not set or < 32 chars. Using default dev secret. Set JWT_SECRET in production.');
+    return 'development_fallback_secret_must_be_32_characters_long_minimum!';
   }
   return secret;
 };

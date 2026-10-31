@@ -41,9 +41,13 @@ export function resetPoolCache(profileId?: string) {
 export async function loadOrCreateRpcPool(profileId: string, persist = true): Promise<any[]> {
   if (!persist) {
     if (!transientPool) {
-      const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
-      const endpointsRaw = JSON.parse(raw);
-      transientPool = Array.isArray(endpointsRaw) ? endpointsRaw : Object.values(endpointsRaw);
+      try {
+        const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
+        const endpointsRaw = JSON.parse(raw);
+        transientPool = Array.isArray(endpointsRaw) ? endpointsRaw : Object.values(endpointsRaw);
+      } catch {
+        transientPool = [{ name: 'Default RPC', url: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', pruned: 1, total: 1 }];
+      }
     }
     return transientPool;
   }
@@ -61,9 +65,14 @@ export async function loadOrCreateRpcPool(profileId: string, persist = true): Pr
   } catch {
     // Non esiste: carica direttamente la lista completa senza test di prune bloccanti
     console.log(`[rpc-pool-manager] Pool non trovato per ${profileId}, carico tutti gli endpoint configurati.`);
-    const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
-    const endpointsRaw = JSON.parse(raw);
-    const endpoints = Array.isArray(endpointsRaw) ? endpointsRaw : Object.values(endpointsRaw);
+    let endpoints: any[] = [];
+    try {
+      const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
+      const endpointsRaw = JSON.parse(raw);
+      endpoints = Array.isArray(endpointsRaw) ? endpointsRaw : Object.values(endpointsRaw);
+    } catch {
+      endpoints = [{ name: 'Default RPC', url: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', pruned: 1, total: 1 }];
+    }
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(file, JSON.stringify(endpoints, null, 2));
     poolCache[profileId] = endpoints;

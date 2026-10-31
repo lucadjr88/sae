@@ -226,7 +226,7 @@ export class RentalService {
 			// fallback: nessun file o errore di parsing
 		}
 		if (!contracts.length) {
-			contracts = await this.fetchContractsOnChain(profileId, limit);
+			contracts = await this.fetchContractsOnChain(profileId);
 			// Solo ora aggiorna il file e la data
 			await this.saveContractsToCache(profileId, contracts);
 			createdAt = new Date().toISOString();

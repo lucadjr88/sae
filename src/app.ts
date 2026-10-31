@@ -1,6 +1,7 @@
 
 import 'dotenv/config.js';
 import express from 'express';
+import compression from 'compression';
 import { installProcessLogContext } from './utils/log-context.js';
 import analyzeProfileRouter from './analysis/analyzeProfile.js';
 import debugRouter from './analysis/debug/index.js';
@@ -23,6 +24,7 @@ installProcessLogContext();
 const PORT = 3000;
 
 const app = express();
+app.use(compression());
 app.use(express.json());
 
 // NOTE: removed global debug logging for static/frontend requests

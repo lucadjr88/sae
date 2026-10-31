@@ -13,7 +13,8 @@ router.post('/fleet-chart-data', async (req: Request, res: Response) => {
     const upstream = await fetch(SDU_UPSTREAM_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fleetIds, days })
+      body: JSON.stringify({ fleetIds, days }),
+      signal: AbortSignal.timeout(5000),
     });
 
     const payload = await upstream.json().catch(() => ({}));

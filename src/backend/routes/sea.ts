@@ -910,6 +910,7 @@ router.post('/sea/scan/prepare', async (req, res) => {
       };
       const provider = new AnchorProvider(connection, readOnlyWallet as any, { commitment: 'confirmed', preflightCommitment: 'confirmed' });
       const sageProgram = new Program(sageIdl as any, SAGE_PROGRAM_ID, provider);
+      const cargoProgram = new Program(CARGO_IDL as any, CARGO_PROGRAM_ID, provider);
       const game: any = await getCachedGame(sageProgram, gameId);
       const statsDefinition = game.cargo.statsDefinition;
       const tracker = await getCachedSduTracker(sageProgram, gameId);
