@@ -90,8 +90,13 @@ export class FleetFeed extends Emitter {
       this.ws.onmessage = async (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.method === 'slotNotification' || msg.method === 'accountNotification' || msg.params) {
-            await this.pollOnce();
+          // Ignora slotNotification (ogni ~400ms) per evitare consumo RPC a valanga
+          if (msg.method === 'accountNotification') {
+            const now = Date.now();
+            if (!this.lastWsPoll || (now - this.lastWsPoll) > 20000) {
+              this.lastWsPoll = now;
+              await this.pollOnce();
+            }
           }
         } catch {}
       };

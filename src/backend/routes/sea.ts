@@ -32,6 +32,73 @@ const SIZE_KEYS = ['xx_small', 'x_small', 'small', 'medium', 'large', 'capital',
 const SIZE_NAMES = ['xxSmall', 'xSmall', 'small', 'medium', 'large', 'capital', 'commander', 'titan'];
 const FACTIONS = ['Unaligned', 'MUD', 'ONI', 'Ustur'];
 
+// Cache in memoria per account di protocollo immutabili (modello Sly: zero chiamate RPC dopo il boot)
+const profileFactionPubkeyCache = new Map<string, PublicKey>();
+async function getCachedProfileFaction(connection: any, profileId: string): Promise<PublicKey> {
+  const cached = profileFactionPubkeyCache.get(profileId);
+  if (cached) return cached;
+  const accounts = await connection.getProgramAccounts(PROFILE_FACTION_PROGRAM_ID, {
+    filters: [{ memcmp: { offset: 9, bytes: profileId } }],
+    commitment: 'confirmed',
+  });
+  if (!accounts || accounts.length === 0) throw new Error('PROFILE_FACTION_NOT_FOUND');
+  const pubkey = accounts[0].pubkey;
+  profileFactionPubkeyCache.set(profileId, pubkey);
+  return pubkey;
+}
+
+const gameAccountCache = new Map<string, any>();
+async function getCachedGame(sageProgram: any, gameId: PublicKey): Promise<any> {
+  const key = gameId.toBase58();
+  const cached = gameAccountCache.get(key);
+  if (cached) return cached;
+  const game = await sageProgram.account.game.fetch(gameId);
+  gameAccountCache.set(key, game);
+  return game;
+}
+
+const sduTrackerCache = new Map<string, any>();
+async function getCachedSduTracker(sageProgram: any, gameId: PublicKey): Promise<any> {
+  const key = gameId.toBase58();
+  const cached = sduTrackerCache.get(key);
+  if (cached) return cached;
+  const trackers = await sageProgram.account.surveyDataUnitTracker.all();
+  const tracker = trackers.find((item: any) => item.account.gameId.equals(gameId));
+  if (!tracker) throw new Error('SURVEY_DATA_UNIT_TRACKER_NOT_FOUND');
+  sduTrackerCache.set(key, tracker);
+  return tracker;
+}
+
+const cargoStatsDefCache = new Map<string, any>();
+async function getCachedCargoStatsDef(cargoProgram: any, statsDefinition: PublicKey): Promise<any> {
+  const key = statsDefinition.toBase58();
+  const cached = cargoStatsDefCache.get(key);
+  if (cached) return cached;
+  const stats = await cargoProgram.account.cargoStatsDefinition.fetch(statsDefinition);
+  cargoStatsDefCache.set(key, stats);
+  return stats;
+}
+
+const cargoTypeCache = new Map<string, PublicKey>();
+function getCachedCargoType(cargoProgram: any, statsDefinition: PublicKey, mint: PublicKey, seqId: number): PublicKey {
+  const key = `${statsDefinition.toBase58()}:${mint.toBase58()}:${seqId}`;
+  const cached = cargoTypeCache.get(key);
+  if (cached) return cached;
+  const [cargoType] = CargoType.findAddress(cargoProgram as any, statsDefinition, mint, seqId);
+  cargoTypeCache.set(key, cargoType);
+  return cargoType;
+}
+
+function decodeSplTokenBalance(data: Buffer | Uint8Array | null | undefined): number {
+  if (!data || data.length < 72) return 0;
+  try {
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    return Number(buf.readBigUInt64LE(64));
+  } catch {
+    return 0;
+  }
+}
+
 function makePriorityFeePolicy(feeModeInput: unknown, baseFeeInput: unknown, multiplierPercent: number) {
   if (feeModeInput != null && feeModeInput !== 'sly' && feeModeInput !== 'wallet') throw new Error('INVALID_FEE_MODE');
   const mode: 'sly' | 'wallet' = feeModeInput === 'wallet' ? 'wallet' : 'sly';
@@ -703,9 +770,14 @@ async function fetchFleetResourcesFromChain(connection: any, chainData: any) {
   const gameId = new PublicKey(chainData.game_id);
   const fuelTank = new PublicKey(chainData.fuel_tank);
   const cargoHold = new PublicKey(chainData.cargo_hold);
-  const gameInfo = await connection.getAccountInfo(gameId, 'confirmed');
-  if (!gameInfo || !gameInfo.owner.equals(SAGE_PROGRAM_ID)) throw new Error('INVALID_GAME_ACCOUNT');
-  const game = coder.accounts.decode('Game', gameInfo.data);
+
+  let game = gameAccountCache.get(gameId.toBase58());
+  if (!game) {
+    const gameInfo = await connection.getAccountInfo(gameId, 'confirmed');
+    if (!gameInfo || !gameInfo.owner.equals(SAGE_PROGRAM_ID)) throw new Error('INVALID_GAME_ACCOUNT');
+    game = coder.accounts.decode('Game', gameInfo.data);
+    gameAccountCache.set(gameId.toBase58(), game);
+  }
   const fuelToken = getAssociatedTokenAddressSync(game.mints.fuel, fuelTank, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
   const foodToken = getAssociatedTokenAddressSync(game.mints.food, cargoHold, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 
@@ -716,15 +788,13 @@ async function fetchFleetResourcesFromChain(connection: any, chainData: any) {
   let fuelCurrent = 0;
   if (fuelAccountInfo) {
     if (!fuelAccountInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('INVALID_TOKEN_ACCOUNT_OWNER');
-    const balance = await connection.getTokenAccountBalance(fuelToken, 'confirmed');
-    fuelCurrent = Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
+    fuelCurrent = decodeSplTokenBalance(fuelAccountInfo.data);
   }
 
   let foodCurrent = 0;
   if (foodAccountInfo) {
     if (!foodAccountInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('INVALID_TOKEN_ACCOUNT_OWNER');
-    const balance = await connection.getTokenAccountBalance(foodToken, 'confirmed');
-    foodCurrent = Number(balance.value.uiAmountString ?? balance.value.uiAmount ?? 0);
+    foodCurrent = decodeSplTokenBalance(foodAccountInfo.data);
   }
 
   const fuelCapacity = Number(chainData.stats?.cargo_stats?.fuel_capacity ?? 0);
@@ -840,24 +910,15 @@ router.post('/sea/scan/prepare', async (req, res) => {
       };
       const provider = new AnchorProvider(connection, readOnlyWallet as any, { commitment: 'confirmed', preflightCommitment: 'confirmed' });
       const sageProgram = new Program(sageIdl as any, SAGE_PROGRAM_ID, provider);
-      const cargoProgram = new Program(CARGO_IDL as any, CARGO_PROGRAM_ID, provider);
-      const game: any = await sageProgram.account.game.fetch(gameId);
+      const game: any = await getCachedGame(sageProgram, gameId);
       const statsDefinition = game.cargo.statsDefinition;
-      const trackers = await sageProgram.account.surveyDataUnitTracker.all();
-      const tracker = trackers.find((item: any) => item.account.gameId.equals(gameId));
-      if (!tracker) throw new Error('SURVEY_DATA_UNIT_TRACKER_NOT_FOUND');
-
-      const [profileFaction] = await connection.getProgramAccounts(PROFILE_FACTION_PROGRAM_ID, {
-        filters: profileFactionFilters,
-        commitment: 'confirmed',
-      });
-      if (!profileFaction) throw new Error('PROFILE_FACTION_NOT_FOUND');
-
-      const cargoStats: any = await cargoProgram.account.cargoStatsDefinition.fetch(statsDefinition);
+      const tracker = await getCachedSduTracker(sageProgram, gameId);
+      const owningProfileFactionPubkey = await getCachedProfileFaction(connection, profileId);
+      const cargoStats: any = await getCachedCargoStatsDef(cargoProgram, statsDefinition);
       const trackerData = tracker.account as any;
       const cargoSeqId = Number(cargoStats.seqId.toString());
-      const [sduCargoType] = CargoType.findAddress(cargoProgram as any, statsDefinition, trackerData.sduMint, cargoSeqId);
-      const [resourceCargoType] = CargoType.findAddress(cargoProgram as any, statsDefinition, game.mints.food, cargoSeqId);
+      const sduCargoType = getCachedCargoType(cargoProgram, statsDefinition, trackerData.sduMint, cargoSeqId);
+      const resourceCargoType = getCachedCargoType(cargoProgram, statsDefinition, game.mints.food, cargoSeqId);
 
 
       const findPointsCategory = (categoryKey: PublicKey) => Object.values(game.points as any)
@@ -916,7 +977,7 @@ router.post('/sea/scan/prepare', async (req, res) => {
             fleetAndOwner: {
               fleet: new PublicKey(fleetId),
               owningProfile: new PublicKey(profileId),
-              owningProfileFaction: profileFaction.pubkey,
+              owningProfileFaction: owningProfileFactionPubkey,
               key: walletAddress,
             },
             gameId,
@@ -1108,33 +1169,21 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
     const fuelRequiredRoundTrip = (distanceOutbound + distanceReturn) * (fuelRate / 100);
 
     const prepared = await withRpc(profileId, async connection => {
-      const gameInfo = await connection.getAccountInfo(gameId, 'confirmed');
-      if (!gameInfo) {
-        const err = new Error(`GAME_ACCOUNT_NOT_FOUND:${gameId.toBase58()}`);
-        (err as any).status = 503;
-        throw err;
-      }
-      const decodedGame = await coder.accounts.decode('Game', gameInfo.data) as any;
-      const fuelToken = getAssociatedTokenAddressSync(decodedGame.mints.fuel, fuelTank, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
-      const fuelInfo = await connection.getAccountInfo(fuelToken, 'confirmed');
-      if (!fuelInfo || !fuelInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('FLEET_FUEL_ACCOUNT_NOT_FOUND');
-      const fuelBalance = await connection.getTokenAccountBalance(fuelToken, 'confirmed');
-      const fuelCurrent = Number(fuelBalance.value.uiAmountString ?? fuelBalance.value.uiAmount ?? 0);
-      if (!(fuelCurrent > fuelRequiredRoundTrip)) {
-        throw new Error(`SUBWARP_FUEL_INSUFFICIENT:${fuelCurrent.toFixed(2)}:${fuelRequiredRoundTrip.toFixed(2)}`);
-      }
-
-      const [profileFaction] = await connection.getProgramAccounts(PROFILE_FACTION_PROGRAM_ID, {
-        filters: [{ memcmp: { offset: 9, bytes: profileId } }],
-        commitment: 'confirmed',
-      });
-      if (!profileFaction) throw new Error('PROFILE_FACTION_NOT_FOUND');
       const sageProgram = new Program(sageIdl as any, SAGE_PROGRAM_ID, new AnchorProvider(connection, {
         publicKey: walletAddress,
         signTransaction: async (transaction: any) => transaction,
         signAllTransactions: async (transactions: any[]) => transactions,
       } as any, { commitment: 'confirmed', preflightCommitment: 'confirmed' }));
-      const game = await sageProgram.account.game.fetch(gameId) as any;
+      const game: any = await getCachedGame(sageProgram, gameId);
+      const fuelToken = getAssociatedTokenAddressSync(game.mints.fuel, fuelTank, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+      const fuelInfo = await connection.getAccountInfo(fuelToken, 'confirmed');
+      if (!fuelInfo || !fuelInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('FLEET_FUEL_ACCOUNT_NOT_FOUND');
+      const fuelCurrent = decodeSplTokenBalance(fuelInfo.data);
+      if (!(fuelCurrent > fuelRequiredRoundTrip)) {
+        throw new Error(`SUBWARP_FUEL_INSUFFICIENT:${fuelCurrent.toFixed(2)}:${fuelRequiredRoundTrip.toFixed(2)}`);
+      }
+
+      const owningProfileFactionPubkey = await getCachedProfileFaction(connection, profileId);
       const instruction = await sageProgram.methods.startSubwarp({
         keyIndex: new BN(profileKey.index),
         toSector: [new BN(x), new BN(y)],
@@ -1144,7 +1193,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
             fleetAndOwner: {
               fleet: new PublicKey(fleetId),
               owningProfile: new PublicKey(profileId),
-              owningProfileFaction: profileFaction.pubkey,
+              owningProfileFaction: owningProfileFactionPubkey,
               key: walletAddress,
             },
             gameId,
@@ -1314,29 +1363,23 @@ router.post('/sea/warp/prepare', async (req, res) => {
       const provider = new AnchorProvider(connection, readOnlyWallet as any, { commitment: 'confirmed', preflightCommitment: 'confirmed' });
       const sageProgram = new Program(sageIdl as any, SAGE_PROGRAM_ID, provider);
       const cargoProgram = new Program(CARGO_IDL as any, CARGO_PROGRAM_ID, provider);
-      const game: any = await sageProgram.account.game.fetch(gameId);
+      const game: any = await getCachedGame(sageProgram, gameId);
       const statsDefinition = game.cargo.statsDefinition;
-      const cargoStats: any = await cargoProgram.account.cargoStatsDefinition.fetch(statsDefinition);
-      const [fuelCargoType] = CargoType.findAddress(
+      const cargoStats: any = await getCachedCargoStatsDef(cargoProgram, statsDefinition);
+      const fuelCargoType = getCachedCargoType(
         cargoProgram as any,
         statsDefinition,
         game.mints.fuel,
         Number(cargoStats.seqId.toString()),
       );
-      await cargoProgram.account.cargoType.fetch(fuelCargoType);
       const fuelToken = getAssociatedTokenAddressSync(game.mints.fuel, fuelTank, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
       const fuelInfo = await connection.getAccountInfo(fuelToken, 'confirmed');
       if (!fuelInfo || !fuelInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('FLEET_FUEL_ACCOUNT_NOT_FOUND');
-      const fuelBalance = await connection.getTokenAccountBalance(fuelToken, 'confirmed');
-      const fuelCurrent = Number(fuelBalance.value.uiAmountString ?? fuelBalance.value.uiAmount ?? 0);
+      const fuelCurrent = decodeSplTokenBalance(fuelInfo.data);
       if (fuelCurrent < fuelRequiredRoundTrip) {
         throw new Error(`WARP_FUEL_INSUFFICIENT:${fuelCurrent.toFixed(2)}:${fuelRequiredRoundTrip.toFixed(2)}`);
       }
-      const [profileFaction] = await connection.getProgramAccounts(PROFILE_FACTION_PROGRAM_ID, {
-        filters: [{ memcmp: { offset: 9, bytes: profileId } }],
-        commitment: 'confirmed',
-      });
-      if (!profileFaction) throw new Error('PROFILE_FACTION_NOT_FOUND');
+      const owningProfileFactionPubkey = await getCachedProfileFaction(connection, profileId);
       const instruction = await sageProgram.methods.warpToCoordinate({
         keyIndex: new BN(profileKey.index),
         toSector: [new BN(waypoint[0]), new BN(waypoint[1])],
@@ -1346,7 +1389,7 @@ router.post('/sea/warp/prepare', async (req, res) => {
             fleetAndOwner: {
               fleet: new PublicKey(fleetId),
               owningProfile: new PublicKey(profileId),
-              owningProfileFaction: profileFaction.pubkey,
+              owningProfileFaction: owningProfileFactionPubkey,
               key: walletAddress,
             },
             gameId,
@@ -1470,16 +1513,15 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
       const provider = new AnchorProvider(connection, readOnlyWallet as any, { commitment: 'confirmed', preflightCommitment: 'confirmed' });
       const sageProgram = new Program(sageIdl as any, SAGE_PROGRAM_ID, provider);
       const cargoProgram = new Program(CARGO_IDL as any, CARGO_PROGRAM_ID, provider);
-      const game: any = await sageProgram.account.game.fetch(gameId);
+      const game: any = await getCachedGame(sageProgram, gameId);
       const statsDefinition = game.cargo.statsDefinition;
-      const cargoStats: any = await cargoProgram.account.cargoStatsDefinition.fetch(statsDefinition);
-      const [fuelCargoType] = CargoType.findAddress(
+      const cargoStats: any = await getCachedCargoStatsDef(cargoProgram, statsDefinition);
+      const fuelCargoType = getCachedCargoType(
         cargoProgram as any,
         statsDefinition,
         game.mints.fuel,
         Number(cargoStats.seqId.toString()),
       );
-      await cargoProgram.account.cargoType.fetch(fuelCargoType);
       const fuelToken = getAssociatedTokenAddressSync(game.mints.fuel, fuelTank, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
       const findPointsCategory = (categoryKey: PublicKey) => Object.values(game.points as any)
         .find((item: any) => item.category.equals(categoryKey));

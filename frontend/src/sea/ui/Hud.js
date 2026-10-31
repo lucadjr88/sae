@@ -281,6 +281,7 @@ export class Hud extends Emitter {
     this.automationLastKnownSector = null;
     this.automationRunId = 0;
     this.automationFleetStates = new Map();
+    this.fleetAutomations = new Map();
     this.fleetScanSummaries = new Map();
     this.fleetStatusOverrides = new Map();
     this.scanPolicy = new ScanPolicy();
@@ -419,11 +420,81 @@ export class Hud extends Emitter {
     this.infoOverlay.hidden = true;
   }
 
+  getFleetAutomation(fleetId) {
+    if (!this.fleetAutomations.has(fleetId)) {
+      this.fleetAutomations.set(fleetId, {
+        fleetId,
+        running: false,
+        faulted: false,
+        runId: 0,
+        runTimer: null,
+        destination: null,
+        lastScanSummary: '',
+        scanTransaction: null,
+        preparedResult: null,
+        preparedAction: null,
+        resources: null,
+        resourcesLoadedFor: null,
+        resourcesLoadedAt: 0,
+        initialScanPending: false,
+        initialScanReady: false,
+        resumeAfterExit: false,
+        waitingForEta: false,
+        awaitingMovementStart: false,
+        awaitingMovementExit: false,
+        needsScanAfterMovement: false,
+        submissionPending: false,
+        actionPending: false,
+        postScanReady: false,
+        lastKnownSector: null,
+        scanPolicy: new ScanPolicy(),
+      });
+    }
+    return this.fleetAutomations.get(fleetId);
+  }
+
+  saveActiveFleetAutomation() {
+    if (!this.automationFleet) return;
+    const auto = this.getFleetAutomation(this.automationFleet.id);
+    auto.running = this.automationRunning;
+    auto.faulted = this.automationFaulted;
+    auto.runId = this.automationRunId;
+    auto.runTimer = this.automationRunTimer;
+    auto.destination = this.automationDestination;
+    auto.lastScanSummary = this.automationLastScanSummary;
+    auto.scanTransaction = this.automationScanTransaction;
+    auto.preparedResult = this.automationPreparedResult;
+    auto.preparedAction = this.automationPreparedAction;
+    auto.resources = this.automationResources;
+    auto.resourcesLoadedFor = this.automationResourcesLoadedFor;
+    auto.resourcesLoadedAt = this.automationResourcesLoadedAt;
+    auto.initialScanPending = this.automationInitialScanPending;
+    auto.initialScanReady = this.automationInitialScanReady;
+    auto.resumeAfterExit = this.automationResumeAfterExit;
+    auto.waitingForEta = this.automationWaitingForEta;
+    auto.awaitingMovementStart = this.automationAwaitingMovementStart;
+    auto.awaitingMovementExit = this.automationAwaitingMovementExit;
+    auto.needsScanAfterMovement = this.automationNeedsScanAfterMovement;
+    auto.submissionPending = this.automationSubmissionPending;
+    auto.actionPending = this.automationActionPending;
+    auto.postScanReady = this.automationPostScanReady;
+    auto.lastKnownSector = this.automationLastKnownSector;
+    auto.scanPolicy = this.scanPolicy;
+  }
+
   openAutomation(fleet) {
-    const continuing = this.automationFleet?.id === fleet.id && (this.automationRunning || this.automationFaulted);
+    if (this.automationFleet && this.automationFleet.id !== fleet.id) {
+      this.saveActiveFleetAutomation();
+    }
+    const auto = this.getFleetAutomation(fleet.id);
+    const continuing = auto.running || auto.faulted;
+    this.automationFleet = fleet;
+
     if (!continuing) {
-      if (this.automationRunning) this.stopAutomation();
+      this.scanPolicy = auto.scanPolicy;
       this.scanPolicy.reset();
+      this.automationRunning = false;
+      this.automationRunTimer = null;
       this.automationSelect.value = '';
       this.automationForm.hidden = true;
       this.automationRequestButton.hidden = true;
@@ -439,7 +510,6 @@ export class Hud extends Emitter {
       this.automationScanResult.hidden = true;
       this.automationScanSubmitButton.hidden = true;
       this.automationResources = null;
-      this.automationFleet = fleet;
       this.automationInitialScanPending = false;
       this.automationInitialScanReady = false;
       this.automationResumeAfterExit = false;
@@ -460,6 +530,31 @@ export class Hud extends Emitter {
       this.populateAutomationForm(fleet);
       this.loadAutomationConfig(fleet);
     } else {
+      this.automationRunning = auto.running;
+      this.automationFaulted = auto.faulted;
+      this.automationRunId = auto.runId;
+      this.automationRunTimer = auto.runTimer;
+      this.automationDestination = auto.destination;
+      this.automationLastScanSummary = auto.lastScanSummary;
+      this.automationScanTransaction = auto.scanTransaction;
+      this.automationPreparedResult = auto.preparedResult;
+      this.automationPreparedAction = auto.preparedAction;
+      this.automationResources = auto.resources;
+      this.automationResourcesLoadedFor = auto.resourcesLoadedFor;
+      this.automationResourcesLoadedAt = auto.resourcesLoadedAt;
+      this.automationInitialScanPending = auto.initialScanPending;
+      this.automationInitialScanReady = auto.initialScanReady;
+      this.automationResumeAfterExit = auto.resumeAfterExit;
+      this.automationWaitingForEta = auto.waitingForEta;
+      this.automationAwaitingMovementStart = auto.awaitingMovementStart;
+      this.automationAwaitingMovementExit = auto.awaitingMovementExit;
+      this.automationNeedsScanAfterMovement = auto.needsScanAfterMovement;
+      this.automationSubmissionPending = auto.submissionPending;
+      this.automationActionPending = auto.actionPending;
+      this.automationPostScanReady = auto.postScanReady;
+      this.automationLastKnownSector = auto.lastKnownSector;
+      this.scanPolicy = auto.scanPolicy;
+
       this.automationFleet = this.snapshot.fleets.find(item => item.id === fleet.id) ?? fleet;
       this.automationSelect.value = 'sdu-program';
       this.automationForm.hidden = false;
@@ -1196,6 +1291,10 @@ export class Hud extends Emitter {
     console.info('[SDU] signer mode', { mode: this.localSigner.unlocked ? 'local' : 'wallet' });
     this.automationRunning = true;
     const runId = ++this.automationRunId;
+    const auto = this.getFleetAutomation(this.automationFleet.id);
+    auto.running = true;
+    auto.faulted = false;
+    auto.runId = runId;
     this.automationInitialScanPending = true;
     this.automationInitialScanReady = false;
     this.automationResumeAfterExit = false;
@@ -1401,32 +1500,58 @@ export class Hud extends Emitter {
     });
   }
 
-  stopAutomation() {
-    const wasRunning = this.automationRunning;
-    this.automationRunning = false;
-    this.automationRunId += 1;
-    clearTimeout(this.automationRunTimer);
-    this.automationRunTimer = null;
-    this.automationInitialScanPending = false;
-    this.automationInitialScanReady = false;
-    this.automationResumeAfterExit = false;
-    this.automationWaitingForEta = false;
-    this.automationAwaitingMovementStart = false;
-    this.automationNeedsScanAfterMovement = false;
-    this.automationPostScanReady = false;
-    this.automationLastKnownSector = null;
-    if (wasRunning) this.automationFaulted = false;
-    if (this.automationToggleButton) {
-      this.automationToggleButton.textContent = 'Avvia automazione';
-      this.automationToggleButton.setAttribute('aria-pressed', 'false');
+  stopAutomation(targetFleetId = this.automationFleet?.id) {
+    if (targetFleetId) {
+      const auto = this.fleetAutomations.get(targetFleetId);
+      if (auto) {
+        auto.running = false;
+        auto.faulted = false;
+        if (auto.runTimer) {
+          clearTimeout(auto.runTimer);
+          auto.runTimer = null;
+        }
+      }
     }
-    this.refreshAutomationState();
-    if (wasRunning) console.info('[SDU] automation stopped', { fleetId: this.automationFleet?.id });
+    const isCurrent = !targetFleetId || targetFleetId === this.automationFleet?.id;
+    if (isCurrent) {
+      const wasRunning = this.automationRunning;
+      this.automationRunning = false;
+      this.automationRunId += 1;
+      if (this.automationRunTimer) {
+        clearTimeout(this.automationRunTimer);
+        this.automationRunTimer = null;
+      }
+      this.automationInitialScanPending = false;
+      this.automationInitialScanReady = false;
+      this.automationResumeAfterExit = false;
+      this.automationWaitingForEta = false;
+      this.automationAwaitingMovementStart = false;
+      this.automationNeedsScanAfterMovement = false;
+      this.automationPostScanReady = false;
+      this.automationLastKnownSector = null;
+      if (wasRunning) this.automationFaulted = false;
+      if (this.automationToggleButton) {
+        this.automationToggleButton.textContent = 'Avvia automazione';
+        this.automationToggleButton.setAttribute('aria-pressed', 'false');
+      }
+      this.refreshAutomationState();
+      if (wasRunning) console.info('[SDU] automation stopped', { fleetId: this.automationFleet?.id });
+    }
+    if (targetFleetId) this.setAutomationFleetState(targetFleetId, 'unavailable');
   }
 
   failAutomation() {
     this.automationRunning = false;
     this.automationFaulted = true;
+    if (this.automationFleet) {
+      const auto = this.getFleetAutomation(this.automationFleet.id);
+      auto.running = false;
+      auto.faulted = true;
+      if (auto.runTimer) {
+        clearTimeout(auto.runTimer);
+        auto.runTimer = null;
+      }
+    }
     this.automationInitialScanPending = false;
     this.automationInitialScanReady = false;
     this.automationResumeAfterExit = false;
