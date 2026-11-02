@@ -1047,6 +1047,9 @@ export class Hud extends Emitter {
           { attempt: 'retry', fleetId: this.automationFleet.id, message: error.message }
         );
         this.automationScanResult.textContent = 'Invio transazione fallito · preparo una nuova transazione';
+        if (movementExit && this.automationRunning && runId === this.automationRunId) {
+          this.automationNeedsScanAfterMovement = true;
+        }
         const prepared = await this.prepareAutomationScan();
         if (prepared && this.automationRunning && runId === this.automationRunId) {
           this.automationSubmissionPending = false;
