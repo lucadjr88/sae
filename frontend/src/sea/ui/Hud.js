@@ -955,7 +955,7 @@ export class Hud extends Emitter {
         action: submittedAction,
       });
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('TRANSACTION_SUBMIT_TIMEOUT')), 30_000)
+        setTimeout(() => reject(new Error('TRANSACTION_SUBMIT_TIMEOUT')), 60_000)
       );
       const result = await Promise.race([submitPromise, timeoutPromise]);
       auto.submissionPending = false;
