@@ -749,9 +749,6 @@ export class Hud extends Emitter {
     this.automationFleet = fleet;
     const movementMode = this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp';
     let operation = resolveScanOperation(fleet, destination, movementMode);
-    if (this.automationNeedsScanAfterMovement) {
-      operation = { status: 'ready', action: 'scan' };
-    }
     if (operation.status === 'waiting') {
       this.automationScanResult.hidden = false;
       this.automationScanResult.textContent = 'Movimento in corso; attendere l’arrivo chain.';
