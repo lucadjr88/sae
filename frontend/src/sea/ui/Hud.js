@@ -1521,7 +1521,15 @@ export class Hud extends Emitter {
     // essere obsoleto (MoveSubwarp/MoveWarp): forziamo la scan per non attendere
     // invano l'aggiornamento chain o l'arrivo di un movimento già concluso.
     if (this.automationNeedsScanAfterMovement && !this.automationResumeAfterExit) {
-      operation = { status: 'ready', action: 'scan' };
+      // Dopo subwarp_start/warp_start serve prima l'exit, non la scan diretta:
+      // saltare l'exit porta a FLEET_NOT_AT_SCAN_COORDINATE (la flotta è ancora in movimento).
+      const lastAction = this.automationPreparedAction;
+      if (lastAction === 'subwarp_start' || lastAction === 'warp_start') {
+        operation = { status: 'ready', action: lastAction === 'subwarp_start' ? 'subwarp_exit' : 'warp_exit' };
+      } else {
+        // Movimento già completato su chain o exit già fatta: procediamo con lo scan.
+        operation = { status: 'ready', action: 'scan' };
+      }
     }
     if (operation.status === 'waiting') {
       this.waitForMovementArrival(fleet, runId);
