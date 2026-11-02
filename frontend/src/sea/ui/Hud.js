@@ -925,12 +925,16 @@ export class Hud extends Emitter {
     this.automationSubmissionPending = true;
     this.automationScanSubmitButton.disabled = true;
     try {
-      const result = await this.transactionClient.signAndSubmit({
+      const submitPromise = this.transactionClient.signAndSubmit({
         prepareId: this.automationScanPrepareId,
         profileId: this.snapshot.profileId,
         transaction: this.automationScanTransaction,
         action: submittedAction,
       });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('TRANSACTION_SUBMIT_TIMEOUT')), 30_000)
+      );
+      const result = await Promise.race([submitPromise, timeoutPromise]);
       this.automationSubmissionPending = false;
       this.automationScanPrepareId = null;
       this.automationScanTransaction = null;
@@ -1022,9 +1026,21 @@ export class Hud extends Emitter {
         cause: error?.cause?.message ?? error?.cause,
       });
       const expiredBeforeSend = error instanceof Error && error.message === 'SCAN_TRANSACTION_BLOCKHASH_EXPIRED';
-      if (expiredBeforeSend && retryExpiredPreparation && this.automationRunning && runId === this.automationRunId) {
-        console.warn('[SDU] prepared transaction expired before send; preparing a fresh transaction');
-        this.automationScanResult.textContent = 'Transazione scaduta prima dell’invio · preparo un nuovo messaggio da confermare';
+      const isSubmitTimeoutOrNetwork =
+        error instanceof Error &&
+        (error.message === 'TRANSACTION_SUBMIT_TIMEOUT' ||
+         /503|Service Unavailable|429|Too Many Requests|fetch failed|socket hang up|ECONNREFUSED|ENOTFOUND|getaddrinfo|timeout|timed out/i.test(error.message));
+      if (
+        (expiredBeforeSend || isSubmitTimeoutOrNetwork) &&
+        retryExpiredPreparation &&
+        this.automationRunning &&
+        runId === this.automationRunId
+      ) {
+        console.warn(
+          '[SDU] submit failed, preparing a fresh transaction',
+          { attempt: 'retry', fleetId: this.automationFleet.id, message: error.message }
+        );
+        this.automationScanResult.textContent = 'Invio transazione fallito · preparo una nuova transazione';
         const prepared = await this.prepareAutomationScan();
         if (prepared && this.automationRunning && runId === this.automationRunId) {
           this.automationSubmissionPending = false;

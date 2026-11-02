@@ -82,7 +82,12 @@ export class FleetFeed extends Emitter {
         this.reconnectAttempts = 0;
         console.log(`[FleetFeed] WebSocket stabilito con successo su: ${ep.name || wsUrl}`);
         this.emit('status', 'connected');
-        
+
+        // Refresh immediato dello snapshot alla (ri)connessione così
+        // l'automazione in attesa riceve i dati chain aggiornati senza
+        // dover attendere il prossimo ciclo di polling (45s).
+        void this.pollOnce();
+
         // Avvia un polling di riserva più lento (es. ogni 45s) per sincronizzazioni periodiche
         this.startPollingLoop(45000);
       };
