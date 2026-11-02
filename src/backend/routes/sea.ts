@@ -10,7 +10,7 @@ import path from 'node:path';
 import bs58 from 'bs58';
 import nacl from 'tweetnacl';
 import fs from 'fs';
-import { fetchProfileFleets } from '../../utils/fetchProfileFleets.js';
+import { fetchProfileFleets, loadFleetFromCache } from '../../utils/fetchProfileFleets.js';
 import { getWalletAuthorityUtil } from '../../utils/getWalletAuthority.js';
 import { RpcPoolManager } from '../../utils/rpc/rpc-pool-manager.js';
 
@@ -657,6 +657,24 @@ async function getSnapshot(profileId: string) {
   return request;
 }
 
+/**
+ * Risolve i dati di una singola flotta per profilo.
+ * Priorità: cache su disco (zero RPC, già popolata da fetchProfileFleets),
+ * fallback a getSnapshot (2× getProgramAccounts) solo se la cache manca.
+ */
+async function loadFleetSnapshot(profileId: string, fleetId: string): Promise<{ fleet: SeaFleet; fromCache: boolean }> {
+  const cachedFleet = await loadFleetFromCache(profileId, fleetId);
+  if (cachedFleet) {
+    const borrowedIds = new Set<string>();
+    const sectors = new Map<string, number[]>();
+    return { fleet: toSeaFleet(cachedFleet, borrowedIds, sectors), fromCache: true };
+  }
+  const snapshot = await getSnapshot(profileId);
+  const fleet = snapshot.fleets.find((item: SeaFleet) => item.id === fleetId);
+  if (!fleet) throw new Error('FLEET_NOT_IN_PROFILE');
+  return { fleet, fromCache: false };
+}
+
 router.post('/sea/scan-filter', async (req, res) => {
   const host = typeof req.body?.host === 'string' ? req.body.host.trim() : '';
   const port = Number(req.body?.port);
@@ -826,9 +844,7 @@ router.get('/sea/fleet-resources', async (req, res) => {
   }
 
   try {
-    const snapshot = await getSnapshot(profileId);
-    const fleet = snapshot.fleets.find((item: SeaFleet) => item.id === fleetId);
-    if (!fleet) return res.status(404).json({ error: 'FLEET_NOT_IN_PROFILE' });
+    const { fleet } = await loadFleetSnapshot(profileId, fleetId);
 
     const chainData = fleet.chainData as any;
     const result = await withRpc(profileId, async connection => {
@@ -877,9 +893,7 @@ router.post('/sea/scan/prepare', async (req, res) => {
   }
 
   try {
-    const snapshot = await getSnapshot(profileId);
-    const fleet = snapshot.fleets.find((item: SeaFleet) => item.id === fleetId);
-    if (!fleet) return res.status(404).json({ error: 'FLEET_NOT_IN_PROFILE' });
+    const { fleet } = await loadFleetSnapshot(profileId, fleetId);
     if (fleet.state !== 'Idle' || !fleet.sector || fleet.sector[0] !== x || fleet.sector[1] !== y) {
       return res.status(409).json({ error: 'FLEET_NOT_AT_SCAN_COORDINATE', fleetState: fleet.state, current: fleet.sector, target: [x, y] });
     }
@@ -1136,9 +1150,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
 
   let scanRpc = { name: 'unknown', host: 'unknown' };
   try {
-    const snapshot = await getSnapshot(profileId);
-    const fleet = snapshot.fleets.find((item: SeaFleet) => item.id === fleetId);
-    if (!fleet) return res.status(404).json({ error: 'FLEET_NOT_IN_PROFILE' });
+    const { fleet } = await loadFleetSnapshot(profileId, fleetId);
     if (fleet.state !== 'Idle' || !fleet.sector) {
       return res.status(409).json({ error: 'FLEET_NOT_IDLE_FOR_SUBWARP', fleetState: fleet.state, current: fleet.sector });
     }
@@ -1315,9 +1327,7 @@ router.post('/sea/warp/prepare', async (req, res) => {
   }
 
   try {
-    const snapshot = await getSnapshot(profileId);
-    const fleet = snapshot.fleets.find((item: SeaFleet) => item.id === fleetId);
-    if (!fleet) return res.status(404).json({ error: 'FLEET_NOT_IN_PROFILE' });
+    const { fleet } = await loadFleetSnapshot(profileId, fleetId);
     if (fleet.state !== 'Idle' || !fleet.sector) {
       return res.status(409).json({ error: 'FLEET_NOT_IDLE_FOR_WARP', fleetState: fleet.state, current: fleet.sector });
     }
@@ -1487,9 +1497,7 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
 
   let prepareRpc = { name: 'unknown', host: 'unknown' };
   try {
-    const snapshot = await getSnapshot(profileId);
-    const fleet = snapshot.fleets.find((item: SeaFleet) => item.id === fleetId);
-    if (!fleet) return res.status(404).json({ error: 'FLEET_NOT_IN_PROFILE' });
+    const { fleet } = await loadFleetSnapshot(profileId, fleetId);
     if (fleet.state !== 'MoveSubwarp' && fleet.state !== 'MoveWarp') return res.status(409).json({ error: 'FLEET_NOT_IN_MOVEMENT', fleetState: fleet.state });
     if (fleet.arrival > Date.now()) return res.status(409).json({ error: 'MOVEMENT_STILL_IN_PROGRESS', arrival: fleet.arrival });
     const exitAction = fleet.state === 'MoveWarp' ? 'warp_exit' : 'subwarp_exit';

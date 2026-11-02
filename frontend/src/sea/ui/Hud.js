@@ -280,6 +280,8 @@ export class Hud extends Emitter {
     this.automationPostScanReady = false;
     this.automationLastKnownSector = null;
     this.automationRunId = 0;
+    this.automationFuelCurrent = null;   // fuel corrente noto (zero RPC durante movimento)
+    this.automationFuelCapacity = null;  // capacità fuel nota (zero RPC durante movimento)
     this.automationFleetStates = new Map();
     this.fleetAutomations = new Map();
     this.fleetScanSummaries = new Map();
@@ -447,6 +449,8 @@ export class Hud extends Emitter {
         actionPending: false,
         postScanReady: false,
         lastKnownSector: null,
+        fuelCurrent: null,
+        fuelCapacity: null,
         scanPolicy: new ScanPolicy(),
       });
     }
@@ -479,6 +483,8 @@ export class Hud extends Emitter {
     auto.actionPending = this.automationActionPending;
     auto.postScanReady = this.automationPostScanReady;
     auto.lastKnownSector = this.automationLastKnownSector;
+    auto.fuelCurrent = this.automationFuelCurrent;
+    auto.fuelCapacity = this.automationFuelCapacity;
     auto.scanPolicy = this.scanPolicy;
   }
 
@@ -553,6 +559,8 @@ export class Hud extends Emitter {
       this.automationActionPending = auto.actionPending;
       this.automationPostScanReady = auto.postScanReady;
       this.automationLastKnownSector = auto.lastKnownSector;
+      this.automationFuelCurrent = auto.fuelCurrent;
+      this.automationFuelCapacity = auto.fuelCapacity;
       this.scanPolicy = auto.scanPolicy;
 
       this.automationFleet = this.snapshot.fleets.find(item => item.id === fleet.id) ?? fleet;
@@ -574,6 +582,30 @@ export class Hud extends Emitter {
 
   async loadAutomationResources(fleet, requestId) {
     const now = Date.now();
+    // Se conosciamo già il fuel in modo locale (aggiornato dopo un movement start,
+    // modello Sly: zero RPC durante movimento/scan cooldown), riusiamo il valore
+    // senza chiamare /api/sea/fleet-resources.
+    if (
+      this.automationFuelCurrent != null &&
+      this.automationFuelCapacity != null &&
+      (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp' || this.automationAwaitingMovementExit)
+    ) {
+      const resources = {
+        fuelCurrent: this.automationFuelCurrent,
+        fuelCapacity: this.automationFuelCapacity,
+        fuelCurrentPct: this.automationFuelCapacity > 0 ? (this.automationFuelCurrent / this.automationFuelCapacity) * 100 : 0,
+        foodCurrent: this.automationResources?.foodCurrent ?? 0,
+      };
+      this.automationResources = resources;
+      this.automationResourcesLoadedFor = fleet.id;
+      this.automationResourcesLoadedAt = now;
+      this.observeAutomationFuel(resources);
+      if (requestId !== this.automationRequestId) return;
+      this.automationRequestButton.disabled = this.automationRunning;
+      this.automationStatus.textContent = `Fuel locale ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · movimento in corso`;
+      this.refreshAutomationState();
+      return true;
+    }
     // Evita chiamate duplicate per lo stesso fleetId entro una soglia breve:
     // i dati on-chain (fuel/food) cambiano lentamente, riusare la cache evita RPC inutili.
     if (
@@ -937,6 +969,16 @@ export class Hud extends Emitter {
       } else if (movementStart && this.automationRunning && runId === this.automationRunId) {
         const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet.id);
         this.automationLastKnownSector = fleet?.sector ?? null;
+        // Aggiorna il fuel locale (modello Sly: scanLastFuelAmount) così durante
+        // il movimento non serve richiamare /api/sea/fleet-resources (zero RPC).
+        if (preparedResult?.fuelCurrent != null) {
+          this.automationFuelCurrent = Number(preparedResult.fuelCurrent);
+          this.automationFuelCapacity = Number(
+            fleet?.chainData?.stats?.cargo_stats?.fuel_capacity ??
+            this.automationResources?.fuelCapacity ??
+            0
+          );
+        }
         const expectedState = submittedAction === 'warp_start' ? 'MoveWarp' : 'MoveSubwarp';
         const target = preparedResult?.coordinates ?? this.automationDestination;
         const targetX = target?.[0] ?? target?.x ?? '?';
@@ -1305,7 +1347,16 @@ export class Hud extends Emitter {
     this.automationToggleButton.disabled = false;
     this.automationRequestButton.disabled = true;
     this.automationStatus.textContent = 'Scan iniziale richiesta sulla posizione corrente';
-    this.beginInitialAutomationScan(runId);
+
+    // Stagger avvio flotte (modello Sly: 1500ms per flotta) per evitare raffiche RPC simultanee
+    const alreadyRunning = Array.from(this.fleetAutomations.values()).filter(a => a.running).length - 1;
+    const staggerMs = Math.max(0, alreadyRunning) * 1500;
+    if (staggerMs > 0) {
+      this.automationStatus.textContent = `Avvio in coda (${staggerMs / 1000}s) · scan iniziale sulla posizione corrente`;
+    }
+    setTimeout(() => {
+      if (this.automationRunning && runId === this.automationRunId) this.beginInitialAutomationScan(runId);
+    }, staggerMs);
   }
 
   async beginInitialAutomationScan(runId, preparedResult = null) {

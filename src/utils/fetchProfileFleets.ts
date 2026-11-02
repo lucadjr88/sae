@@ -65,6 +65,20 @@ async function loadFleetsFromCache(profileId: string): Promise<any[]> {
   return loaded.filter(Boolean);
 }
 
+/**
+ * Legge i dati di una singola flotta dalla cache su disco (zero RPC).
+ * Restituisce null se il file non esiste o non è leggibile.
+ */
+export async function loadFleetFromCache(profileId: string, fleetId: string): Promise<any | null> {
+  const filePath = path.join(process.cwd(), 'cache', profileId, 'fleets', `${fleetId}.json`);
+  try {
+    const raw = await fs.readFile(filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 // Fetch fleets associated to a profileId using getProgramAccounts + memcmp
 export async function fetchProfileFleets(profileId: string, profileOffset = 41, persistCache = true, useCacheFallback = true, logRpcDetails = true, onRpc?: (endpoint: any) => void): Promise<any[]> {
   const SAGE_PROGRAM_ID = 'SAGE2HAwep459SNq61LHvjxPk4pLPEJLoMETef7f7EE';
