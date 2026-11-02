@@ -748,7 +748,10 @@ export class Hud extends Emitter {
     if (!fleet || !destination) return false;
     this.automationFleet = fleet;
     const movementMode = this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp';
-    const operation = resolveScanOperation(fleet, destination, movementMode);
+    let operation = resolveScanOperation(fleet, destination, movementMode);
+    if (this.automationNeedsScanAfterMovement) {
+      operation = { status: 'ready', action: 'scan' };
+    }
     if (operation.status === 'waiting') {
       this.automationScanResult.hidden = false;
       this.automationScanResult.textContent = 'Movimento in corso; attendere l’arrivo chain.';
@@ -887,7 +890,10 @@ export class Hud extends Emitter {
     }
     this.automationScanButton.hidden = false;
     const movementMode = this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp';
-    const operation = resolveScanOperation(fleet, destination, movementMode);
+    let operation = resolveScanOperation(fleet, destination, movementMode);
+    if (this.automationNeedsScanAfterMovement) {
+      operation = { status: 'ready', action: 'scan' };
+    }
     if (operation.status === 'waiting') {
       this.automationScanButton.textContent = operation.action === 'warp_exit' ? 'Warp in corso' : 'Subwarp in corso';
       this.automationScanButton.disabled = true;
