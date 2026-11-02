@@ -980,6 +980,13 @@ export class Hud extends Emitter {
         this.automationStatus.textContent = 'Scan confermata · selezione destinazione…';
         await this.continueAutomationAfterInitialScan(runId);
       } else if (movementExit && this.automationRunning && runId === this.automationRunId) {
+        // Salva il sector attuale (destinazione dell'exit) prima di perdere il riferimento.
+        // Dopo l'exit la flotta è fisicamente a fleet.to; lo snapshot WS potrebbe non essere
+        // ancora aggiornato (stato ancora MoveSubwarp, sector null), quindi dobbiamo preservare
+        // il sector noto per poter procedere con la scan iniziale (modello Sly: stato reale prima di operare).
+        if (this.automationDestination) {
+          this.automationLastKnownSector = [this.automationDestination.x, this.automationDestination.y];
+        }
         this.automationAwaitingMovementStart = false;
         this.automationAwaitingMovementExit = false;
         this.automationResumeAfterExit = false;
