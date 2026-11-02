@@ -1497,8 +1497,25 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
 
   let prepareRpc = { name: 'unknown', host: 'unknown' };
   try {
-    const { fleet } = await loadFleetSnapshot(profileId, fleetId);
-    if (fleet.state !== 'MoveSubwarp' && fleet.state !== 'MoveWarp') return res.status(409).json({ error: 'FLEET_NOT_IN_MOVEMENT', fleetState: fleet.state });
+    const { fleet: cachedFleet } = await loadFleetSnapshot(profileId, fleetId);
+    // Sly: prima di ogni operazione critica, verifica lo stato reale on-chain invece di affidarsi a snapshot obsoleti.
+    // Se la cache dice che la flotta non è in movimento, verifica con getSnapshot (stato reale) prima di rifiutare.
+    let fleet = cachedFleet;
+    if (fleet.state !== 'MoveSubwarp' && fleet.state !== 'MoveWarp') {
+      const { fleets } = await getSnapshot(profileId);
+      const realFleet = fleets.find((f: any) => f.id === fleetId);
+      if (realFleet && (realFleet.state === 'MoveSubwarp' || realFleet.state === 'MoveWarp')) {
+        // Stato reale confermato in movimento: procedi con l'exit usando i dati reali
+        fleet = realFleet;
+      } else {
+        // Reale stato Idle o non trovato: restituisci sector per permettere al frontend di scansionare
+        return res.status(200).json({
+          status: 'ALREADY_IDLE',
+          sector: realFleet?.sector ?? cachedFleet.sector,
+          fleetState: realFleet?.state ?? cachedFleet.state,
+        });
+      }
+    }
     if (fleet.arrival > Date.now()) return res.status(409).json({ error: 'MOVEMENT_STILL_IN_PROGRESS', arrival: fleet.arrival });
     const exitAction = fleet.state === 'MoveWarp' ? 'warp_exit' : 'subwarp_exit';
     const feePolicy = makePriorityFeePolicy(req.body?.feeMode, req.body?.priorityFeeLamports, exitAction === 'subwarp_exit' ? 100 : 10);

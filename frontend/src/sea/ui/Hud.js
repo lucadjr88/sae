@@ -784,6 +784,22 @@ export class Hud extends Emitter {
         feeMode: this.settingsUseSlyFee?.checked ? 'sly' : 'wallet',
         priorityFeeLamports: this.settingsPriorityFeeInput?.value ?? '1',
       });
+      // Sly: se il backend segnala che la flotta è già Idle (exit precedente andata a buon fine
+      // ma conferma persa su WebSocket instabile), procediamo direttamente con la scan usando
+      // il sector reale restituito dal backend, invece di fallire con 409 o coordinate undefined.
+      if (result.status === 'ALREADY_IDLE') {
+        this.automationAwaitingMovementExit = false;
+        this.automationResumeAfterExit = false;
+        this.automationNeedsScanAfterMovement = true;
+        this.automationInitialScanPending = true;
+        this.automationInitialScanReady = false;
+        if (result.sector) {
+          this.automationDestination = { x: result.sector[0], y: result.sector[1], sb: null };
+        }
+        this.automationScanResult.textContent = 'Movimento già completato su chain · avvio scansione';
+        await this.beginInitialAutomationScan(this.automationRunId, result);
+        return true;
+      }
       this.automationScanTransaction = result.transaction;
       this.automationPreparedResult = result;
       this.automationScanPrepareId = result.prepareId ?? null;
@@ -1397,7 +1413,7 @@ export class Hud extends Emitter {
         this.automationNeedsScanAfterMovement = true;
         this.automationInitialScanPending = true;
         this.automationInitialScanReady = false;
-        const coords = preparedResult?.coordinates ?? fleet.sector ?? this.automationLastKnownSector;
+        const coords = preparedResult?.coordinates ?? preparedResult?.sector ?? fleet.sector ?? this.automationLastKnownSector;
         if (!coords) {
           console.error('[SDU] initial scan stopped: no coordinates available', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector });
           this.failAutomation();
