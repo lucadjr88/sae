@@ -1041,9 +1041,10 @@ export class Hud extends Emitter {
         this.stopAutomation();
       }
     } catch (error) {
-      this.automationScanPrepareId = null;
-      this.automationScanTransaction = null;
-      this.automationPreparedResult = null;
+      auto.submissionPending = false;
+      auto.scanPrepareId = null;
+      auto.scanTransaction = null;
+      auto.preparedResult = null;
       this.automationScanSubmitButton.hidden = true;
       this.automationScanResult.textContent = error instanceof Error ? error.message : 'Firma o invio scan non riuscito';
       console.error('[SDU] transaction action failed', {
@@ -1076,7 +1077,7 @@ export class Hud extends Emitter {
         }
         const prepared = await this.prepareAutomationScan();
         if (prepared && this.automationRunning && runId === this.automationRunId) {
-          this.automationSubmissionPending = false;
+          auto.submissionPending = false;
           await this.submitPreparedScan(false);
           return;
         }
@@ -1110,7 +1111,7 @@ export class Hud extends Emitter {
       }
       if ((scanAction || movementStart || movementExit) && this.automationRunning && runId === this.automationRunId) this.failAutomation();
     } finally {
-      this.automationSubmissionPending = false;
+      if (auto) auto.submissionPending = false;
       this.automationScanSubmitButton.disabled = false;
     }
   }
