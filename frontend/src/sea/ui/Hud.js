@@ -800,10 +800,11 @@ export class Hud extends Emitter {
         await this.beginInitialAutomationScan(this.automationRunId, result);
         return true;
       }
-      this.automationScanTransaction = result.transaction;
-      this.automationPreparedResult = result;
-      this.automationScanPrepareId = result.prepareId ?? null;
-      this.automationPreparedAction = result.action;
+      const auto = this.getFleetAutomation(fleet.id);
+      auto.scanTransaction = result.transaction;
+      auto.preparedResult = result;
+      auto.scanPrepareId = result.prepareId ?? null;
+      auto.preparedAction = result.action;
       this.automationScanSubmitButton.textContent = this.automationPreparedAction === 'subwarp_start'
         ? 'Firma e avvia Subwarp'
         : this.automationPreparedAction === 'warp_start'
@@ -826,8 +827,9 @@ export class Hud extends Emitter {
         simulation: result.simulation,
       }, null, 2);
       if (result.simulation.err) {
-        this.automationScanTransaction = null;
-        this.automationScanPrepareId = null;
+        const auto2 = this.getFleetAutomation(fleet.id);
+        auto2.scanTransaction = null;
+        auto2.scanPrepareId = null;
         console.error('[SDU] transaction simulation rejected', {
           fleetId: fleet.id,
           coordinates: result.coordinates,
@@ -847,9 +849,10 @@ export class Hud extends Emitter {
       if (!prepared && this.automationInitialScanPending && this.automationRunning) this.failAutomation();
       return prepared;
     } catch (error) {
-      this.automationScanTransaction = null;
-      this.automationPreparedResult = null;
-      this.automationScanPrepareId = null;
+      const auto3 = this.getFleetAutomation(fleet.id);
+      auto3.scanTransaction = null;
+      auto3.preparedResult = null;
+      auto3.scanPrepareId = null;
       this.automationScanSubmitButton.hidden = true;
       const movementExit = action === 'subwarp_exit' || action === 'warp_exit';
       const movementExitCompletedOnChain =
@@ -934,30 +937,31 @@ export class Hud extends Emitter {
   }
 
   async submitPreparedScan(retryExpiredPreparation = true) {
-    if (this.automationSubmissionPending || !(this.wallet || this.localSigner.unlocked) || !this.automationScanTransaction || !this.automationScanPrepareId || !this.automationFleet) return;
-    const submittedAction = this.automationPreparedAction;
-    const preparedResult = this.automationPreparedResult;
+    const auto = this.automationFleet ? this.getFleetAutomation(this.automationFleet.id) : null;
+    if (!auto || auto.submissionPending || !(this.wallet || this.localSigner.unlocked) || !auto.scanTransaction || !auto.scanPrepareId || !this.automationFleet) return;
+    const submittedAction = auto.preparedAction;
+    const preparedResult = auto.preparedResult;
     const scanAction = submittedAction === 'scan';
     const movementStart = submittedAction === 'subwarp_start' || submittedAction === 'warp_start';
     const movementExit = submittedAction === 'subwarp_exit' || submittedAction === 'warp_exit';
     const runId = this.automationRunId;
-    this.automationSubmissionPending = true;
+    auto.submissionPending = true;
     this.automationScanSubmitButton.disabled = true;
     try {
       const submitPromise = this.transactionClient.signAndSubmit({
-        prepareId: this.automationScanPrepareId,
+        prepareId: auto.scanPrepareId,
         profileId: this.snapshot.profileId,
-        transaction: this.automationScanTransaction,
+        transaction: auto.scanTransaction,
         action: submittedAction,
       });
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('TRANSACTION_SUBMIT_TIMEOUT')), 30_000)
       );
       const result = await Promise.race([submitPromise, timeoutPromise]);
-      this.automationSubmissionPending = false;
-      this.automationScanPrepareId = null;
-      this.automationScanTransaction = null;
-      this.automationPreparedResult = null;
+      auto.submissionPending = false;
+      auto.scanPrepareId = null;
+      auto.scanTransaction = null;
+      auto.preparedResult = null;
       this.automationScanSubmitButton.hidden = true;
       console.info('[SDU] on-chain action confirmed', { fleetId: this.automationFleet.id, action: result.action, signature: result.signature });
       console.info('[SDU] transaction fee', { fleetId: this.automationFleet.id, signature: result.signature, ...result.fee });
