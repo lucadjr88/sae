@@ -1633,8 +1633,10 @@ export class Hud extends Emitter {
     }
     if (!this.automationRunning || runId !== this.automationRunId) return;
     if (operation.action === 'subwarp_start' || operation.action === 'warp_start') {
+      this.automationPreparedAction = operation.action;
       this.automationAwaitingMovementStart = true;
       this.automationNeedsScanAfterMovement = true;
+      console.debug('[SDU] runAutomationAction: awaiting movement start', { fleetId: fleet.id, action: operation.action, expectedState: operation.action === 'warp_start' ? 'MoveWarp' : 'MoveSubwarp' });
     }
     if (operation.action === 'subwarp_exit' || operation.action === 'warp_exit') this.automationAwaitingMovementExit = true;
     await this.submitPreparedScan();
