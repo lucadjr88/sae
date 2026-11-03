@@ -19,8 +19,7 @@ function fmtEta(ms) {
 function describe(fleet, now, nameAt, scanSummary) {
   if (fleet.state === 'MoveWarp' || fleet.state === 'MoveSubwarp') {
     const kind = fleet.state === 'MoveWarp' ? 'warp' : 'subwarp';
-    const movementStatus = `${kind} → ${nameAt(fleet.to)} · arrivo ${fmtEta(fleet.arrival - now)}`;
-    return scanSummary ? `${movementStatus} · ${scanSummary}` : movementStatus;
+    return `${kind} → ${nameAt(fleet.to)} · arrivo ${fmtEta(fleet.arrival - now)}`;
   }
   if (fleet.state === 'Idle' && scanSummary) return scanSummary;
   if (fleet.sector) return `${fleet.state} · ${nameAt(fleet.sector)}${fleet.state === 'Idle' && fleet.scanCooldownEnd > now ? ' · scanning SDU' : ''}`;
@@ -708,6 +707,10 @@ export class Hud extends Emitter {
         resources: auto.resources,
         requestType,
         resetCounts,
+        lastScanOutcome: auto.pendingScanOutcome ? {
+          ...auto.pendingScanOutcome,
+          strike: `${strikeBeforeRequest}/${Number.isFinite(Number.parseInt(String(strikeThresholdRaw ?? '').trim(), 10)) ? Number.parseInt(String(strikeThresholdRaw).trim(), 10) : 5}`,
+        } : null,
       });
       console.info(`[SDU] scan-filter payload\n${JSON.stringify(payload, null, 2)}`);
       const simulate = this.settingsSimulateScanFilter?.checked ?? false;
@@ -727,6 +730,7 @@ export class Hud extends Emitter {
           payload,
         });
       if (auto.runId !== runId) return false;
+      if (payload.esito_ultimo_scan) auto.pendingScanOutcome = null;
       const currentStrike = policy.completeSelection({
         requestType,
         minimumPct: minimumPctRaw,
@@ -1045,6 +1049,10 @@ export class Hud extends Emitter {
         auto.lastScanSummary = this.formatScanResult(result.scanResult);
         const fleetScanSummary = this.formatFleetScanStatus(result.scanResult);
         this.fleetScanSummaries.set(fleetId, fleetScanSummary);
+        auto.pendingScanOutcome = Number.isFinite(result.scanResult?.probabilityPct)
+          ? { scanPercent: result.scanResult.probabilityPct, sdu: result.scanResult.sduFound ?? 0 }
+          : null;
+        this.fleetStatusOverrides.delete(fleetId);
         if (this.isAutomationFleetSelected(fleetId)) this.automationResult.textContent = auto.lastScanSummary;
         console.info('[SDU] scan result', { fleetId, ...result.scanResult });
         this.render();
@@ -1080,7 +1088,7 @@ export class Hud extends Emitter {
         // Aggiorna il fuel locale (modello Sly: scanLastFuelAmount) così durante
         // il movimento non serve richiamare /api/sea/fleet-resources (zero RPC).
         if (preparedResult?.fuelCurrent != null) {
-          auto.fuelCurrent = Number(preparedResult.fuelCurrent);
+          auto.fuelCurrent = Number(preparedResult.fuelAfterStart ?? preparedResult.fuelCurrent);
           auto.fuelCapacity = Number(
             fleet?.chainData?.stats?.cargo_stats?.fuel_capacity ??
             auto.resources?.fuelCapacity ??
@@ -1093,7 +1101,9 @@ export class Hud extends Emitter {
         const targetY = target?.[1] ?? target?.y ?? '?';
         const mode = submittedAction === 'warp_start' ? 'warp' : 'subwarp';
         const eta = Number(preparedResult?.arrivalSeconds);
+        this.fleetScanSummaries.delete(fleetId);
         this.fleetStatusOverrides.set(fleetId, {
+          arrivalMs: Number.isFinite(eta) ? Date.now() + eta * 1000 : null,
           text: `${mode} → (${targetX}, ${targetY}) · arrivo ${Number.isFinite(eta) ? fmtEta(eta * 1000) : 'in corso'}`,
           expectedState,
           target: [Number(targetX), Number(targetY)],
@@ -2097,6 +2107,8 @@ export class Hud extends Emitter {
       : !updatedAt ? 'In attesa dei dati…'
       : `Aggiornato ${fmtEta(age)} fa${stale ? ' (dati vecchi)' : ''}`;
     for (const { detail, fleet } of this.rows.values()) {
+      const override = this.fleetStatusOverrides.get(fleet.id);
+      if (override?.arrivalMs && Date.now() > override.arrivalMs) this.fleetStatusOverrides.delete(fleet.id);
       detail.textContent = this.fleetStatusOverrides.get(fleet.id)?.text
         ?? describe(fleet, now, s => this.nameAt(s), this.fleetScanSummaries.get(fleet.id));
     }

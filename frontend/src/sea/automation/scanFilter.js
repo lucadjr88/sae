@@ -31,7 +31,7 @@ function formatNumericForPayload(value) {
   return numeric.toFixed(2).replace(/\.?0+$/, '');
 }
 
-export function buildScanFilterPayload({ form, config, fleet, currentCoords, resources, requestType = 'cell', resetCounts = false }) {
+export function buildScanFilterPayload({ form, config, fleet, currentCoords, resources, requestType = 'cell', resetCounts = false, lastScanOutcome = null }) {
   if (!fleet?.name || !fleet?.id) throw new Error('Nome e ID flotta sono obbligatori');
   if (!resources || !Number.isFinite(Number(resources.fuelCurrentPct))) throw new Error('Fuel on-chain non disponibile');
   if (!Number.isFinite(Number(resources.foodCurrent))) throw new Error('Food on-chain non disponibile');
@@ -47,7 +47,7 @@ export function buildScanFilterPayload({ form, config, fleet, currentCoords, res
     sbCoords = bases.join(';');
   }
 
-  return {
+  const payload = {
     nomeFlotta: fleet.name.trim(),
     idFlotta: fleet.id.trim(),
     count: valueOf(form, 'count', config),
@@ -74,6 +74,17 @@ export function buildScanFilterPayload({ form, config, fleet, currentCoords, res
     reset_counts: resetCounts,
     requestType,
   };
+  // Guida v14: esito_ultimo_scan omesso al primo ciclo e inviato una sola volta
+  if (lastScanOutcome && Number.isFinite(Number(lastScanOutcome.scanPercent))) {
+    payload.esito_ultimo_scan = {
+      scanPercent: Number(lastScanOutcome.scanPercent),
+      sdu: Number.isFinite(Number(lastScanOutcome.sdu)) ? Number(lastScanOutcome.sdu) : 0,
+      coords: current,
+      fuel: Number(resources.fuelCurrentPct.toFixed(2)),
+      strike: lastScanOutcome.strike,
+    };
+  }
+  return payload;
 }
 
 export function simulateScanFilterResponse(payload, pauseStrike = 0) {

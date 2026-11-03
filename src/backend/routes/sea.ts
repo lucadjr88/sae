@@ -1201,7 +1201,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
       const fuelInfo = await connection.getAccountInfo(fuelToken, 'confirmed');
       if (!fuelInfo || !fuelInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('FLEET_FUEL_ACCOUNT_NOT_FOUND');
       const fuelCurrent = decodeSplTokenBalance(fuelInfo.data);
-      if (!(fuelCurrent > fuelRequiredRoundTrip)) {
+      if (fuelCurrent < fuelRequiredRoundTrip) {
         throw new Error(`SUBWARP_FUEL_INSUFFICIENT:${fuelCurrent.toFixed(2)}:${fuelRequiredRoundTrip.toFixed(2)}`);
       }
 
@@ -1241,6 +1241,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
         distanceOutbound,
         distanceReturn,
         fuelCurrent,
+        fuelAfterStart: Math.max(0, fuelCurrent - distanceOutbound * (fuelRate / 100)),
         fuelRequiredRoundTrip,
         arrivalSeconds: distanceOutbound / (subwarpSpeed / 1_000_000),
         feePolicy: {
@@ -1466,6 +1467,7 @@ router.post('/sea/warp/prepare', async (req, res) => {
     const distance = Math.hypot(waypoint[0] - current[0], waypoint[1] - current[1]);
     return res.json({
       fleetId, coordinates: waypoint, finalCoordinates: target, fuelCurrent: prepared.fuelCurrent, fuelRequiredRoundTrip,
+      fuelAfterStart: Math.max(0, prepared.fuelCurrent - Math.ceil(distance * warpFuelRate / 100)),
       arrivalSeconds: distance / (warpSpeed / 1_000_000), feePolicy: prepared.feePolicy, instructions: ['warpToCoordinate'],
       transaction: prepared.transactionBase64, lastValidBlockHeight: prepared.lastValidBlockHeight,
       simulation: prepared.simulation, prepareId, action: 'warp_start',
