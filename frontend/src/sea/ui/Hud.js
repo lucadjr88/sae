@@ -1673,14 +1673,6 @@ export class Hud extends Emitter {
         console.debug('[SDU] runAutomationAction: forced scan after movement exit (needsScanAfterMovement)', { fleetId: fleet.id, lastAction });
       }
     }
-    // Se stiamo riprendendo dopo un exit (auto.resumeAfterExit) ma lo snapshot
-    // è ancora obsoleto (MoveSubwarp/MoveWarp), forziamo l'uscita per non restare
-    // bloccati in attesa di un aggiornamento chain che potrebbe non arrivare.
-    if (auto.resumeAfterExit && (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp')) {
-      const exitAction = fleet.state === 'MoveWarp' ? 'warp_exit' : 'subwarp_exit';
-      operation = { status: 'ready', action: exitAction };
-      console.debug('[SDU] runAutomationAction: forced exit after resume (ETA expired, snapshot stale)', { fleetId: fleet.id, state: fleet.state, action: exitAction });
-    }
     if (operation.status === 'waiting') {
       this.waitForMovementArrival(fleet, runId);
       return;
