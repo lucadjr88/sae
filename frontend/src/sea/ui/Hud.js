@@ -1,7 +1,7 @@
 import { Emitter } from '../util/emitter.js';
 import { STALE_AFTER_MS } from '../config.js';
 import { shipLook } from '../map/shipSprites.js';
-import { buildScanFilterPayload, requestScanFilter, simulateScanFilterResponse } from '../automation/scanFilter.js';
+import { buildScanFilterPayload, fuelReachableRadius, requestScanFilter, resolveStarbaseList, simulateScanFilterResponse } from '../automation/scanFilter.js';
 import { resolveScanOperation } from '../automation/scanOperation.js';
 import { ScanPolicy } from '../automation/scanPolicy.js';
 import { SeaTransactionClient } from '../automation/seaTransactionClient.js';
@@ -1673,7 +1673,7 @@ export class Hud extends Emitter {
       fleet,
       movementMode: auto.config?.movementMode ?? this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp',
       currentCoords: fleet.sector,
-      sbCoords: auto.config?.sbCoords ?? this.automationForm.querySelector('[data-scan-param="sbCoords"]')?.value,
+      sbCoords: resolveStarbaseList(this.automationForm, auto.config),
       rangeSB: auto.config?.rangeSB ?? this.automationForm.querySelector('[data-scan-param="rangeSB"]')?.value,
     });
     if (!auto.resupply && radius < 1) {
@@ -1778,8 +1778,7 @@ export class Hud extends Emitter {
   async startResupply(runId, fleetId) {
     const auto = this.getFleetAutomation(fleetId);
     const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
-    const sbCoords = auto.config?.sbCoords
-      ?? this.automationForm.querySelector('[data-scan-param="sbCoords"]')?.value ?? '';
+    const sbCoords = resolveStarbaseList(this.automationForm, auto.config);
     const bases = String(sbCoords).split(';').map(item => item.split(',').map(Number)).filter(pair => pair.length === 2 && pair.every(Number.isFinite));
     if (!fleet?.sector || !bases.length) return false;
     const [x, y] = bases.sort((a, b) => Math.hypot(a[0] - fleet.sector[0], a[1] - fleet.sector[1]) - Math.hypot(b[0] - fleet.sector[0], b[1] - fleet.sector[1]))[0];

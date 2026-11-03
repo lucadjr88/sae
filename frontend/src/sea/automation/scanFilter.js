@@ -31,6 +31,14 @@ function formatNumericForPayload(value) {
   return numeric.toFixed(2).replace(/\.?0+$/, '');
 }
 
+// Elenco SB effettivo (come nel payload): con doubleSB usa primaSB;secondaSB, altrimenti sbCoords.
+export function resolveStarbaseList(form, config) {
+  const pair = name => { try { return normalizeCoordPair(valueOf(form, name, config)); } catch { return ''; } };
+  return valueOf(form, 'doubleSB', config)
+    ? [pair('primaSB'), pair('secondaSB')].filter(Boolean).join(';')
+    : pair('sbCoords');
+}
+
 // Raggio massimo di destinazione raggiungibile con il fuel attuale (andata + ritorno alla SB più vicina).
 // Stessa formula del guard backend: (andata + ritorno) * rate/100 <= fuel.
 export function fuelReachableRadius({ fuelCurrent, fleet, movementMode, currentCoords, sbCoords, rangeSB }) {
@@ -40,8 +48,9 @@ export function fuelReachableRadius({ fuelCurrent, fleet, movementMode, currentC
   if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(fuel)) return Infinity;
   const budget = fuel / (rate / 100);
   const current = normalizeCoordPair(currentCoords);
-  const nearestSB = String(sbCoords).split(';').filter(Boolean).map(normalizeCoordPair)
-    .reduce((best, base) => Math.min(best, distance(current, base)), Infinity);
+  const bases = String(sbCoords ?? '').split(';').filter(Boolean).map(normalizeCoordPair);
+  if (!bases.length) return Infinity;
+  const nearestSB = bases.reduce((best, base) => Math.min(best, distance(current, base)), Infinity);
   // Con destinazione entro R dalla flotta: ritorno <= distanza flotta-SB + R; oppure entro rangeSB dalla SB.
   const viaFleet = (budget - nearestSB) / 2;
   const sbRange = Number(rangeSB);
