@@ -1465,8 +1465,12 @@ export class Hud extends Emitter {
         await this.runAutomationAction(runId);
         return;
       } else {
+        // Movimento già completato su chain (ETA scaduto) ma snapshot obsoleto (MoveSubwarp/MoveWarp).
+        // Non attendiamo ulteriormente: forziamo l'uscita per proseguire con la scan iniziale.
+        // Coerente con il modello Sly: stato reale prima di operare, nessun attesa di aggiornamenti chain obsoleti.
         this.automationResumeAfterExit = true;
-        this.waitForMovementArrival(fleet, runId);
+        this.automationStatus.textContent = 'Movimento arrivato · preparo uscita';
+        await this.runAutomationAction(runId);
         return;
       }
     }
@@ -1597,6 +1601,14 @@ export class Hud extends Emitter {
         operation = { status: 'ready', action: 'scan' };
         console.debug('[SDU] runAutomationAction: forced scan after movement exit (needsScanAfterMovement)', { fleetId: fleet.id, lastAction });
       }
+    }
+    // Se stiamo riprendendo dopo un exit (automationResumeAfterExit) ma lo snapshot
+    // è ancora obsoleto (MoveSubwarp/MoveWarp), forziamo l'uscita per non restare
+    // bloccati in attesa di un aggiornamento chain che potrebbe non arrivare.
+    if (this.automationResumeAfterExit && (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp')) {
+      const exitAction = fleet.state === 'MoveWarp' ? 'warp_exit' : 'subwarp_exit';
+      operation = { status: 'ready', action: exitAction };
+      console.debug('[SDU] runAutomationAction: forced exit after resume (ETA expired, snapshot stale)', { fleetId: fleet.id, state: fleet.state, action: exitAction });
     }
     if (operation.status === 'waiting') {
       this.waitForMovementArrival(fleet, runId);
