@@ -1164,7 +1164,11 @@ export class Hud extends Emitter {
         logs: error?.logs ?? error?.data?.logs ?? error?.cause?.logs,
         cause: error?.cause?.message ?? error?.cause,
       });
-      const expiredBeforeSend = error instanceof Error && error.message === 'SCAN_TRANSACTION_BLOCKHASH_EXPIRED';
+      const expiredBeforeSend = error instanceof Error && (
+        error.message === 'SCAN_TRANSACTION_BLOCKHASH_EXPIRED'
+        // Exit non confermato in tempo: se è atterrato, la nuova prepare risponde FLEET_NOT_IN_MOVEMENT e si prosegue con la scan
+        || (movementExit && /^SCAN_CONFIRMATION_(PENDING|UNKNOWN)/.test(error.message))
+      );
       if (
         expiredBeforeSend &&
         retryExpiredPreparation &&
