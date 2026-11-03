@@ -946,7 +946,15 @@ export class Hud extends Emitter {
       if (this.isAutomationFleetSelected(fleetId)) {
         this.automationScanResult.textContent = error instanceof Error ? error.message : 'Preparazione azione non riuscita';
       }
-      console.error('[SDU] action preparation failed', { fleetId: fleet.id, coordinates: [destination.x, destination.y], action, error });
+      console.error('[SDU] action preparation failed', {
+        fleetId: fleet.id,
+        coordinates: [destination.x, destination.y],
+        action,
+        error: {
+          name: error instanceof Error ? error.name : 'Error',
+          message: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+        },
+      });
       if (auto.initialScanPending && auto.running) this.failAutomation(fleetId);
       return false;
     } finally {

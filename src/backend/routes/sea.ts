@@ -268,6 +268,9 @@ function rpcErrorType(error: unknown): '429' | '503' | 'unsupported' | 'error' {
     (/Expected the value to satisfy a union of|failed to get accounts owned by program/i.test(message)
       && /Connection\.getProgramAccounts/.test(stack))
   ) return 'unsupported';
+  if (/failed to get info about account .{0,200}StructError: Expected the value to satisfy a union of/i.test(message)) {
+    return '503';
+  }
   if (status === 429 || /429|Too Many Requests/i.test(message)) return '429';
   if (status === 402 || /\b402\b|Payment Required|Out of CU/i.test(message)) return '503';
   if (status === 401 || status === 403 || /\b(?:401|403)\b|Unauthorized|Forbidden/i.test(message)) return '503';
