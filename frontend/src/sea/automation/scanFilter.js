@@ -13,7 +13,11 @@ function distance(left, right) {
   return Math.hypot(rightX - leftX, rightY - leftY);
 }
 
-function valueOf(form, name) {
+function valueOf(form, name, config) {
+  if (config && Object.hasOwn(config, name)) {
+    const value = config[name];
+    return typeof value === 'boolean' ? value : String(value).trim();
+  }
   const control = form.querySelector(`[data-scan-param="${name}"]`);
   return control instanceof HTMLInputElement && control.type === 'checkbox'
     ? control.checked
@@ -27,16 +31,16 @@ function formatNumericForPayload(value) {
   return numeric.toFixed(2).replace(/\.?0+$/, '');
 }
 
-export function buildScanFilterPayload({ form, fleet, currentCoords, resources, requestType = 'cell', resetCounts = false }) {
+export function buildScanFilterPayload({ form, config, fleet, currentCoords, resources, requestType = 'cell', resetCounts = false }) {
   if (!fleet?.name || !fleet?.id) throw new Error('Nome e ID flotta sono obbligatori');
   if (!resources || !Number.isFinite(Number(resources.fuelCurrentPct))) throw new Error('Fuel on-chain non disponibile');
   if (!Number.isFinite(Number(resources.foodCurrent))) throw new Error('Food on-chain non disponibile');
 
   const current = normalizeCoordPair(currentCoords);
-  const doubleSB = valueOf(form, 'doubleSB');
-  const firstSB = doubleSB ? normalizeCoordPair(valueOf(form, 'primaSB')) : '';
-  const secondSB = doubleSB ? normalizeCoordPair(valueOf(form, 'secondaSB')) : '';
-  let sbCoords = normalizeCoordPair(valueOf(form, 'sbCoords'));
+  const doubleSB = valueOf(form, 'doubleSB', config);
+  const firstSB = doubleSB ? normalizeCoordPair(valueOf(form, 'primaSB', config)) : '';
+  const secondSB = doubleSB ? normalizeCoordPair(valueOf(form, 'secondaSB', config)) : '';
+  let sbCoords = normalizeCoordPair(valueOf(form, 'sbCoords', config));
 
   if (doubleSB) {
     const bases = [firstSB, secondSB].sort((left, right) => distance(current, left) - distance(current, right));
@@ -46,27 +50,27 @@ export function buildScanFilterPayload({ form, fleet, currentCoords, resources, 
   return {
     nomeFlotta: fleet.name.trim(),
     idFlotta: fleet.id.trim(),
-    count: valueOf(form, 'count'),
-    sdu: valueOf(form, 'sdu'),
-    growing: valueOf(form, 'growing'),
-    scanCooldown: valueOf(form, 'scanCooldown'),
+    count: valueOf(form, 'count', config),
+    sdu: valueOf(form, 'sdu', config),
+    growing: valueOf(form, 'growing', config),
+    scanCooldown: valueOf(form, 'scanCooldown', config),
     currentCoords: current,
     sbCoords,
     primaSB: firstSB,
     secondaSB: secondSB,
-    rangeSB: valueOf(form, 'rangeSB'),
-    smartRange: valueOf(form, 'smartRange'),
+    rangeSB: valueOf(form, 'rangeSB', config),
+    smartRange: valueOf(form, 'smartRange', config),
     fuel: formatNumericForPayload(resources.fuelCurrentPct),
-    fuel_min: valueOf(form, 'fuel_min'),
-    fuel_range_min: valueOf(form, 'fuel_range_min'),
-    fuel_max: valueOf(form, 'fuel_max'),
+    fuel_min: valueOf(form, 'fuel_min', config),
+    fuel_range_min: valueOf(form, 'fuel_range_min', config),
+    fuel_max: valueOf(form, 'fuel_max', config),
     food: formatNumericForPayload(resources.foodCurrent),
-    food_min: valueOf(form, 'food_min'),
-    maxareaFromFleet: valueOf(form, 'maxareaFromFleet'),
-    coeffcount1: valueOf(form, 'coeffcount1'),
-    coeffsdu1: valueOf(form, 'coeffsdu1'),
-    coeffgrowing1: valueOf(form, 'coeffgrowing1'),
-    maxdistanceFromFleet1: valueOf(form, 'maxdistanceFromFleet1'),
+    food_min: valueOf(form, 'food_min', config),
+    maxareaFromFleet: valueOf(form, 'maxareaFromFleet', config),
+    coeffcount1: valueOf(form, 'coeffcount1', config),
+    coeffsdu1: valueOf(form, 'coeffsdu1', config),
+    coeffgrowing1: valueOf(form, 'coeffgrowing1', config),
+    maxdistanceFromFleet1: valueOf(form, 'maxdistanceFromFleet1', config),
     reset_counts: resetCounts,
     requestType,
   };

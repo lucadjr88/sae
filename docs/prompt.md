@@ -5,3 +5,5 @@ cd ~/sae
 git add -A  
 git commit -m "Update changes"
 git push origin main // git push -u origin sea     
+
+git add -A && git commit -m "prepare multi flotta" && git push origin sea-studio --force  

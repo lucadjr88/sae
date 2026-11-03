@@ -225,12 +225,11 @@ export class Hud extends Emitter {
     this.automationForm = document.createElement('div');
     this.automationForm.className = 'automation-form';
     this.automationForm.hidden = true;
+    this.automationForm.addEventListener('input', () => this.captureActiveAutomationConfig());
+    this.automationForm.addEventListener('change', () => this.captureActiveAutomationConfig());
     this.automationStatus = document.createElement('div');
     this.automationStatus.className = 'automation-status';
     this.automationStatus.setAttribute('role', 'status');
-    this.automationRequestId = 0;
-    this.automationResourcesLoadedFor = null;
-    this.automationResourcesLoadedAt = 0;
     this.automationLeft = document.createElement('div');
     this.automationLeft.className = 'automation-column';
     this.automationRight = document.createElement('div');
@@ -268,25 +267,10 @@ export class Hud extends Emitter {
     this.automationToggleButton.textContent = 'Avvia automazione';
     this.automationToggleButton.hidden = true;
     this.automationToggleButton.disabled = true;
-    this.automationRunning = false;
-    this.automationFaulted = false;
-    this.automationRunTimer = null;
-    this.automationWaitingForEta = false;
-    this.automationAwaitingMovementStart = false;
-    this.automationAwaitingMovementExit = false;
-    this.automationSubmissionPending = false;
-    this.automationActionPending = false;
-    this.automationNeedsScanAfterMovement = false;
-    this.automationPostScanReady = false;
-    this.automationLastKnownSector = null;
-    this.automationRunId = 0;
-    this.automationFuelCurrent = null;   // fuel corrente noto (zero RPC durante movimento)
-    this.automationFuelCapacity = null;  // capacità fuel nota (zero RPC durante movimento)
     this.automationFleetStates = new Map();
     this.fleetAutomations = new Map();
     this.fleetScanSummaries = new Map();
     this.fleetStatusOverrides = new Map();
-    this.scanPolicy = new ScanPolicy();
     this.automationSelect.addEventListener('change', () => {
       if (this.automationSelect.value !== 'sdu-program') this.stopAutomation();
       this.automationForm.hidden = this.automationSelect.value !== 'sdu-program';
@@ -307,8 +291,9 @@ export class Hud extends Emitter {
     this.automationScanButton.addEventListener('click', () => this.prepareAutomationScan());
     this.automationScanSubmitButton.addEventListener('click', () => this.submitPreparedScan());
     this.automationToggleButton.addEventListener('click', () => {
-      if (this.automationRunning) this.stopAutomation();
-      else if (this.automationFaulted) this.acknowledgeAutomationFault();
+      const auto = this.getCurrentAutoState();
+      if (auto?.running) this.stopAutomation(auto.fleetId);
+      else if (auto?.faulted) this.acknowledgeAutomationFault(auto.fleetId);
       else this.startAutomation();
     });
     this.automationClose = document.createElement('button');
@@ -394,8 +379,7 @@ export class Hud extends Emitter {
   }
 
   destroy() {
-    this.stopAutomation();
-    this.automationRequestId += 1;
+    for (const fleetId of this.fleetAutomations.keys()) this.stopAutomation(fleetId);
     clearInterval(this.renderTimer);
     this.toolbar.remove();
     this.infoOverlay.remove();
@@ -429,6 +413,7 @@ export class Hud extends Emitter {
         running: false,
         faulted: false,
         runId: 0,
+        requestId: 0,
         runTimer: null,
         destination: null,
         lastScanSummary: '',
@@ -438,6 +423,7 @@ export class Hud extends Emitter {
         resources: null,
         resourcesLoadedFor: null,
         resourcesLoadedAt: 0,
+        config: null,
         initialScanPending: false,
         initialScanReady: false,
         resumeAfterExit: false,
@@ -457,174 +443,187 @@ export class Hud extends Emitter {
     return this.fleetAutomations.get(fleetId);
   }
 
+  getAutoState(fleetId) {
+    return this.getFleetAutomation(fleetId);
+  }
+
+  getCurrentAutoState() {
+    return this.automationFleet ? this.getFleetAutomation(this.automationFleet.id) : null;
+  }
+
+  isAutomationFleetSelected(fleetId) {
+    return Boolean(fleetId && this.automationFleet?.id === fleetId);
+  }
+
+  // Mantiene in memoria le modifiche della flotta corrente quando si cambia pannello.
   saveActiveFleetAutomation() {
-    if (!this.automationFleet) return;
-    const auto = this.getFleetAutomation(this.automationFleet.id);
-    auto.running = this.automationRunning;
-    auto.faulted = this.automationFaulted;
-    auto.runId = this.automationRunId;
-    auto.runTimer = this.automationRunTimer;
-    auto.destination = this.automationDestination;
-    auto.lastScanSummary = this.automationLastScanSummary;
-    auto.scanTransaction = this.automationScanTransaction;
-    auto.preparedResult = this.automationPreparedResult;
-    auto.preparedAction = this.automationPreparedAction;
-    auto.resources = this.automationResources;
-    auto.resourcesLoadedFor = this.automationResourcesLoadedFor;
-    auto.resourcesLoadedAt = this.automationResourcesLoadedAt;
-    auto.initialScanPending = this.automationInitialScanPending;
-    auto.initialScanReady = this.automationInitialScanReady;
-    auto.resumeAfterExit = this.automationResumeAfterExit;
-    auto.waitingForEta = this.automationWaitingForEta;
-    auto.awaitingMovementStart = this.automationAwaitingMovementStart;
-    auto.awaitingMovementExit = this.automationAwaitingMovementExit;
-    auto.needsScanAfterMovement = this.automationNeedsScanAfterMovement;
-    auto.submissionPending = this.automationSubmissionPending;
-    auto.actionPending = this.automationActionPending;
-    auto.postScanReady = this.automationPostScanReady;
-    auto.lastKnownSector = this.automationLastKnownSector;
-    auto.fuelCurrent = this.automationFuelCurrent;
-    auto.fuelCapacity = this.automationFuelCapacity;
-    auto.scanPolicy = this.scanPolicy;
+    const auto = this.getCurrentAutoState();
+    if (auto && !this.automationOverlay.hidden) auto.config = this.readAutomationConfig();
+  }
+
+  captureActiveAutomationConfig() {
+    if (!this.automationOverlay.hidden) this.saveActiveFleetAutomation();
+  }
+
+  readAutomationConfig(includeReadonlyScanParams = true) {
+    const config = {};
+    for (const control of this.automationForm.querySelectorAll('[data-config-key]')) {
+      if (control.readOnly && (!includeReadonlyScanParams || !control.dataset.scanParam)) continue;
+      if (control instanceof HTMLInputElement && control.type === 'radio' && !control.checked) continue;
+      config[control.dataset.configKey] = control instanceof HTMLInputElement && control.type === 'checkbox'
+        ? control.checked
+        : control.value;
+    }
+    return config;
+  }
+
+  applyAutomationConfig(config) {
+    for (const control of this.automationForm.querySelectorAll('[data-config-key]')) {
+      if (control.readOnly || !(control.dataset.configKey in config)) continue;
+      if (control instanceof HTMLInputElement && control.type === 'radio') {
+        control.checked = control.value === String(config[control.dataset.configKey]);
+      } else if (control instanceof HTMLInputElement && control.type === 'checkbox') {
+        control.checked = Boolean(config[control.dataset.configKey]);
+      } else {
+        control.value = String(config[control.dataset.configKey]);
+      }
+    }
+  }
+
+  loadFleetAutomationForm(fleet, auto) {
+    this.populateAutomationForm(fleet);
+    this.loadAutomationConfig(fleet);
+    if (auto.config) this.applyAutomationConfig(auto.config);
+    auto.config = this.readAutomationConfig();
+    this.updateRecommendedRange();
   }
 
   openAutomation(fleet) {
-    if (this.automationFleet && this.automationFleet.id !== fleet.id) {
-      this.saveActiveFleetAutomation();
-    }
+    if (this.automationFleet?.id !== fleet.id) this.saveActiveFleetAutomation();
     const auto = this.getFleetAutomation(fleet.id);
     const continuing = auto.running || auto.faulted;
     this.automationFleet = fleet;
 
     if (!continuing) {
-      this.scanPolicy = auto.scanPolicy;
-      this.scanPolicy.reset();
-      this.automationRunning = false;
-      this.automationRunTimer = null;
+      auto.scanPolicy.reset();
+      auto.runId += 1;
+      auto.requestId += 1;
+      auto.running = false;
+      clearTimeout(auto.runTimer);
+      auto.runTimer = null;
       this.automationSelect.value = '';
       this.automationForm.hidden = true;
       this.automationRequestButton.hidden = true;
       this.automationSaveButton.hidden = true;
       this.automationToggleButton.hidden = true;
       this.automationResult.textContent = '';
-      this.automationDestination = null;
-      this.automationLastScanSummary = '';
-      this.automationScanTransaction = null;
-      this.automationPreparedResult = null;
-      this.automationPreparedAction = null;
+      auto.destination = null;
+      auto.lastScanSummary = '';
+      auto.scanTransaction = null;
+      auto.preparedResult = null;
+      auto.preparedAction = null;
       this.automationScanButton.hidden = true;
       this.automationScanResult.hidden = true;
       this.automationScanSubmitButton.hidden = true;
-      this.automationResources = null;
-      this.automationInitialScanPending = false;
-      this.automationInitialScanReady = false;
-      this.automationResumeAfterExit = false;
-      this.automationWaitingForEta = false;
-      this.automationAwaitingMovementStart = false;
-      this.automationAwaitingMovementExit = false;
-      this.automationNeedsScanAfterMovement = false;
-      this.automationSubmissionPending = false;
-      this.automationActionPending = false;
-      this.automationFaulted = this.automationFleetStates.get(fleet.id) === 'faulted';
+      auto.resources = null;
+      auto.initialScanPending = false;
+      auto.initialScanReady = false;
+      auto.resumeAfterExit = false;
+      auto.waitingForEta = false;
+      auto.awaitingMovementStart = false;
+      auto.awaitingMovementExit = false;
+      auto.needsScanAfterMovement = false;
+      auto.submissionPending = false;
+      auto.actionPending = false;
+      auto.faulted = this.automationFleetStates.get(fleet.id) === 'faulted';
       if ((fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp') && fleet.to) {
-        this.automationDestination = { x: fleet.to[0], y: fleet.to[1], sb: null };
+        auto.destination = { x: fleet.to[0], y: fleet.to[1], sb: null };
       }
       this.automationRequestButton.disabled = true;
       this.automationToggleButton.disabled = true;
       this.setAutomationFleetState(fleet.id, 'unavailable');
       this.automationStatus.textContent = 'Lettura risorse on-chain…';
-      this.populateAutomationForm(fleet);
-      this.loadAutomationConfig(fleet);
+      this.loadFleetAutomationForm(fleet, auto);
     } else {
-      this.automationRunning = auto.running;
-      this.automationFaulted = auto.faulted;
-      this.automationRunId = auto.runId;
-      this.automationRunTimer = auto.runTimer;
-      this.automationDestination = auto.destination;
-      this.automationLastScanSummary = auto.lastScanSummary;
-      this.automationScanTransaction = auto.scanTransaction;
-      this.automationPreparedResult = auto.preparedResult;
-      this.automationPreparedAction = auto.preparedAction;
-      this.automationResources = auto.resources;
-      this.automationResourcesLoadedFor = auto.resourcesLoadedFor;
-      this.automationResourcesLoadedAt = auto.resourcesLoadedAt;
-      this.automationInitialScanPending = auto.initialScanPending;
-      this.automationInitialScanReady = auto.initialScanReady;
-      this.automationResumeAfterExit = auto.resumeAfterExit;
-      this.automationWaitingForEta = auto.waitingForEta;
-      this.automationAwaitingMovementStart = auto.awaitingMovementStart;
-      this.automationAwaitingMovementExit = auto.awaitingMovementExit;
-      this.automationNeedsScanAfterMovement = auto.needsScanAfterMovement;
-      this.automationSubmissionPending = auto.submissionPending;
-      this.automationActionPending = auto.actionPending;
-      this.automationPostScanReady = auto.postScanReady;
-      this.automationLastKnownSector = auto.lastKnownSector;
-      this.automationFuelCurrent = auto.fuelCurrent;
-      this.automationFuelCapacity = auto.fuelCapacity;
-      this.scanPolicy = auto.scanPolicy;
-
       this.automationFleet = this.snapshot.fleets.find(item => item.id === fleet.id) ?? fleet;
       this.automationSelect.value = 'sdu-program';
       this.automationForm.hidden = false;
       this.automationRequestButton.hidden = false;
       this.automationSaveButton.hidden = false;
       this.automationToggleButton.hidden = false;
-      if (this.automationDestination) this.updateAutomationActionButton();
+      this.loadFleetAutomationForm(this.automationFleet, auto);
+      if (auto.destination) this.updateAutomationActionButton(fleet.id);
       this.refreshAutomationState();
     }
+    this.automationResult.textContent = auto.lastScanSummary;
+    this.automationScanResult.textContent = auto.preparedResult ? JSON.stringify(auto.preparedResult, null, 2) : '';
+    this.automationScanResult.hidden = !auto.preparedResult;
+    this.automationScanSubmitButton.hidden = !auto.scanPrepareId;
+    if (auto.running) this.automationStatus.textContent = 'Automazione attiva';
+    else if (auto.faulted) this.automationStatus.textContent = 'Automazione bloccata per errore · premi Arresta per sbloccare';
+    else if (auto.resources) {
+      this.automationStatus.textContent = `Fuel ${auto.resources.fuelCurrent.toFixed(2)} / ${auto.resources.fuelCapacity.toFixed(2)} (${auto.resources.fuelCurrentPct.toFixed(1)}%) · Food ${auto.resources.foodCurrent.toFixed(2)}`;
+    }
     this.automationOverlay.hidden = false;
+    if (auto.destination) this.updateAutomationActionButton(fleet.id);
     this.automationClose.focus();
     if (!continuing) {
-      const requestId = ++this.automationRequestId;
+      const requestId = ++auto.requestId;
       this.loadAutomationResources(fleet, requestId);
     }
   }
 
   async loadAutomationResources(fleet, requestId) {
+    const auto = this.getFleetAutomation(fleet.id);
+    if (requestId !== auto.requestId) return false;
     const now = Date.now();
     // Se conosciamo già il fuel in modo locale (aggiornato dopo un movement start,
     // modello Sly: zero RPC durante movimento/scan cooldown), riusiamo il valore
     // senza chiamare /api/sea/fleet-resources.
     if (
-      this.automationFuelCurrent != null &&
-      this.automationFuelCapacity != null &&
-      (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp' || this.automationAwaitingMovementExit)
+      auto.fuelCurrent != null &&
+      auto.fuelCapacity != null &&
+      (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp' || auto.awaitingMovementExit)
     ) {
       const resources = {
-        fuelCurrent: this.automationFuelCurrent,
-        fuelCapacity: this.automationFuelCapacity,
-        fuelCurrentPct: this.automationFuelCapacity > 0 ? (this.automationFuelCurrent / this.automationFuelCapacity) * 100 : 0,
-        foodCurrent: this.automationResources?.foodCurrent ?? 0,
+        fuelCurrent: auto.fuelCurrent,
+        fuelCapacity: auto.fuelCapacity,
+        fuelCurrentPct: auto.fuelCapacity > 0 ? (auto.fuelCurrent / auto.fuelCapacity) * 100 : 0,
+        foodCurrent: auto.resources?.foodCurrent ?? 0,
       };
-      this.automationResources = resources;
-      this.automationResourcesLoadedFor = fleet.id;
-      this.automationResourcesLoadedAt = now;
-      this.observeAutomationFuel(resources);
-      if (requestId !== this.automationRequestId) return;
-      this.automationRequestButton.disabled = this.automationRunning;
-      this.automationStatus.textContent = `Fuel locale ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · movimento in corso`;
-      this.refreshAutomationState();
+      auto.resources = resources;
+      auto.resourcesLoadedFor = fleet.id;
+      auto.resourcesLoadedAt = now;
+      this.observeAutomationFuel(resources, fleet.id);
+      if (requestId !== auto.requestId) return;
+      if (this.isAutomationFleetSelected(fleet.id)) {
+        this.automationRequestButton.disabled = auto.running;
+        this.automationStatus.textContent = `Fuel locale ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · movimento in corso`;
+        this.refreshAutomationState(fleet.id);
+      }
       return true;
     }
     // Evita chiamate duplicate per lo stesso fleetId entro una soglia breve:
     // i dati on-chain (fuel/food) cambiano lentamente, riusare la cache evita RPC inutili.
     if (
-      this.automationResourcesLoadedFor === fleet.id &&
-      this.automationResources &&
-      now - this.automationResourcesLoadedAt < 30_000
+      auto.resourcesLoadedFor === fleet.id &&
+      auto.resources &&
+      now - auto.resourcesLoadedAt < 30_000
     ) {
       console.debug('[SDU] fleet resources cached, skipping fetch', { fleetId: fleet.id });
-      if (requestId !== this.automationRequestId) return;
-      const resources = this.automationResources;
+      if (requestId !== auto.requestId) return;
+      const resources = auto.resources;
       for (const key of ['fuelCurrent', 'fuelCapacity', 'fuelCurrentPct', 'foodCurrent']) {
         if (typeof resources[key] !== 'number' || !Number.isFinite(resources[key])) {
           throw new Error(`INVALID_FLEET_RESOURCES_CACHE:${key}`);
         }
       }
-      this.observeAutomationFuel(resources);
-      this.automationRequestButton.disabled = this.automationRunning;
-      this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
-      this.refreshAutomationState();
+      this.observeAutomationFuel(resources, fleet.id);
+      if (this.isAutomationFleetSelected(fleet.id)) {
+        this.automationRequestButton.disabled = auto.running;
+        this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
+        this.refreshAutomationState(fleet.id);
+      }
       return true;
     }
 
@@ -640,49 +639,59 @@ export class Hud extends Emitter {
           throw new Error(`INVALID_FLEET_RESOURCES:${key}`);
         }
       }
-      if (requestId !== this.automationRequestId) return;
-      this.automationResources = resources;
-      this.automationResourcesLoadedFor = fleet.id;
-      this.automationResourcesLoadedAt = now;
-      this.observeAutomationFuel(resources);
+      if (requestId !== auto.requestId) return;
+      auto.resources = resources;
+      auto.resourcesLoadedFor = fleet.id;
+      auto.resourcesLoadedAt = now;
+      this.observeAutomationFuel(resources, fleet.id);
       console.debug('[SDU] fleet resources loaded', resources);
-      this.automationRequestButton.disabled = this.automationRunning;
-      this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
-      this.refreshAutomationState();
+      if (this.isAutomationFleetSelected(fleet.id)) {
+        this.automationRequestButton.disabled = auto.running;
+        this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
+        this.refreshAutomationState(fleet.id);
+      }
       return true;
     } catch (error) {
-      if (requestId !== this.automationRequestId) return false;
+      if (requestId !== auto.requestId) return false;
       console.error('[SDU] fleet resource read failed', { fleetId: fleet.id, error });
-      this.automationResources = null;
-      this.automationRequestButton.disabled = true;
-      this.automationStatus.textContent = 'Risorse on-chain non disponibili';
-      this.refreshAutomationState();
+      auto.resources = null;
+      if (this.isAutomationFleetSelected(fleet.id)) {
+        this.automationRequestButton.disabled = true;
+        this.automationStatus.textContent = 'Risorse on-chain non disponibili';
+        this.refreshAutomationState(fleet.id);
+      }
       return false;
     }
   }
 
-  async requestAutomationDestination() {
-    const fleetId = this.automationFleet?.id;
+  async requestAutomationDestination(fleetId = this.automationFleet?.id) {
+    if (!fleetId) return false;
     const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    const auto = this.getFleetAutomation(fleetId);
+    const runId = auto.runId;
     try {
       if (!fleet) throw new Error('Flotta assente dallo snapshot aggiornato');
-      this.automationFleet = fleet;
       if (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp') {
-        if (fleet.to) this.automationDestination = { x: fleet.to[0], y: fleet.to[1], sb: null };
-        this.updateAutomationActionButton();
+        if (fleet.to) auto.destination = { x: fleet.to[0], y: fleet.to[1], sb: null };
+        this.updateAutomationActionButton(fleetId);
         const remaining = Math.max(0, fleet.arrival - Date.now());
-        this.automationResult.textContent = remaining > 0
-          ? `${fleet.state} in corso · uscita disponibile tra ${Math.ceil(remaining / 1000)}s`
-          : `${fleet.state} arrivato · prepara l’uscita prima di richiedere una nuova destinazione`;
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationResult.textContent = remaining > 0
+            ? `${fleet.state} in corso · uscita disponibile tra ${Math.ceil(remaining / 1000)}s`
+            : `${fleet.state} arrivato · prepara l’uscita prima di richiedere una nuova destinazione`;
+        }
         return false;
       }
       if (fleet.state !== 'Idle' || !fleet.sector) throw new Error('Flotta non pronta per una richiesta di destinazione');
       const previousCell = fleet.sector;
-      const strikeThresholdRaw = this.automationForm.querySelector('[data-scan-param="pause_strike_iniziale"]')?.value;
-      const minimumPctRaw = this.automationForm.querySelector('[data-scan-param="percentuale_minima"]')?.value;
-      const strikeBeforeRequest = this.scanPolicy.pauseStrike;
-      const requestType = this.scanPolicy.takeRequestType(strikeThresholdRaw);
-      const resetCounts = this.scanPolicy.takeResetCounts();
+      const strikeThresholdRaw = auto.config?.pause_strike_iniziale
+        ?? this.automationForm.querySelector('[data-scan-param="pause_strike_iniziale"]')?.value;
+      const minimumPctRaw = auto.config?.percentuale_minima
+        ?? this.automationForm.querySelector('[data-scan-param="percentuale_minima"]')?.value;
+      const policy = auto.scanPolicy;
+      const strikeBeforeRequest = policy.pauseStrike;
+      const requestType = policy.takeRequestType(strikeThresholdRaw);
+      const resetCounts = policy.takeResetCounts();
       if (requestType === 'area') {
         console.info('[SDU] area request selected', {
           fleetId: fleet.id,
@@ -692,18 +701,21 @@ export class Hud extends Emitter {
       }
       const payload = buildScanFilterPayload({
         form: this.automationForm,
+        config: auto.config,
         fleet,
         currentCoords: previousCell,
-        resources: this.automationResources,
+        resources: auto.resources,
         requestType,
         resetCounts,
       });
       console.info(`[SDU] scan-filter payload\n${JSON.stringify(payload, null, 2)}`);
       const simulate = this.settingsSimulateScanFilter?.checked ?? false;
-      this.automationRequestButton.disabled = true;
-      this.automationResult.textContent = 'Selezione destinazione…';
-      this.automationScanTransaction = null;
-      this.automationScanResult.hidden = true;
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationRequestButton.disabled = true;
+        this.automationResult.textContent = 'Selezione destinazione…';
+      }
+      auto.scanTransaction = null;
+      if (this.isAutomationFleetSelected(fleetId)) this.automationScanResult.hidden = true;
       console.debug('[SDU] destination selection started', { fleetId: fleet.id, simulate });
       const result = simulate
         ? simulateScanFilterResponse(payload, strikeBeforeRequest)
@@ -713,7 +725,8 @@ export class Hud extends Emitter {
           timeoutSeconds: this.settingsRequestTimeout?.value,
           payload,
         });
-      const currentStrike = this.scanPolicy.completeSelection({
+      if (auto.runId !== runId) return false;
+      const currentStrike = policy.completeSelection({
         requestType,
         minimumPct: minimumPctRaw,
       });
@@ -724,39 +737,53 @@ export class Hud extends Emitter {
         requestType,
         strike: `${currentStrike}/${thresholdDisplay}`,
       });
-      this.automationDestination = { x: Number(result.x), y: Number(result.y), sb: result.sb ?? null };
-      this.updateAutomationActionButton();
-      this.automationScanResult.hidden = true;
+      auto.destination = { x: Number(result.x), y: Number(result.y), sb: result.sb ?? null };
+      this.updateAutomationActionButton(fleetId);
+      if (this.isAutomationFleetSelected(fleetId)) this.automationScanResult.hidden = true;
       if (simulate) console.debug('[SDU] simulated scan-filter response', result);
       const destinationSummary = `Destinazione ${result.x},${result.y} [${requestType}]${result.sb ? ` · SB ${result.sb}` : ''}${result['%'] == null ? '' : ` · API ${result['%']}%`} · strike ${currentStrike}/${thresholdDisplay}${result.source === 'simulated' ? ' · simulata' : ''}`;
-      this.automationResult.textContent = [this.automationLastScanSummary, destinationSummary].filter(Boolean).join(' · ');
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationResult.textContent = [auto.lastScanSummary, destinationSummary].filter(Boolean).join(' · ');
+      }
       return true;
     } catch (error) {
+      if (auto.runId !== runId) return false;
       console.error('[SDU] destination selection failed', { fleetId: fleet?.id, error });
-      this.automationDestination = null;
-      this.automationScanButton.hidden = true;
-      this.automationResult.textContent = error instanceof Error ? error.message : 'Errore richiesta destinazione';
+      auto.destination = null;
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationScanButton.hidden = true;
+        this.automationResult.textContent = error instanceof Error ? error.message : 'Errore richiesta destinazione';
+      }
       return false;
     } finally {
-      this.automationRequestButton.disabled = this.automationRunning || !this.automationResources;
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationRequestButton.disabled = auto.running || !auto.resources;
+      }
     }
   }
 
-  async prepareAutomationScan() {
-    const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
-    const destination = this.automationDestination;
+  async prepareAutomationScan(fleetId = this.automationFleet?.id) {
+    if (!fleetId) return false;
+    const auto = this.getFleetAutomation(fleetId);
+    const runId = auto.runId;
+    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    const destination = auto.destination;
     if (!fleet || !destination) {
-      console.debug('[SDU] prepareAutomationScan: missing fleet or destination', { fleetId: this.automationFleet?.id, hasDestination: Boolean(destination) });
+      console.debug('[SDU] prepareAutomationScan: missing fleet or destination', { fleetId, hasDestination: Boolean(destination) });
       return false;
     }
-    this.automationFleet = fleet;
-    const movementMode = this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp';
+    if (!this.isAutomationFleetSelected(fleetId) && !auto.running) return false;
+    const movementMode = auto.config?.movementMode
+      ?? this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value
+      ?? 'subwarp';
+    const starbase = auto.config?.sbCoords
+      ?? this.automationForm.querySelector('[data-scan-param="sbCoords"]')?.value;
     let operation = resolveScanOperation(fleet, destination, movementMode);
-    console.debug('[SDU] prepareAutomationScan entry', { fleetId: fleet.id, fleetState: fleet.state, destination: { x: destination.x, y: destination.y }, automationNeedsScanAfterMovement: this.automationNeedsScanAfterMovement, automationResumeAfterExit: this.automationResumeAfterExit, operation });
+    console.debug('[SDU] prepareAutomationScan entry', { fleetId: fleet.id, fleetState: fleet.state, destination: { x: destination.x, y: destination.y }, automationNeedsScanAfterMovement: auto.needsScanAfterMovement, automationResumeAfterExit: auto.resumeAfterExit, operation });
     // Dopo una movement exit già confermata su chain, lo snapshot può essere obsoleto (MoveSubwarp).
     // Forziamo la scan invece di preparare una exit ridondante.
-    if (this.automationNeedsScanAfterMovement && !this.automationResumeAfterExit) {
-      const lastAction = this.automationPreparedAction;
+    if (auto.needsScanAfterMovement && !auto.resumeAfterExit) {
+      const lastAction = auto.preparedAction;
       if (lastAction === 'subwarp_start' || lastAction === 'warp_start') {
         operation = { status: 'ready', action: lastAction === 'subwarp_start' ? 'subwarp_exit' : 'warp_exit' };
         console.debug('[SDU] prepareAutomationScan: forced exit after movement start', { fleetId: fleet.id, lastAction, action: operation.action });
@@ -767,24 +794,32 @@ export class Hud extends Emitter {
       }
     }
     if (operation.status === 'waiting') {
-      this.automationScanResult.hidden = false;
-      this.automationScanResult.textContent = 'Movimento in corso; attendere l’arrivo chain.';
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationScanResult.hidden = false;
+        this.automationScanResult.textContent = 'Movimento in corso; attendere l’arrivo chain.';
+      }
       return false;
     }
     if (operation.status !== 'ready') {
-      this.automationScanResult.hidden = false;
-      this.automationScanResult.textContent = `Stato flotta ${fleet.state}: preparazione non disponibile.`;
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationScanResult.hidden = false;
+        this.automationScanResult.textContent = `Stato flotta ${fleet.state}: preparazione non disponibile.`;
+      }
       return false;
     }
     const { action } = operation;
-    if (this.automationInitialScanPending && action === 'scan' && !this.automationInitialScanReady) {
-      this.automationScanResult.hidden = false;
-      this.automationScanResult.textContent = 'Scan non ancora disponibile: cooldown on-chain attivo.';
+    if (auto.initialScanPending && action === 'scan' && !auto.initialScanReady) {
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationScanResult.hidden = false;
+        this.automationScanResult.textContent = 'Scan non ancora disponibile: cooldown on-chain attivo.';
+      }
       return false;
     }
-    this.automationScanButton.disabled = true;
-    this.automationScanResult.hidden = false;
-    this.automationScanResult.textContent = 'Connessione wallet e simulazione…';
+    if (this.isAutomationFleetSelected(fleetId)) {
+      this.automationScanButton.disabled = true;
+      this.automationScanResult.hidden = false;
+      this.automationScanResult.textContent = 'Connessione wallet e simulazione…';
+    }
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt += 1) {
       try {
@@ -796,43 +831,44 @@ export class Hud extends Emitter {
           : destination,
         action,
         starbase: action === 'subwarp_start' || action === 'warp_start'
-          ? destination.sb || this.automationForm.querySelector('[data-scan-param="sbCoords"]')?.value
+          ? destination.sb || starbase
           : undefined,
         feeMode: this.settingsUseSlyFee?.checked ? 'sly' : 'wallet',
         priorityFeeLamports: this.settingsPriorityFeeInput?.value ?? '1',
       });
+      if (auto.runId !== runId) return false;
       // Sly: se il backend segnala che la flotta è già Idle (exit precedente andata a buon fine
       // ma conferma persa su WebSocket instabile), procediamo direttamente con la scan usando
       // il sector reale restituito dal backend, invece di fallire con 409 o coordinate undefined.
       if (result.status === 'ALREADY_IDLE') {
-        this.automationAwaitingMovementExit = false;
-        this.automationResumeAfterExit = false;
-        this.automationNeedsScanAfterMovement = true;
-        this.automationInitialScanPending = true;
-        this.automationInitialScanReady = false;
+        auto.awaitingMovementExit = false;
+        auto.resumeAfterExit = false;
+        auto.needsScanAfterMovement = true;
+        auto.initialScanPending = true;
+        auto.initialScanReady = false;
         if (result.sector) {
-          this.automationDestination = { x: result.sector[0], y: result.sector[1], sb: null };
+          auto.destination = { x: result.sector[0], y: result.sector[1], sb: null };
         }
-        this.automationScanResult.textContent = 'Movimento già completato su chain · avvio scansione';
-        await this.beginInitialAutomationScan(this.automationRunId, result);
+        if (this.isAutomationFleetSelected(fleetId)) this.automationScanResult.textContent = 'Movimento già completato su chain · avvio scansione';
+        await this.beginInitialAutomationScan(auto.runId, result, fleetId);
         return true;
       }
-      const auto = this.getFleetAutomation(fleet.id);
       auto.scanTransaction = result.transaction;
       auto.preparedResult = result;
       auto.scanPrepareId = result.prepareId ?? null;
       auto.preparedAction = result.action;
-      this.automationScanSubmitButton.textContent = this.automationPreparedAction === 'subwarp_start'
-        ? 'Firma e avvia Subwarp'
-        : this.automationPreparedAction === 'warp_start'
-          ? 'Firma e avvia Warp'
-        : this.automationPreparedAction === 'subwarp_exit'
-          ? 'Firma e completa Subwarp'
-          : this.automationPreparedAction === 'warp_exit'
-            ? 'Firma e completa Warp'
-          : 'Firma e invia scan';
-      this.automationScanSubmitButton.hidden = !result.prepareId || Boolean(result.simulation.err);
-      this.automationScanResult.textContent = JSON.stringify({
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationScanSubmitButton.textContent = auto.preparedAction === 'subwarp_start'
+          ? 'Firma e avvia Subwarp'
+          : auto.preparedAction === 'warp_start'
+            ? 'Firma e avvia Warp'
+          : auto.preparedAction === 'subwarp_exit'
+            ? 'Firma e completa Subwarp'
+            : auto.preparedAction === 'warp_exit'
+              ? 'Firma e completa Warp'
+            : 'Firma e invia scan';
+        this.automationScanSubmitButton.hidden = !result.prepareId || Boolean(result.simulation.err);
+        this.automationScanResult.textContent = JSON.stringify({
         action: result.action ?? action,
         fleetId: result.fleetId,
         coordinates: result.coordinates,
@@ -842,7 +878,8 @@ export class Hud extends Emitter {
         instructions: result.instructions,
         feePolicy: result.feePolicy,
         simulation: result.simulation,
-      }, null, 2);
+        }, null, 2);
+      }
       if (result.simulation.err) {
         const auto2 = this.getFleetAutomation(fleet.id);
         auto2.scanTransaction = null;
@@ -863,30 +900,30 @@ export class Hud extends Emitter {
         unitsConsumed: result.simulation.unitsConsumed,
       });
       const prepared = Boolean(result.prepareId && !result.simulation.err);
-      if (!prepared && this.automationInitialScanPending && this.automationRunning) this.failAutomation();
+      if (!prepared && auto.initialScanPending && auto.running) this.failAutomation(fleetId);
       return prepared;
     } catch (error) {
       const auto3 = this.getFleetAutomation(fleet.id);
       auto3.scanTransaction = null;
       auto3.preparedResult = null;
       auto3.scanPrepareId = null;
-      this.automationScanSubmitButton.hidden = true;
+      if (this.isAutomationFleetSelected(fleetId)) this.automationScanSubmitButton.hidden = true;
       const movementExit = action === 'subwarp_exit' || action === 'warp_exit';
       const movementExitCompletedOnChain =
         movementExit && error instanceof Error && error.message === 'FLEET_NOT_IN_MOVEMENT';
-      if (movementExitCompletedOnChain && this.automationRunning) {
+      if (movementExitCompletedOnChain && auto.running) {
         console.warn(
           '[SDU] movement exit rejected during preparation: fleet already Idle on chain; proceeding to scan',
           { fleetId: fleet.id, action }
         );
-        this.automationAwaitingMovementExit = false;
-        this.automationResumeAfterExit = false;
-        this.automationNeedsScanAfterMovement = true;
-        this.automationInitialScanPending = true;
-        this.automationInitialScanReady = false;
-        this.automationScanResult.textContent = 'Movimento già completato su chain · avvio scansione';
+        auto.awaitingMovementExit = false;
+        auto.resumeAfterExit = false;
+        auto.needsScanAfterMovement = true;
+        auto.initialScanPending = true;
+        auto.initialScanReady = false;
+        if (this.isAutomationFleetSelected(fleetId)) this.automationScanResult.textContent = 'Movimento già completato su chain · avvio scansione';
         console.debug('[SDU] prepareAutomationScan: FLEET_NOT_IN_MOVEMENT, retrying initial scan with preparedResult', { fleetId: fleet.id, action, hasPreparedResult: Boolean(auto3?.preparedResult), coordinates: auto3?.preparedResult?.coordinates });
-        await this.beginInitialAutomationScan(this.automationRunId, auto3?.preparedResult ?? null);
+        await this.beginInitialAutomationScan(auto.runId, auto3?.preparedResult ?? null, fleetId);
         return false;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -894,44 +931,52 @@ export class Hud extends Emitter {
       if (
         isRpcTemporary &&
         attempt + 1 < maxRetries &&
-        this.automationRunning
+        auto.running
       ) {
         console.warn(
           '[SDU] RPC temporary error during action preparation, retrying',
           { attempt: attempt + 1, maxRetries, fleetId: fleet.id, action, message }
         );
-        this.automationScanResult.textContent = `Errore RPC temporaneo, riprovo (${attempt + 1}/${maxRetries})…`;
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationScanResult.textContent = `Errore RPC temporaneo, riprovo (${attempt + 1}/${maxRetries})…`;
+        }
         await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
         continue;
       }
-      this.automationScanResult.textContent = error instanceof Error ? error.message : 'Preparazione azione non riuscita';
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationScanResult.textContent = error instanceof Error ? error.message : 'Preparazione azione non riuscita';
+      }
       console.error('[SDU] action preparation failed', { fleetId: fleet.id, coordinates: [destination.x, destination.y], action, error });
-      if (this.automationInitialScanPending && this.automationRunning) this.failAutomation();
+      if (auto.initialScanPending && auto.running) this.failAutomation(fleetId);
       return false;
     } finally {
-      this.automationScanButton.disabled = this.automationRunning;
+      if (this.isAutomationFleetSelected(fleetId)) this.automationScanButton.disabled = auto.running;
     }}
     return false;
   }
 
-  updateAutomationActionButton() {
-    const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
-    const destination = this.automationDestination;
+  updateAutomationActionButton(fleetId = this.automationFleet?.id) {
+    if (!this.isAutomationFleetSelected(fleetId)) return;
+    const auto = this.getFleetAutomation(fleetId);
+    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    const destination = auto.destination;
     if (!fleet || !destination) {
       this.automationScanButton.hidden = true;
       return;
     }
     this.automationScanButton.hidden = false;
-    const movementMode = this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp';
+    const movementMode = auto.config?.movementMode
+      ?? this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value
+      ?? 'subwarp';
     let operation = resolveScanOperation(fleet, destination, movementMode);
-    if (this.automationNeedsScanAfterMovement) {
+    if (auto.needsScanAfterMovement) {
       operation = { status: 'ready', action: 'scan' };
     }
     if (operation.status === 'waiting') {
       this.automationScanButton.textContent = operation.action === 'warp_exit' ? 'Warp in corso' : 'Subwarp in corso';
       this.automationScanButton.disabled = true;
     } else if (operation.status === 'ready') {
-      if (this.automationInitialScanPending && operation.action === 'scan' && !this.automationInitialScanReady) {
+      if (auto.initialScanPending && operation.action === 'scan' && !auto.initialScanReady) {
         this.automationScanButton.textContent = 'Cooldown scan attivo';
         this.automationScanButton.disabled = true;
         return;
@@ -943,27 +988,27 @@ export class Hud extends Emitter {
         warp_start: 'Prepara Warp',
         warp_exit: 'Completa Warp',
       }[operation.action];
-      if (this.automationInitialScanPending && operation.action === 'scan') {
+      if (auto.initialScanPending && operation.action === 'scan') {
         this.automationScanButton.textContent = 'Prepara scan iniziale';
       }
-      this.automationScanButton.disabled = this.automationRunning;
+      this.automationScanButton.disabled = auto.running;
     } else {
       this.automationScanButton.textContent = 'Azione non disponibile';
       this.automationScanButton.disabled = true;
     }
   }
 
-  async submitPreparedScan(retryExpiredPreparation = true) {
-    const auto = this.automationFleet ? this.getFleetAutomation(this.automationFleet.id) : null;
-    if (!auto || auto.submissionPending || !(this.wallet || this.localSigner.unlocked) || !auto.scanTransaction || !auto.scanPrepareId || !this.automationFleet) return;
+  async submitPreparedScan(retryExpiredPreparation = true, fleetId = this.automationFleet?.id) {
+    const auto = fleetId ? this.getFleetAutomation(fleetId) : null;
+    if (!auto || auto.submissionPending || !(this.wallet || this.localSigner.unlocked) || !auto.scanTransaction || !auto.scanPrepareId) return;
     const submittedAction = auto.preparedAction;
     const preparedResult = auto.preparedResult;
     const scanAction = submittedAction === 'scan';
     const movementStart = submittedAction === 'subwarp_start' || submittedAction === 'warp_start';
     const movementExit = submittedAction === 'subwarp_exit' || submittedAction === 'warp_exit';
-    const runId = this.automationRunId;
+    const runId = auto.runId;
     auto.submissionPending = true;
-    this.automationScanSubmitButton.disabled = true;
+    if (this.isAutomationFleetSelected(fleetId)) this.automationScanSubmitButton.disabled = true;
     try {
       const submitPromise = this.transactionClient.signAndSubmit({
         prepareId: auto.scanPrepareId,
@@ -979,97 +1024,99 @@ export class Hud extends Emitter {
       auto.scanPrepareId = null;
       auto.scanTransaction = null;
       auto.preparedResult = null;
-      this.automationScanSubmitButton.hidden = true;
-      console.info('[SDU] on-chain action confirmed', { fleetId: this.automationFleet.id, action: result.action, signature: result.signature });
-      console.info('[SDU] transaction fee', { fleetId: this.automationFleet.id, signature: result.signature, ...result.fee });
-      this.automationScanResult.textContent = JSON.stringify(result, null, 2);
+      if (this.isAutomationFleetSelected(fleetId)) this.automationScanSubmitButton.hidden = true;
+      console.info('[SDU] on-chain action confirmed', { fleetId, action: result.action, signature: result.signature });
+      console.info('[SDU] transaction fee', { fleetId, signature: result.signature, ...result.fee });
+      if (this.isAutomationFleetSelected(fleetId)) this.automationScanResult.textContent = JSON.stringify(result, null, 2);
       if (result.action === 'scan') {
-        this.scanPolicy.observeScanResult(result.scanResult?.probabilityPct);
-        this.automationLastScanSummary = this.formatScanResult(result.scanResult);
+        auto.scanPolicy.observeScanResult(result.scanResult?.probabilityPct);
+        auto.lastScanSummary = this.formatScanResult(result.scanResult);
         const fleetScanSummary = this.formatFleetScanStatus(result.scanResult);
-        if (fleetScanSummary) this.fleetScanSummaries.set(this.automationFleet.id, fleetScanSummary);
-        this.automationResult.textContent = this.automationLastScanSummary;
-        console.info('[SDU] scan result', { fleetId: this.automationFleet.id, ...result.scanResult });
+        if (fleetScanSummary) this.fleetScanSummaries.set(fleetId, fleetScanSummary);
+        if (this.isAutomationFleetSelected(fleetId)) this.automationResult.textContent = auto.lastScanSummary;
+        console.info('[SDU] scan result', { fleetId, ...result.scanResult });
         this.render();
       }
-      if (scanAction && this.automationRunning && runId === this.automationRunId) {
-        this.automationInitialScanPending = false;
-        this.automationInitialScanReady = false;
-        this.automationNeedsScanAfterMovement = false;
-        this.automationPostScanReady = true;
-        this.automationDestination = null;
-        this.automationStatus.textContent = 'Scan confermata · selezione destinazione…';
-        await this.continueAutomationAfterInitialScan(runId);
-      } else if (movementExit && this.automationRunning && runId === this.automationRunId) {
+      if (scanAction && auto.running && runId === auto.runId) {
+        auto.initialScanPending = false;
+        auto.initialScanReady = false;
+        auto.needsScanAfterMovement = false;
+        auto.postScanReady = true;
+        auto.destination = null;
+        if (this.isAutomationFleetSelected(fleetId)) this.automationStatus.textContent = 'Scan confermata · selezione destinazione…';
+        await this.continueAutomationAfterInitialScan(runId, fleetId);
+      } else if (movementExit && auto.running && runId === auto.runId) {
         // Salva il sector attuale (destinazione dell'exit) prima di perdere il riferimento.
         // Dopo l'exit la flotta è fisicamente a fleet.to; lo snapshot WS potrebbe non essere
         // ancora aggiornato (stato ancora MoveSubwarp, sector null), quindi dobbiamo preservare
         // il sector noto per poter procedere con la scan iniziale (modello Sly: stato reale prima di operare).
-        if (this.automationDestination) {
-          this.automationLastKnownSector = [this.automationDestination.x, this.automationDestination.y];
+        if (auto.destination) {
+          auto.lastKnownSector = [auto.destination.x, auto.destination.y];
         }
-        this.automationAwaitingMovementStart = false;
-        this.automationAwaitingMovementExit = false;
-        this.automationResumeAfterExit = false;
-        this.automationNeedsScanAfterMovement = true;
-        this.automationInitialScanPending = true;
-        this.automationInitialScanReady = false;
-        this.automationDestination = null;
-        console.info('[SDU] movement exit confirmed on-chain · starting local scan', { fleetId: this.automationFleet.id, action: result.action, signature: result.signature, hasPreparedResult: Boolean(preparedResult), coordinates: preparedResult?.coordinates });
-        await this.beginInitialAutomationScan(runId, preparedResult);
-      } else if (movementStart && this.automationRunning && runId === this.automationRunId) {
-        const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet.id);
-        this.automationLastKnownSector = fleet?.sector ?? null;
+        auto.awaitingMovementStart = false;
+        auto.awaitingMovementExit = false;
+        auto.resumeAfterExit = false;
+        auto.needsScanAfterMovement = true;
+        auto.initialScanPending = true;
+        auto.initialScanReady = false;
+        auto.destination = null;
+        console.info('[SDU] movement exit confirmed on-chain · starting local scan', { fleetId: fleetId, action: result.action, signature: result.signature, hasPreparedResult: Boolean(preparedResult), coordinates: preparedResult?.coordinates });
+        await this.beginInitialAutomationScan(runId, preparedResult, fleetId);
+      } else if (movementStart && auto.running && runId === auto.runId) {
+        const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+        auto.lastKnownSector = fleet?.sector ?? null;
         // Aggiorna il fuel locale (modello Sly: scanLastFuelAmount) così durante
         // il movimento non serve richiamare /api/sea/fleet-resources (zero RPC).
         if (preparedResult?.fuelCurrent != null) {
-          this.automationFuelCurrent = Number(preparedResult.fuelCurrent);
-          this.automationFuelCapacity = Number(
+          auto.fuelCurrent = Number(preparedResult.fuelCurrent);
+          auto.fuelCapacity = Number(
             fleet?.chainData?.stats?.cargo_stats?.fuel_capacity ??
-            this.automationResources?.fuelCapacity ??
+            auto.resources?.fuelCapacity ??
             0
           );
         }
         const expectedState = submittedAction === 'warp_start' ? 'MoveWarp' : 'MoveSubwarp';
-        const target = preparedResult?.coordinates ?? this.automationDestination;
+        const target = preparedResult?.coordinates ?? auto.destination;
         const targetX = target?.[0] ?? target?.x ?? '?';
         const targetY = target?.[1] ?? target?.y ?? '?';
         const mode = submittedAction === 'warp_start' ? 'warp' : 'subwarp';
         const eta = Number(preparedResult?.arrivalSeconds);
-        this.fleetStatusOverrides.set(this.automationFleet.id, {
+        this.fleetStatusOverrides.set(fleetId, {
           text: `${mode} → (${targetX}, ${targetY}) · arrivo ${Number.isFinite(eta) ? fmtEta(eta * 1000) : 'in corso'}`,
           expectedState,
           target: [Number(targetX), Number(targetY)],
         });
         this.render();
-        clearTimeout(this.automationRunTimer);
-        this.automationRunTimer = null;
-        this.automationAwaitingMovementStart = false;
-        this.automationAwaitingMovementExit = false;
-        this.automationResumeAfterExit = false;
-        this.automationNeedsScanAfterMovement = true;
-        this.automationWaitingForEta = false;
-        clearTimeout(this.automationRunTimer);
-        this.automationRunTimer = null;
+        clearTimeout(auto.runTimer);
+        auto.runTimer = null;
+        auto.awaitingMovementStart = false;
+        auto.awaitingMovementExit = false;
+        auto.resumeAfterExit = false;
+        auto.needsScanAfterMovement = true;
+        auto.waitingForEta = false;
+        clearTimeout(auto.runTimer);
+        auto.runTimer = null;
         if (!fleet) {
-          console.error('[SDU] movement start confirmed but fleet missing from snapshot', { fleetId: this.automationFleet.id, action: result.action });
-          this.failAutomation();
+          console.error('[SDU] movement start confirmed but fleet missing from snapshot', { fleetId, action: result.action });
+          this.failAutomation(fleetId);
           return;
         }
         console.info('[SDU] movement start confirmed on-chain · waiting for movement arrival', { fleetId: fleet.id, action: result.action, hasPreparedResult: Boolean(preparedResult), arrivalSeconds: preparedResult?.arrivalSeconds });
         this.waitForMovementArrival(fleet, runId, preparedResult);
       } else {
-        this.stopAutomation();
+        this.stopAutomation(fleetId);
       }
     } catch (error) {
       auto.submissionPending = false;
       auto.scanPrepareId = null;
       auto.scanTransaction = null;
       auto.preparedResult = null;
-      this.automationScanSubmitButton.hidden = true;
-      this.automationScanResult.textContent = error instanceof Error ? error.message : 'Firma o invio scan non riuscito';
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationScanSubmitButton.hidden = true;
+        this.automationScanResult.textContent = error instanceof Error ? error.message : 'Firma o invio scan non riuscito';
+      }
       console.error('[SDU] transaction action failed', {
-        fleetId: this.automationFleet.id,
+        fleetId,
         action: submittedAction,
         name: error?.name,
         message: error?.message ?? String(error),
@@ -1085,21 +1132,23 @@ export class Hud extends Emitter {
       if (
         (expiredBeforeSend || isSubmitTimeoutOrNetwork) &&
         retryExpiredPreparation &&
-        this.automationRunning &&
-        runId === this.automationRunId
+        auto.running &&
+        runId === auto.runId
       ) {
         console.warn(
           '[SDU] submit failed, preparing a fresh transaction',
-          { attempt: 'retry', fleetId: this.automationFleet.id, message: error.message }
+          { attempt: 'retry', fleetId, message: error.message }
         );
-        this.automationScanResult.textContent = 'Invio transazione fallito · preparo una nuova transazione';
-        if (movementExit && this.automationRunning && runId === this.automationRunId) {
-          this.automationNeedsScanAfterMovement = true;
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationScanResult.textContent = 'Invio transazione fallito · preparo una nuova transazione';
         }
-        const prepared = await this.prepareAutomationScan();
-        if (prepared && this.automationRunning && runId === this.automationRunId) {
+        if (movementExit && auto.running && runId === auto.runId) {
+          auto.needsScanAfterMovement = true;
+        }
+        const prepared = await this.prepareAutomationScan(fleetId);
+        if (prepared && auto.running && runId === auto.runId) {
           auto.submissionPending = false;
-          await this.submitPreparedScan(false);
+          await this.submitPreparedScan(false, fleetId);
           return;
         }
       }
@@ -1114,30 +1163,31 @@ export class Hud extends Emitter {
         error.message === 'FLEET_NOT_IN_MOVEMENT';
       if (
         movementExitCompletedOnChain &&
-        this.automationRunning &&
-        runId === this.automationRunId
+        auto.running &&
+        runId === auto.runId
       ) {
         console.debug(
           '[SDU] submitPreparedScan: FLEET_NOT_IN_MOVEMENT, retrying initial scan with preparedResult',
-          { fleetId: this.automationFleet.id, action: submittedAction, hasPreparedResult: Boolean(preparedResult), coordinates: preparedResult?.coordinates }
+          { fleetId, action: submittedAction, hasPreparedResult: Boolean(preparedResult), coordinates: preparedResult?.coordinates }
         );
         console.warn(
           '[SDU] movement exit rejected: fleet already Idle on chain; proceeding to scan',
-          { fleetId: this.automationFleet.id, action: submittedAction }
+          { fleetId, action: submittedAction }
         );
-        this.automationAwaitingMovementExit = false;
-        this.automationNeedsScanAfterMovement = true;
-        this.automationInitialScanPending = true;
-        this.automationInitialScanReady = false;
-        this.automationStatus.textContent =
-          'Movimento già completato su chain · avvio scansione';
-        await this.beginInitialAutomationScan(runId, preparedResult);
+        auto.awaitingMovementExit = false;
+        auto.needsScanAfterMovement = true;
+        auto.initialScanPending = true;
+        auto.initialScanReady = false;
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationStatus.textContent = 'Movimento già completato su chain · avvio scansione';
+        }
+        await this.beginInitialAutomationScan(runId, preparedResult, fleetId);
         return;
       }
-      if ((scanAction || movementStart || movementExit) && this.automationRunning && runId === this.automationRunId) this.failAutomation();
+      if ((scanAction || movementStart || movementExit) && auto.running && runId === auto.runId) this.failAutomation(fleetId);
     } finally {
-      if (auto) auto.submissionPending = false;
-      this.automationScanSubmitButton.disabled = false;
+      auto.submissionPending = false;
+      if (this.isAutomationFleetSelected(fleetId)) this.automationScanSubmitButton.disabled = false;
     }
   }
 
@@ -1395,130 +1445,144 @@ export class Hud extends Emitter {
     this.settingsEl.hidden = true;
   }
 
-  startAutomation() {
-    if (this.automationRunning) return;
-    if (!this.canStartAutomation()) {
-      this.refreshAutomationState();
+  startAutomation(fleetId = this.automationFleet?.id) {
+    const auto = fleetId ? this.getFleetAutomation(fleetId) : null;
+    if (!auto || auto.running) return;
+    if (!this.canStartAutomation(fleetId)) {
+      this.refreshAutomationState(fleetId);
       return;
     }
     if (this.localSigner.storedPublicKey() && !this.localSigner.unlocked) {
-      this.automationStatus.textContent = 'Chiave locale salvata ma bloccata · inserisci la password e premi Sblocca';
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationStatus.textContent = 'Chiave locale salvata ma bloccata · inserisci la password e premi Sblocca';
+      }
       return;
     }
     console.info('[SDU] signer mode', { mode: this.localSigner.unlocked ? 'local' : 'wallet' });
-    this.automationRunning = true;
-    const runId = ++this.automationRunId;
-    const auto = this.getFleetAutomation(this.automationFleet.id);
+    const runId = ++auto.runId;
     auto.running = true;
     auto.faulted = false;
-    auto.runId = runId;
-    this.automationInitialScanPending = true;
-    this.automationInitialScanReady = false;
-    this.automationResumeAfterExit = false;
-    this.setAutomationFleetState(this.automationFleet.id, 'running');
-    console.info('[SDU] automation started with scan at current sector', { fleetId: this.automationFleet.id });
-    this.automationToggleButton.textContent = 'Arresta automazione';
-    this.automationToggleButton.setAttribute('aria-pressed', 'true');
-    this.automationToggleButton.disabled = false;
-    this.automationRequestButton.disabled = true;
-    this.automationStatus.textContent = 'Scan iniziale richiesta sulla posizione corrente';
+    auto.initialScanPending = true;
+    auto.initialScanReady = false;
+    auto.resumeAfterExit = false;
+    this.setAutomationFleetState(fleetId, 'running');
+    console.info('[SDU] automation started with scan at current sector', { fleetId });
+    if (this.isAutomationFleetSelected(fleetId)) {
+      this.automationToggleButton.textContent = 'Arresta automazione';
+      this.automationToggleButton.setAttribute('aria-pressed', 'true');
+      this.automationToggleButton.disabled = false;
+      this.automationRequestButton.disabled = true;
+      this.automationStatus.textContent = 'Scan iniziale richiesta sulla posizione corrente';
+    }
 
     // Stagger avvio flotte (modello Sly: 1500ms per flotta) per evitare raffiche RPC simultanee
     const alreadyRunning = Array.from(this.fleetAutomations.values()).filter(a => a.running).length - 1;
     const staggerMs = Math.max(0, alreadyRunning) * 1500;
-    if (staggerMs > 0) {
+    if (staggerMs > 0 && this.isAutomationFleetSelected(fleetId)) {
       this.automationStatus.textContent = `Avvio in coda (${staggerMs / 1000}s) · scan iniziale sulla posizione corrente`;
     }
-    setTimeout(() => {
-      if (this.automationRunning && runId === this.automationRunId) this.beginInitialAutomationScan(runId);
+    clearTimeout(auto.runTimer);
+    auto.runTimer = setTimeout(() => {
+      auto.runTimer = null;
+      if (auto.running && runId === auto.runId) this.beginInitialAutomationScan(runId, null, fleetId);
     }, staggerMs);
   }
 
-  async beginInitialAutomationScan(runId, preparedResult = null) {
-    if (!this.automationRunning || runId !== this.automationRunId) return;
-    const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
+  async beginInitialAutomationScan(runId, preparedResult = null, fleetId = this.automationFleet?.id) {
+    const auto = this.getFleetAutomation(fleetId);
+    if (!auto || !auto.running || runId !== auto.runId) return;
+    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
     if (!fleet) {
-      console.error('[SDU] initial scan stopped: fleet missing from snapshot', { fleetId: this.automationFleet?.id });
-      this.failAutomation();
+      console.error('[SDU] initial scan stopped: fleet missing from snapshot', { fleetId });
+      this.failAutomation(fleetId);
       return;
     }
-    this.automationFleet = fleet;
-    console.debug('[SDU] beginInitialAutomationScan entry', { runId, fleetId: fleet.id, fleetState: fleet.state, sector: fleet.sector, automationNeedsScanAfterMovement: this.automationNeedsScanAfterMovement, automationResumeAfterExit: this.automationResumeAfterExit, automationLastKnownSector: this.automationLastKnownSector, hasPreparedResult: Boolean(preparedResult), preparedCoords: preparedResult?.coordinates });
+    console.debug('[SDU] beginInitialAutomationScan entry', { runId, fleetId: fleet.id, fleetState: fleet.state, sector: fleet.sector, automationNeedsScanAfterMovement: auto.needsScanAfterMovement, automationResumeAfterExit: auto.resumeAfterExit, automationLastKnownSector: auto.lastKnownSector, hasPreparedResult: Boolean(preparedResult), preparedCoords: preparedResult?.coordinates });
     if (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp') {
-      if (this.automationNeedsScanAfterMovement && !this.automationResumeAfterExit) {
+      if (auto.needsScanAfterMovement && !auto.resumeAfterExit) {
         // Il movimento è già confermato su chain (exit o timeout): ignoriamo lo snapshot obsoleto e procediamo con lo scan
         // Coerente con il modello Sly: stato reale prima di operare, nessun attesa di aggiornamenti chain obsoleti.
-        this.automationAwaitingMovementExit = false;
-        this.automationNeedsScanAfterMovement = true;
-        this.automationInitialScanPending = true;
-        this.automationInitialScanReady = true;
-        const coords = preparedResult?.coordinates ?? preparedResult?.sector ?? fleet.sector ?? this.automationLastKnownSector;
+        auto.awaitingMovementExit = false;
+        auto.needsScanAfterMovement = true;
+        auto.initialScanPending = true;
+        auto.initialScanReady = true;
+        const coords = preparedResult?.coordinates ?? preparedResult?.sector ?? fleet.sector ?? auto.lastKnownSector;
         console.debug('[SDU] beginInitialAutomationScan: movement stale, forcing scan after exit', { fleetId: fleet.id, state: fleet.state, coordsSource: preparedResult?.coordinates ? 'preparedResult' : preparedResult?.sector ? 'preparedResult.sector' : fleet.sector ? 'fleet.sector' : 'automationLastKnownSector', coords });
         if (!coords) {
-          console.error('[SDU] initial scan stopped: no coordinates available', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector, automationLastKnownSector: this.automationLastKnownSector });
-          this.failAutomation();
+          console.error('[SDU] initial scan stopped: no coordinates available', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector, automationLastKnownSector: auto.lastKnownSector });
+          this.failAutomation(fleetId);
           return;
         }
-        this.automationDestination = { x: coords[0], y: coords[1], sb: null };
-        this.updateAutomationActionButton();
-        this.automationStatus.textContent = 'Preparo la scan iniziale sulla posizione corrente';
-        await this.runAutomationAction(runId);
+        auto.destination = { x: coords[0], y: coords[1], sb: null };
+        this.updateAutomationActionButton(fleetId);
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationStatus.textContent = 'Preparo la scan iniziale sulla posizione corrente';
+        }
+        await this.runAutomationAction(runId, fleetId);
         return;
       } else {
         // Movimento già completato su chain (ETA scaduto) ma snapshot obsoleto (MoveSubwarp/MoveWarp).
         // Non attendiamo ulteriormente: forziamo l'uscita per proseguire con la scan iniziale.
         // Coerente con il modello Sly: stato reale prima di operare, nessun attesa di aggiornamenti chain obsoleti.
-        this.automationResumeAfterExit = true;
-        this.automationStatus.textContent = 'Movimento arrivato · preparo uscita';
-        await this.runAutomationAction(runId);
+        auto.resumeAfterExit = true;
+        if (this.isAutomationFleetSelected(fleetId)) this.automationStatus.textContent = 'Movimento arrivato · preparo uscita';
+        await this.runAutomationAction(runId, fleetId);
         return;
       }
     }
     if (fleet.state !== 'Idle' || !fleet.sector) {
       console.error('[SDU] initial scan stopped: unsupported fleet state', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector });
-      this.failAutomation();
+      this.failAutomation(fleetId);
       return;
     }
-    this.automationDestination = { x: fleet.sector[0], y: fleet.sector[1], sb: null };
-    this.updateAutomationActionButton();
+    auto.destination = { x: fleet.sector[0], y: fleet.sector[1], sb: null };
+    this.updateAutomationActionButton(fleetId);
     const cooldownRemaining = Math.max(0, Number(fleet.scanCooldownEnd ?? 0) - Date.now());
     if (cooldownRemaining > 0) {
-      if (this.automationNeedsScanAfterMovement) {
+      if (auto.needsScanAfterMovement) {
         console.debug('[SDU] beginInitialAutomationScan: scan cooldown active, waiting before scan', { fleetId: fleet.id, cooldownRemainingMs: cooldownRemaining, cooldownRemainingSec: Math.ceil(cooldownRemaining / 1000) });
-        this.automationStatus.textContent = `Scan cooldown chain · attendo ${Math.ceil(cooldownRemaining / 1000)}s`;
-        clearTimeout(this.automationRunTimer);
-        this.automationRunTimer = setTimeout(() => {
-          this.automationRunTimer = null;
-          if (this.automationRunning && runId === this.automationRunId) this.beginInitialAutomationScan(runId);
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationStatus.textContent = `Scan cooldown chain · attendo ${Math.ceil(cooldownRemaining / 1000)}s`;
+        }
+        clearTimeout(auto.runTimer);
+        auto.runTimer = setTimeout(() => {
+          auto.runTimer = null;
+          if (auto.running && runId === auto.runId) this.beginInitialAutomationScan(runId, null, fleetId);
         }, cooldownRemaining);
-        this.automationScanButton.textContent = 'Cooldown scan attivo';
-        this.automationScanButton.disabled = true;
-        this.automationScanButton.hidden = false;
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationScanButton.textContent = 'Cooldown scan attivo';
+          this.automationScanButton.disabled = true;
+          this.automationScanButton.hidden = false;
+        }
         return;
       }
-      this.automationInitialScanPending = false;
-      this.automationInitialScanReady = false;
-      this.automationStatus.textContent = 'Scan in cooldown · richiedo la prossima destinazione';
-      await this.continueAutomationAfterInitialScan(runId);
+      auto.initialScanPending = false;
+      auto.initialScanReady = false;
+      if (this.isAutomationFleetSelected(fleetId)) {
+        this.automationStatus.textContent = 'Scan in cooldown · richiedo la prossima destinazione';
+      }
+      await this.continueAutomationAfterInitialScan(runId, fleetId);
       return;
     }
-    this.automationInitialScanReady = true;
-    this.updateAutomationActionButton();
-    this.automationStatus.textContent = 'Preparo la scan iniziale sulla posizione corrente';
-    await this.runAutomationAction(runId);
+    auto.initialScanReady = true;
+    this.updateAutomationActionButton(fleetId);
+    if (this.isAutomationFleetSelected(fleetId)) {
+      this.automationStatus.textContent = 'Preparo la scan iniziale sulla posizione corrente';
+    }
+    await this.runAutomationAction(runId, fleetId);
   }
 
   async waitForMovementArrival(fleet, runId, preparedResult = null) {
-    console.debug('[SDU] waitForMovementArrival entry', { runId, fleetId: fleet.id, fleetState: fleet.state, hasPreparedResult: Boolean(preparedResult), arrivalSeconds: preparedResult?.arrivalSeconds, fleetArrival: fleet.arrival, automationWaitingForEta: this.automationWaitingForEta });
+    const auto = this.getFleetAutomation(fleet.id);
+    console.debug('[SDU] waitForMovementArrival entry', { runId, fleetId: fleet.id, fleetState: fleet.state, hasPreparedResult: Boolean(preparedResult), arrivalSeconds: preparedResult?.arrivalSeconds, fleetArrival: fleet.arrival, automationWaitingForEta: auto.waitingForEta });
     if (!preparedResult && !fleet.to) {
       console.error('[SDU] movement recovery stopped: on-chain target missing', { fleetId: fleet.id, state: fleet.state });
-      this.failAutomation();
+      this.failAutomation(fleet.id);
       return;
     }
-    this.automationFleet = fleet;
     const target = preparedResult?.coordinates ?? fleet.to;
-    this.automationDestination = { x: target[0], y: target[1], sb: null };
-    this.updateAutomationActionButton();
+    auto.destination = { x: target[0], y: target[1], sb: null };
+    this.updateAutomationActionButton(fleet.id);
     const arrivalMs = preparedResult?.arrivalSeconds
       ? Date.now() + Number(preparedResult.arrivalSeconds) * 1000
       : Number(fleet.arrival ?? 0);
@@ -1526,73 +1590,80 @@ export class Hud extends Emitter {
     const movementName = fleet.state === 'MoveWarp' ? 'Warp' : 'Subwarp';
     console.debug('[SDU] waitForMovementArrival calculated', { fleetId: fleet.id, arrivalMs, remaining, remainingSec: Math.ceil(remaining / 1000), movementName });
     if (remaining === 0) {
-      clearTimeout(this.automationRunTimer);
-      this.automationRunTimer = null;
-      this.automationWaitingForEta = false;
-      this.automationStatus.textContent = `${movementName} arrivato · prepara uscita`;
+      clearTimeout(auto.runTimer);
+      auto.runTimer = null;
+      auto.waitingForEta = false;
+      if (this.isAutomationFleetSelected(fleet.id)) {
+        this.automationStatus.textContent = `${movementName} arrivato · prepara uscita`;
+      }
       console.debug('[SDU] waitForMovementArrival: remaining === 0, launching runAutomationAction', { fleetId: fleet.id, runId });
-      if (this.automationRunning && runId === this.automationRunId) await this.runAutomationAction(runId);
+      if (auto.running && runId === auto.runId) await this.runAutomationAction(runId, fleet.id);
       return;
     }
-    this.automationStatus.textContent = `${movementName} in corso · attendo ETA chain`;
-    if (this.automationWaitingForEta) {
+    if (this.isAutomationFleetSelected(fleet.id)) {
+      this.automationStatus.textContent = `${movementName} in corso · attendo ETA chain`;
+    }
+    if (auto.waitingForEta) {
       console.debug('[SDU] waitForMovementArrival: already waiting for ETA, skipping', { fleetId: fleet.id, remaining });
       return;
     }
-    clearTimeout(this.automationRunTimer);
-    this.automationWaitingForEta = true;
-    this.automationRunTimer = setTimeout(() => {
-      this.automationRunTimer = null;
-      this.automationWaitingForEta = false;
+    clearTimeout(auto.runTimer);
+    auto.waitingForEta = true;
+    auto.runTimer = setTimeout(() => {
+      auto.runTimer = null;
+      auto.waitingForEta = false;
       console.debug('[SDU] waitForMovementArrival: ETA timer expired, starting initial scan', { fleetId: fleet.id, runId });
-      if (this.automationRunning && runId === this.automationRunId) this.beginInitialAutomationScan(runId);
+      if (auto.running && runId === auto.runId) this.beginInitialAutomationScan(runId, null, fleet.id);
     }, remaining);
   }
 
-  async continueAutomationAfterInitialScan(runId) {
-    if (!this.automationRunning || runId !== this.automationRunId) return;
-    const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
-    console.debug('[SDU] continueAutomationAfterInitialScan entry', { runId, fleetId: this.automationFleet?.id, fleetState: fleet?.state, sector: fleet?.sector, automationPostScanReady: this.automationPostScanReady });
-    if (!fleet || (!this.automationPostScanReady && fleet.state !== 'Idle') || !fleet.sector) {
-      console.error('[SDU] post-scan destination request blocked: fleet is not Idle', { fleetId: fleet?.id, state: fleet?.state, sector: fleet?.sector, automationPostScanReady: this.automationPostScanReady });
-      this.failAutomation();
+  async continueAutomationAfterInitialScan(runId, fleetId = this.automationFleet?.id) {
+    const auto = this.getFleetAutomation(fleetId);
+    if (!auto || !auto.running || runId !== auto.runId) return;
+    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    console.debug('[SDU] continueAutomationAfterInitialScan entry', { runId, fleetId, fleetState: fleet?.state, sector: fleet?.sector, automationPostScanReady: auto.postScanReady });
+    if (!fleet || (!auto.postScanReady && fleet.state !== 'Idle') || !fleet.sector) {
+      console.error('[SDU] post-scan destination request blocked: fleet is not Idle', { fleetId: fleet?.id, state: fleet?.state, sector: fleet?.sector, automationPostScanReady: auto.postScanReady });
+      this.failAutomation(fleetId);
       return;
     }
-    this.automationFleet = fleet;
-    this.automationPostScanReady = false;
-    if (!await this.loadAutomationResources(fleet, this.automationRequestId)) {
+    auto.postScanReady = false;
+    const requestId = ++auto.requestId;
+    if (!await this.loadAutomationResources(fleet, requestId)) {
       console.error('[SDU] continueAutomationAfterInitialScan: loadAutomationResources failed', { fleetId: fleet.id });
-      if (this.automationRunning && runId === this.automationRunId) this.failAutomation();
+      if (auto.running && runId === auto.runId) this.failAutomation(fleetId);
       return;
     }
-    if (!this.automationRunning || runId !== this.automationRunId) return;
-    if (!await this.requestAutomationDestination()) {
+    if (!auto.running || runId !== auto.runId) return;
+    if (!await this.requestAutomationDestination(fleetId)) {
       console.error('[SDU] continueAutomationAfterInitialScan: requestAutomationDestination failed', { fleetId: fleet.id });
-      if (this.automationRunning && runId === this.automationRunId) this.failAutomation();
+      if (auto.running && runId === auto.runId) this.failAutomation(fleetId);
       return;
     }
-    await this.runAutomationAction(runId);
+    await this.runAutomationAction(runId, fleetId);
   }
 
-  async runAutomationAction(runId) {
-    if (!this.automationRunning || runId !== this.automationRunId) return;
-    const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
-    if (!fleet || !this.automationDestination) {
-      console.error('[SDU] automatic action missing fleet or destination', { fleetId: this.automationFleet?.id, destination: this.automationDestination });
-      this.failAutomation();
+  async runAutomationAction(runId, fleetId = this.automationFleet?.id) {
+    const auto = this.getFleetAutomation(fleetId);
+    if (!auto || !auto.running || runId !== auto.runId) return;
+    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    if (!fleet || !auto.destination) {
+      console.error('[SDU] automatic action missing fleet or destination', { fleetId, destination: auto.destination });
+      this.failAutomation(fleetId);
       return;
     }
-    this.automationFleet = fleet;
-    const movementMode = this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp';
-    let operation = resolveScanOperation(fleet, this.automationDestination, movementMode);
-    console.debug('[SDU] runAutomationAction entry', { runId, fleetId: fleet.id, fleetState: fleet.state, destination: { x: this.automationDestination.x, y: this.automationDestination.y }, automationNeedsScanAfterMovement: this.automationNeedsScanAfterMovement, automationResumeAfterExit: this.automationResumeAfterExit, automationPreparedAction: this.automationPreparedAction, resolvedOperation: operation });
+    const movementMode = auto.config?.movementMode
+      ?? this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value
+      ?? 'subwarp';
+    let operation = resolveScanOperation(fleet, auto.destination, movementMode);
+    console.debug('[SDU] runAutomationAction entry', { runId, fleetId: fleet.id, fleetState: fleet.state, destination: { x: auto.destination.x, y: auto.destination.y }, automationNeedsScanAfterMovement: auto.needsScanAfterMovement, automationResumeAfterExit: auto.resumeAfterExit, automationPreparedAction: auto.preparedAction, resolvedOperation: operation });
     // Se il movimento è già confermato su chain (exit o start), lo snapshot può
     // essere obsoleto (MoveSubwarp/MoveWarp): forziamo la scan per non attendere
     // invano l'aggiornamento chain o l'arrivo di un movimento già concluso.
-    if (this.automationNeedsScanAfterMovement && !this.automationResumeAfterExit) {
+    if (auto.needsScanAfterMovement && !auto.resumeAfterExit) {
       // Dopo subwarp_start/warp_start serve prima l'exit, non la scan diretta:
       // saltare l'exit porta a FLEET_NOT_AT_SCAN_COORDINATE (la flotta è ancora in movimento).
-      const lastAction = this.automationPreparedAction;
+      const lastAction = auto.preparedAction;
       if (lastAction === 'subwarp_start' || lastAction === 'warp_start') {
         operation = { status: 'ready', action: lastAction === 'subwarp_start' ? 'subwarp_exit' : 'warp_exit' };
         console.debug('[SDU] runAutomationAction: forced exit after movement start', { fleetId: fleet.id, lastAction, action: operation.action });
@@ -1602,10 +1673,10 @@ export class Hud extends Emitter {
         console.debug('[SDU] runAutomationAction: forced scan after movement exit (needsScanAfterMovement)', { fleetId: fleet.id, lastAction });
       }
     }
-    // Se stiamo riprendendo dopo un exit (automationResumeAfterExit) ma lo snapshot
+    // Se stiamo riprendendo dopo un exit (auto.resumeAfterExit) ma lo snapshot
     // è ancora obsoleto (MoveSubwarp/MoveWarp), forziamo l'uscita per non restare
     // bloccati in attesa di un aggiornamento chain che potrebbe non arrivare.
-    if (this.automationResumeAfterExit && (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp')) {
+    if (auto.resumeAfterExit && (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp')) {
       const exitAction = fleet.state === 'MoveWarp' ? 'warp_exit' : 'subwarp_exit';
       operation = { status: 'ready', action: exitAction };
       console.debug('[SDU] runAutomationAction: forced exit after resume (ETA expired, snapshot stale)', { fleetId: fleet.id, state: fleet.state, action: exitAction });
@@ -1616,151 +1687,158 @@ export class Hud extends Emitter {
     }
     if (operation.status !== 'ready') {
       console.error('[SDU] automatic action unavailable', { fleetId: fleet.id, state: fleet.state, reason: operation.reason });
-      this.failAutomation();
+      this.failAutomation(fleetId);
       return;
     }
     if (operation.action === 'scan') {
       const remaining = Math.max(0, Number(fleet.scanCooldownEnd ?? 0) - Date.now());
       if (remaining > 0) {
-        this.automationStatus.textContent = `Scan cooldown chain · attendo ${Math.ceil(remaining / 1000)}s`;
-        clearTimeout(this.automationRunTimer);
-        this.automationRunTimer = setTimeout(() => {
-          this.automationRunTimer = null;
-          if (this.automationRunning && runId === this.automationRunId) this.runAutomationAction(runId);
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationStatus.textContent = `Scan cooldown chain · attendo ${Math.ceil(remaining / 1000)}s`;
+        }
+        clearTimeout(auto.runTimer);
+        auto.runTimer = setTimeout(() => {
+          auto.runTimer = null;
+          if (auto.running && runId === auto.runId) this.runAutomationAction(runId, fleetId);
         }, remaining);
         return;
       }
     }
-    if (this.automationActionPending) return;
-    this.automationActionPending = true;
+    if (auto.actionPending) return;
+    auto.actionPending = true;
     let prepared = false;
     try {
-      prepared = await this.prepareAutomationScan();
+      prepared = await this.prepareAutomationScan(fleetId);
     } finally {
-      this.automationActionPending = false;
+      auto.actionPending = false;
     }
     if (!prepared) {
-      if (this.automationRunning && runId === this.automationRunId) this.failAutomation();
+      if (auto.running && runId === auto.runId) this.failAutomation(fleetId);
       return;
     }
-    if (!this.automationRunning || runId !== this.automationRunId) return;
+    if (!auto.running || runId !== auto.runId) return;
     if (operation.action === 'subwarp_start' || operation.action === 'warp_start') {
-      this.automationPreparedAction = operation.action;
-      this.automationAwaitingMovementStart = true;
-      this.automationNeedsScanAfterMovement = true;
+      auto.preparedAction = operation.action;
+      auto.awaitingMovementStart = true;
+      auto.needsScanAfterMovement = true;
       console.debug('[SDU] runAutomationAction: awaiting movement start', { fleetId: fleet.id, action: operation.action, expectedState: operation.action === 'warp_start' ? 'MoveWarp' : 'MoveSubwarp' });
     }
-    if (operation.action === 'subwarp_exit' || operation.action === 'warp_exit') this.automationAwaitingMovementExit = true;
-    await this.submitPreparedScan();
+    if (operation.action === 'subwarp_exit' || operation.action === 'warp_exit') auto.awaitingMovementExit = true;
+    await this.submitPreparedScan(true, fleetId);
   }
 
-  observeAutomationFuel(resources) {
-    const fuelMinimum = Number(this.automationForm.querySelector('[data-scan-param="fuel_min"]')?.value);
-    const crossing = this.scanPolicy.observeFuel(resources.fuelCurrentPct, fuelMinimum);
+  observeAutomationFuel(resources, fleetId) {
+    const auto = this.getFleetAutomation(fleetId);
+    const fuelMinimum = Number(auto.config?.fuel_min
+      ?? (this.isAutomationFleetSelected(fleetId)
+        ? this.automationForm.querySelector('[data-scan-param="fuel_min"]')?.value
+        : undefined));
+    const crossing = auto.scanPolicy.observeFuel(resources.fuelCurrentPct, fuelMinimum);
     if (!crossing) return;
     console.info('[SDU] fuel crossed minimum; next request is area', {
-      fleetId: this.automationFleet?.id,
+      fleetId,
       ...crossing,
       fuelMinimum,
     });
   }
 
-  stopAutomation(targetFleetId = this.automationFleet?.id) {
-    if (targetFleetId) {
-      const auto = this.fleetAutomations.get(targetFleetId);
-      if (auto) {
-        auto.running = false;
-        auto.faulted = false;
-        if (auto.runTimer) {
-          clearTimeout(auto.runTimer);
-          auto.runTimer = null;
-        }
-      }
+  stopAutomation(fleetId = this.automationFleet?.id) {
+    const auto = fleetId ? this.fleetAutomations.get(fleetId) : null;
+    if (!auto) return;
+    const wasRunning = auto.running;
+    auto.running = false;
+    auto.faulted = false;
+    auto.runId += 1;
+    auto.requestId += 1;
+    if (auto.runTimer) clearTimeout(auto.runTimer);
+    auto.runTimer = null;
+    auto.initialScanPending = false;
+    auto.initialScanReady = false;
+    auto.resumeAfterExit = false;
+    auto.waitingForEta = false;
+    auto.awaitingMovementStart = false;
+    auto.awaitingMovementExit = false;
+    auto.needsScanAfterMovement = false;
+    auto.submissionPending = false;
+    auto.actionPending = false;
+    auto.postScanReady = false;
+    auto.lastKnownSector = null;
+    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    this.setAutomationFleetState(
+      fleetId,
+      auto.resources && this.canFleetAutomationProceed(fleet) ? 'stopped' : 'unavailable'
+    );
+    if (this.isAutomationFleetSelected(fleetId)) {
+      this.automationToggleButton.textContent = 'Avvia automazione';
+      this.automationToggleButton.setAttribute('aria-pressed', 'false');
+      this.refreshAutomationState(fleetId);
     }
-    const isCurrent = !targetFleetId || targetFleetId === this.automationFleet?.id;
-    if (isCurrent) {
-      const wasRunning = this.automationRunning;
-      this.automationRunning = false;
-      this.automationRunId += 1;
-      if (this.automationRunTimer) {
-        clearTimeout(this.automationRunTimer);
-        this.automationRunTimer = null;
-      }
-      this.automationInitialScanPending = false;
-      this.automationInitialScanReady = false;
-      this.automationResumeAfterExit = false;
-      this.automationWaitingForEta = false;
-      this.automationAwaitingMovementStart = false;
-      this.automationNeedsScanAfterMovement = false;
-      this.automationPostScanReady = false;
-      this.automationLastKnownSector = null;
-      if (wasRunning) this.automationFaulted = false;
-      if (this.automationToggleButton) {
-        this.automationToggleButton.textContent = 'Avvia automazione';
-        this.automationToggleButton.setAttribute('aria-pressed', 'false');
-      }
-      this.refreshAutomationState();
-      if (wasRunning) console.info('[SDU] automation stopped', { fleetId: this.automationFleet?.id });
-    }
-    if (targetFleetId) this.setAutomationFleetState(targetFleetId, 'unavailable');
+    if (wasRunning) console.info('[SDU] automation stopped', { fleetId });
   }
 
-  failAutomation() {
-    this.automationRunning = false;
-    this.automationFaulted = true;
-    if (this.automationFleet) {
-      const auto = this.getFleetAutomation(this.automationFleet.id);
-      auto.running = false;
-      auto.faulted = true;
-      if (auto.runTimer) {
-        clearTimeout(auto.runTimer);
-        auto.runTimer = null;
-      }
+  failAutomation(fleetId = this.automationFleet?.id) {
+    const auto = fleetId ? this.fleetAutomations.get(fleetId) : null;
+    if (!auto) return;
+    auto.running = false;
+    auto.faulted = true;
+    auto.runId += 1;
+    auto.requestId += 1;
+    if (auto.runTimer) clearTimeout(auto.runTimer);
+    auto.runTimer = null;
+    auto.initialScanPending = false;
+    auto.initialScanReady = false;
+    auto.resumeAfterExit = false;
+    auto.waitingForEta = false;
+    auto.awaitingMovementStart = false;
+    auto.needsScanAfterMovement = false;
+    auto.submissionPending = false;
+    auto.actionPending = false;
+    auto.postScanReady = false;
+    auto.lastKnownSector = null;
+    if (fleetId) this.setAutomationFleetState(fleetId, 'faulted');
+    if (this.isAutomationFleetSelected(fleetId)) {
+      this.automationStatus.textContent = 'Automazione bloccata per errore · premi Arresta per sbloccare';
+      this.refreshAutomationState(fleetId);
     }
-    this.automationInitialScanPending = false;
-    this.automationInitialScanReady = false;
-    this.automationResumeAfterExit = false;
-    this.automationWaitingForEta = false;
-    this.automationAwaitingMovementStart = false;
-    this.automationNeedsScanAfterMovement = false;
-    this.automationPostScanReady = false;
-    this.automationLastKnownSector = null;
-    this.automationRunId += 1;
-    clearTimeout(this.automationRunTimer);
-    this.automationRunTimer = null;
-    if (this.automationFleet) this.setAutomationFleetState(this.automationFleet.id, 'faulted');
-    this.automationStatus.textContent = 'Automazione bloccata per errore · premi Arresta per sbloccare';
-    this.refreshAutomationState();
   }
 
-  acknowledgeAutomationFault() {
-    if (!this.automationFaulted) return;
-    this.automationFaulted = false;
-    this.automationStatus.textContent = 'Errore riconosciuto · automazione arrestata';
-    this.refreshAutomationState();
-    console.info('[SDU] automation error acknowledged by user', { fleetId: this.automationFleet?.id });
+  acknowledgeAutomationFault(fleetId = this.automationFleet?.id) {
+    const auto = fleetId ? this.getFleetAutomation(fleetId) : null;
+    if (!auto || !auto.faulted) return;
+    auto.faulted = false;
+    if (this.isAutomationFleetSelected(fleetId)) {
+      this.automationStatus.textContent = 'Errore riconosciuto · automazione arrestata';
+      this.refreshAutomationState(fleetId);
+    }
+    console.info('[SDU] automation error acknowledged by user', { fleetId });
   }
 
-  canStartAutomation() {
-    const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
-    const canResumeMovement = (fleet?.state === 'MoveSubwarp' || fleet?.state === 'MoveWarp') && Boolean(fleet.to);
+  canStartAutomation(fleetId = this.automationFleet?.id) {
+    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    const auto = fleetId ? this.getFleetAutomation(fleetId) : null;
     return this.automationSelect.value === 'sdu-program'
-      && Boolean(this.automationResources)
-      && (Boolean(fleet?.sector) && fleet.state === 'Idle' || canResumeMovement);
+      && Boolean(auto?.resources)
+      && this.canFleetAutomationProceed(fleet);
   }
 
-  refreshAutomationState() {
-    if (!this.automationToggleButton) return;
-    if (this.automationRequestButton) this.automationRequestButton.disabled = this.automationRunning || !this.automationResources;
-    const state = this.automationRunning ? 'running'
-      : this.automationFaulted ? 'faulted'
-        : this.canStartAutomation() ? 'stopped' : 'unavailable';
+  canFleetAutomationProceed(fleet) {
+    const canResumeMovement = (fleet?.state === 'MoveSubwarp' || fleet?.state === 'MoveWarp') && Boolean(fleet.to);
+    return Boolean(fleet?.sector) && fleet.state === 'Idle' || canResumeMovement;
+  }
+
+  refreshAutomationState(fleetId = this.automationFleet?.id) {
+    if (!this.automationToggleButton || !this.isAutomationFleetSelected(fleetId)) return;
+    const auto = this.getFleetAutomation(fleetId);
+    if (this.automationRequestButton) this.automationRequestButton.disabled = auto?.running || !auto?.resources;
+    const state = auto?.running ? 'running'
+      : auto?.faulted ? 'faulted'
+        : this.canStartAutomation(fleetId) ? 'stopped' : 'unavailable';
     this.automationToggleButton.textContent = state === 'running' || state === 'faulted'
       ? 'Arresta automazione'
       : 'Avvia automazione';
     this.automationToggleButton.setAttribute('aria-pressed', String(state === 'running'));
     this.automationToggleButton.disabled = state === 'unavailable';
-    if (this.automationFleet) this.setAutomationFleetState(this.automationFleet.id, state);
+    this.setAutomationFleetState(fleetId, state);
   }
 
   setAutomationFleetState(fleetId, state) {
@@ -1808,21 +1886,19 @@ export class Hud extends Emitter {
   saveAutomationConfig() {
     const fleet = this.automationFleet;
     if (!fleet) return;
-    const config = {};
-    for (const control of this.automationForm.querySelectorAll('[data-config-key]')) {
-      if (control.readOnly) continue;
-      if (control instanceof HTMLInputElement && control.type === 'radio' && !control.checked) continue;
-      config[control.dataset.configKey] = control instanceof HTMLInputElement && control.type === 'checkbox'
-        ? control.checked
-        : control.value;
-    }
+    this.getFleetAutomation(fleet.id).config = this.readAutomationConfig();
+    const config = this.readAutomationConfig(false);
     try {
       localStorage.setItem(this.automationConfigKey(fleet), JSON.stringify(config));
       console.info('[SDU] fleet configuration saved', { fleetId: fleet.id, savedFields: Object.keys(config).length });
-      this.automationStatus.textContent = 'Parametri salvati nel browser';
+      if (this.isAutomationFleetSelected(fleet.id)) {
+        this.automationStatus.textContent = 'Parametri salvati nel browser';
+      }
     } catch (error) {
       console.error('[SDU] fleet configuration save failed', { fleetId: fleet.id, error });
-      this.automationStatus.textContent = 'Salvataggio locale non riuscito';
+      if (this.isAutomationFleetSelected(fleet.id)) {
+        this.automationStatus.textContent = 'Salvataggio locale non riuscito';
+      }
     }
   }
 
@@ -1835,80 +1911,96 @@ export class Hud extends Emitter {
     this.snapshot = snapshot;
     this.reconcileFleetStatusOverrides();
     this.rebuildList();
-    if (!this.automationOverlay.hidden && this.automationDestination) this.updateAutomationActionButton();
-    if (this.automationRunning && this.automationSubmissionPending) {
-      this.refreshAutomationState();
-      this.render();
+    const selectedAuto = this.getCurrentAutoState();
+    if (selectedAuto?.destination) this.updateAutomationActionButton(selectedAuto.fleetId);
+    for (const [fleetId, auto] of this.fleetAutomations) {
+      if (!auto.running) continue;
+      if (auto.submissionPending) {
+        this.refreshAutomationState(fleetId);
+        continue;
+      }
+      this.processFleetAutomationSnapshot(auto);
+    }
+    this.refreshAutomationState();
+    this.render();
+  }
+
+  processFleetAutomationSnapshot(auto) {
+    const { fleetId, runId } = auto;
+    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    if (!fleet) {
+      console.error('[SDU] automation stopped: fleet missing from snapshot', { fleetId });
+      this.failAutomation(fleetId);
       return;
     }
-    const updatedAutomationFleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
-    const expectedMovement = (this.automationPreparedAction === 'subwarp_start' && updatedAutomationFleet?.state === 'MoveSubwarp')
-      || (this.automationPreparedAction === 'warp_start' && updatedAutomationFleet?.state === 'MoveWarp');
-    if (this.automationRunning && this.automationAwaitingMovementStart) {
-      console.debug('[SDU] setSnapshot: automationAwaitingMovementStart active', { fleetId: this.automationFleet?.id, updatedState: updatedAutomationFleet?.state, expectedMovement, automationPreparedAction: this.automationPreparedAction });
+    const expectedMovement = (auto.preparedAction === 'subwarp_start' && fleet.state === 'MoveSubwarp')
+      || (auto.preparedAction === 'warp_start' && fleet.state === 'MoveWarp');
+    if (auto.awaitingMovementStart) {
+      console.debug('[SDU] setSnapshot: automationAwaitingMovementStart active', { fleetId, updatedState: fleet.state, expectedMovement, automationPreparedAction: auto.preparedAction });
       if (expectedMovement) {
-        this.automationAwaitingMovementStart = false;
-        this.automationResumeAfterExit = true;
-        this.waitForMovementArrival(updatedAutomationFleet, this.automationRunId);
-      } else if (updatedAutomationFleet?.state === 'Idle') {
-        this.automationStatus.textContent = 'Movimento confermato · attendo aggiornamento chain';
-        this.refreshAutomationState();
+        auto.awaitingMovementStart = false;
+        auto.resumeAfterExit = true;
+        this.waitForMovementArrival(fleet, runId);
+      } else if (fleet.state === 'Idle') {
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationStatus.textContent = 'Movimento confermato · attendo aggiornamento chain';
+        }
+        this.refreshAutomationState(fleetId);
       } else {
         console.error('[SDU] movement start produced unexpected fleet state', {
-          fleetId: this.automationFleet?.id,
-          state: updatedAutomationFleet?.state,
+          fleetId,
+          state: fleet.state,
         });
-        this.failAutomation();
+        this.failAutomation(fleetId);
       }
-    } else if (this.automationRunning && this.automationAwaitingMovementExit) {
-      if (updatedAutomationFleet?.state === 'Idle' && updatedAutomationFleet.sector) {
-        this.automationAwaitingMovementExit = false;
-        this.automationResumeAfterExit = false;
-        this.automationNeedsScanAfterMovement = true;
-        this.automationInitialScanPending = true;
-        this.automationInitialScanReady = false;
-        this.automationFleet = updatedAutomationFleet;
-        this.automationDestination = null;
-        console.info('[SDU] signed movement exit observed on-chain; starting local scan', { fleetId: updatedAutomationFleet.id });
-        this.beginInitialAutomationScan(this.automationRunId);
-      } else if (updatedAutomationFleet?.state === 'MoveSubwarp' || updatedAutomationFleet?.state === 'MoveWarp') {
-        this.automationStatus.textContent = 'Uscita firmata · attendo conferma chain';
-        this.refreshAutomationState();
+    } else if (auto.awaitingMovementExit) {
+      if (fleet.state === 'Idle' && fleet.sector) {
+        auto.awaitingMovementExit = false;
+        auto.resumeAfterExit = false;
+        auto.needsScanAfterMovement = true;
+        auto.initialScanPending = true;
+        auto.initialScanReady = false;
+        auto.destination = null;
+        console.info('[SDU] signed movement exit observed on-chain; starting local scan', { fleetId });
+        this.beginInitialAutomationScan(runId, null, fleetId);
+      } else if (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp') {
+        if (this.isAutomationFleetSelected(fleetId)) {
+          this.automationStatus.textContent = 'Uscita firmata · attendo conferma chain';
+        }
+        this.refreshAutomationState(fleetId);
       } else {
         console.error('[SDU] movement exit produced unexpected fleet state', {
-          fleetId: this.automationFleet?.id,
-          state: updatedAutomationFleet?.state,
+          fleetId,
+          state: fleet.state,
         });
-        this.failAutomation();
+        this.failAutomation(fleetId);
       }
-    } else if (this.automationRunning && this.automationResumeAfterExit) {
-      if (updatedAutomationFleet?.state === 'Idle' && updatedAutomationFleet.sector) {
-        this.automationResumeAfterExit = false;
-        this.automationInitialScanPending = true;
-        this.automationInitialScanReady = false;
-        this.automationFleet = updatedAutomationFleet;
-        this.automationDestination = null;
-        console.info('[SDU] movement exit observed on-chain; starting local scan', { fleetId: updatedAutomationFleet.id });
-        this.beginInitialAutomationScan(this.automationRunId);
-      } else if (updatedAutomationFleet?.state === 'MoveSubwarp' || updatedAutomationFleet?.state === 'MoveWarp') {
-        this.waitForMovementArrival(updatedAutomationFleet, this.automationRunId);
+    } else if (auto.resumeAfterExit) {
+      if (fleet.state === 'Idle' && fleet.sector) {
+        auto.resumeAfterExit = false;
+        auto.initialScanPending = true;
+        auto.initialScanReady = false;
+        auto.destination = null;
+        console.info('[SDU] movement exit observed on-chain; starting local scan', { fleetId });
+        this.beginInitialAutomationScan(runId, null, fleetId);
+      } else if (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp') {
+        this.waitForMovementArrival(fleet, runId);
       } else {
         console.error('[SDU] movement exit produced unexpected fleet state', {
-          fleetId: this.automationFleet?.id,
-          state: updatedAutomationFleet?.state,
+          fleetId,
+          state: fleet.state,
         });
-        this.failAutomation();
+        this.failAutomation(fleetId);
       }
-    } else if (this.automationRunning && expectedMovement) {
-      this.automationResumeAfterExit = true;
-      this.waitForMovementArrival(updatedAutomationFleet, this.automationRunId);
-    } else if (this.automationRunning && !this.canStartAutomation()) {
-      console.error('[SDU] automation stopped: fleet preconditions no longer hold', { fleetId: this.automationFleet?.id });
-      this.failAutomation();
+    } else if (expectedMovement) {
+      auto.resumeAfterExit = true;
+      this.waitForMovementArrival(fleet, runId);
+    } else if (!this.canFleetAutomationProceed(fleet)) {
+      console.error('[SDU] automation stopped: fleet preconditions no longer hold', { fleetId });
+      this.failAutomation(fleetId);
     } else {
-      this.refreshAutomationState();
+      this.refreshAutomationState(fleetId);
     }
-    this.render();
   }
 
   reconcileFleetStatusOverrides() {
