@@ -1684,7 +1684,19 @@ export class Hud extends Emitter {
   async continueAutomationAfterInitialScan(runId, fleetId = this.automationFleet?.id) {
     const auto = this.getFleetAutomation(fleetId);
     if (!auto || !auto.running || runId !== auto.runId) return;
-    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    let fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    // Snapshot ancora in movimento dopo l'exit confermato: forza il refresh e attende Idle con settore
+    for (let i = 0; i < 15 && (!fleet?.sector || fleet.state !== 'Idle') && auto.running && runId === auto.runId; i += 1) {
+      this.emit('refresh');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    }
+    if (!auto.running || runId !== auto.runId) return;
+    // Scan confermata on-chain ma snapshot ancora in movimento: la flotta è Idle al settore noto
+    if (fleet && auto.postScanReady && auto.lastKnownSector && (!fleet.sector || fleet.state !== 'Idle')) {
+      console.warn('[SDU] post-scan: snapshot stale, using last known sector', { fleetId, state: fleet.state, sector: auto.lastKnownSector });
+      fleet = { ...fleet, state: 'Idle', sector: auto.lastKnownSector };
+    }
     trace('post-scan', fleetId, { run: runId, state: fleet?.state, sector: fleet?.sector, ready: auto.postScanReady });
     if (!fleet || (!auto.postScanReady && fleet.state !== 'Idle') || !fleet.sector) {
       console.error('[SDU] post-scan destination request blocked: fleet is not Idle', { fleetId: fleet?.id, state: fleet?.state, sector: fleet?.sector, automationPostScanReady: auto.postScanReady });
