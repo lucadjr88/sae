@@ -9,6 +9,12 @@ import { LocalSigner } from '../automation/localSigner.js';
 
 const fmtSector = s => `(${s[0]}, ${s[1]})`;
 
+// Log compatto su una riga: [SDU] step fleet=abcd12 k=v ...
+const trace = (step, fleetId, info = {}) => {
+  const kv = Object.entries(info).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' ');
+  console.debug(`[SDU] ${step} fleet=${String(fleetId).slice(0, 6)}${kv ? ` ${kv}` : ''}`);
+};
+
 function fmtEta(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
   const h = Math.floor(s / 3600);
@@ -612,7 +618,6 @@ export class Hud extends Emitter {
       auto.resources &&
       now - auto.resourcesLoadedAt < 30_000
     ) {
-      console.debug('[SDU] fleet resources cached, skipping fetch', { fleetId: fleet.id });
       if (requestId !== auto.requestId) return;
       const resources = auto.resources;
       for (const key of ['fuelCurrent', 'fuelCapacity', 'fuelCurrentPct', 'foodCurrent']) {
@@ -631,7 +636,6 @@ export class Hud extends Emitter {
 
     try {
       const query = new URLSearchParams({ profileId: this.snapshot.profileId, fleetId: fleet.id });
-      console.debug('[SDU] loading fleet resources', { fleetId: fleet.id });
       const response = await fetch(`/api/sea/fleet-resources?${query}`);
       const resources = await response.json();
       if (!response.ok) throw new Error(resources.error || 'resource lookup failed');
@@ -646,7 +650,7 @@ export class Hud extends Emitter {
       auto.resourcesLoadedFor = fleet.id;
       auto.resourcesLoadedAt = now;
       this.observeAutomationFuel(resources, fleet.id);
-      console.debug('[SDU] fleet resources loaded', resources);
+      trace('resources', fleet.id, { fuel: resources?.fuelCurrent, fuelPct: resources?.fuelCurrentPct?.toFixed?.(1), food: resources?.foodCurrent });
       if (this.isAutomationFleetSelected(fleet.id)) {
         this.automationRequestButton.disabled = auto.running;
         this.automationStatus.textContent = `Fuel ${resources.fuelCurrent.toFixed(2)} / ${resources.fuelCapacity.toFixed(2)} (${resources.fuelCurrentPct.toFixed(1)}%) · Food ${resources.foodCurrent.toFixed(2)}`;
@@ -789,7 +793,7 @@ export class Hud extends Emitter {
     const starbase = auto.config?.sbCoords
       ?? this.automationForm.querySelector('[data-scan-param="sbCoords"]')?.value;
     let operation = resolveScanOperation(fleet, destination, movementMode);
-    console.debug('[SDU] prepareAutomationScan entry', { fleetId: fleet.id, fleetState: fleet.state, destination: { x: destination.x, y: destination.y }, automationNeedsScanAfterMovement: auto.needsScanAfterMovement, automationResumeAfterExit: auto.resumeAfterExit, operation });
+    trace('prepare', fleet.id, { state: fleet.state, dest: `${destination.x},${destination.y}`, action: operation?.action, needsScan: auto.needsScanAfterMovement });
     // Dopo una movement exit già confermata su chain, lo snapshot può essere obsoleto (MoveSubwarp).
     // Forziamo la scan invece di preparare una exit ridondante.
     if (auto.needsScanAfterMovement && !auto.resumeAfterExit) {
@@ -968,6 +972,7 @@ export class Hud extends Emitter {
       // Fuel insufficiente per il movimento: rifornimento alla base (modello Sly handleResupply)
       if (/^(SUBWARP|WARP)_FUEL_INSUFFICIENT$/.test(message) && (action === 'subwarp_start' || action === 'warp_start') && !auto.resupply && auto.running) {
         auto.resupplyRequested = true;
+        trace('fuel insufficient', fleetId, { action, message });
         return false;
       }
       if (auto.initialScanPending && auto.running) this.failAutomation(fleetId);
@@ -1034,6 +1039,8 @@ export class Hud extends Emitter {
     auto.submissionPending = true;
     if (this.isAutomationFleetSelected(fleetId)) this.automationScanSubmitButton.disabled = true;
     try {
+      trace('submit', fleetId, { action: submittedAction, prepareId: auto.scanPrepareId });
+      const t0 = Date.now();
       const submitPromise = this.transactionClient.signAndSubmit({
         prepareId: auto.scanPrepareId,
         profileId: this.snapshot.profileId,
@@ -1046,6 +1053,7 @@ export class Hud extends Emitter {
       const result = await Promise.race([submitPromise, timeoutPromise]);
       clearTimeout(submitTimeout);
       submitTimeout = null;
+      trace('submit ok', fleetId, { action: submittedAction, ms: Date.now() - t0 });
       auto.submissionPending = false;
       auto.scanPrepareId = null;
       auto.scanTransaction = null;
@@ -1211,6 +1219,18 @@ export class Hud extends Emitter {
         }
         await this.beginInitialAutomationScan(runId, preparedResult, fleetId);
         return;
+      }
+      // Timeout di submit: la tx può essere comunque andata a buon fine, si verifica lo stato reale prima di fallire
+      if (movementStart && error?.message === 'TRANSACTION_SUBMIT_TIMEOUT' && auto.running && runId === auto.runId) {
+        for (let i = 0; i < 10 && auto.running && runId === auto.runId; i += 1) {
+          this.emit('refresh');
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const live = this.snapshot.fleets.find(item => item.id === fleetId);
+          if (live?.state === 'MoveSubwarp' || live?.state === 'MoveWarp') {
+            console.info('[SDU] submit timeout but movement started on-chain; continuing', { fleetId, state: live.state });
+            return;
+          }
+        }
       }
       if ((scanAction || movementStart || movementExit) && auto.running && runId === auto.runId) this.failAutomation(fleetId);
     } finally {
@@ -1529,7 +1549,7 @@ export class Hud extends Emitter {
       this.failAutomation(fleetId);
       return;
     }
-    console.debug('[SDU] beginInitialAutomationScan entry', { runId, fleetId: fleet.id, fleetState: fleet.state, sector: fleet.sector, automationNeedsScanAfterMovement: auto.needsScanAfterMovement, automationResumeAfterExit: auto.resumeAfterExit, automationLastKnownSector: auto.lastKnownSector, hasPreparedResult: Boolean(preparedResult), preparedCoords: preparedResult?.coordinates });
+    trace('initial scan', fleet.id, { run: runId, state: fleet.state, sector: fleet.sector, needsScan: auto.needsScanAfterMovement, prepared: Boolean(preparedResult) });
     if (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp') {
       if (auto.needsScanAfterMovement && !auto.resumeAfterExit) {
         // Il movimento è già confermato su chain (exit o timeout): ignoriamo lo snapshot obsoleto e procediamo con lo scan
@@ -1620,7 +1640,6 @@ export class Hud extends Emitter {
 
   async waitForMovementArrival(fleet, runId, preparedResult = null) {
     const auto = this.getFleetAutomation(fleet.id);
-    console.debug('[SDU] waitForMovementArrival entry', { runId, fleetId: fleet.id, fleetState: fleet.state, hasPreparedResult: Boolean(preparedResult), arrivalSeconds: preparedResult?.arrivalSeconds, fleetArrival: fleet.arrival, automationWaitingForEta: auto.waitingForEta });
     if (!preparedResult && !fleet.to) {
       console.error('[SDU] movement recovery stopped: on-chain target missing', { fleetId: fleet.id, state: fleet.state });
       this.failAutomation(fleet.id);
@@ -1634,7 +1653,7 @@ export class Hud extends Emitter {
       : Number(fleet.arrival ?? 0);
     const remaining = Math.max(0, arrivalMs - Date.now());
     const movementName = fleet.state === 'MoveWarp' ? 'Warp' : 'Subwarp';
-    console.debug('[SDU] waitForMovementArrival calculated', { fleetId: fleet.id, arrivalMs, remaining, remainingSec: Math.ceil(remaining / 1000), movementName });
+    trace('wait arrival', fleet.id, { run: runId, state: fleet.state, movement: movementName, remainingSec: Math.ceil(remaining / 1000) });
     if (remaining === 0) {
       clearTimeout(auto.runTimer);
       auto.runTimer = null;
@@ -1642,7 +1661,6 @@ export class Hud extends Emitter {
       if (this.isAutomationFleetSelected(fleet.id)) {
         this.automationStatus.textContent = `${movementName} arrivato · prepara uscita`;
       }
-      console.debug('[SDU] waitForMovementArrival: remaining === 0, launching runAutomationAction', { fleetId: fleet.id, runId });
       if (auto.running && runId === auto.runId) await this.runAutomationAction(runId, fleet.id);
       return;
     }
@@ -1667,7 +1685,7 @@ export class Hud extends Emitter {
     const auto = this.getFleetAutomation(fleetId);
     if (!auto || !auto.running || runId !== auto.runId) return;
     const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
-    console.debug('[SDU] continueAutomationAfterInitialScan entry', { runId, fleetId, fleetState: fleet?.state, sector: fleet?.sector, automationPostScanReady: auto.postScanReady });
+    trace('post-scan', fleetId, { run: runId, state: fleet?.state, sector: fleet?.sector, ready: auto.postScanReady });
     if (!fleet || (!auto.postScanReady && fleet.state !== 'Idle') || !fleet.sector) {
       console.error('[SDU] post-scan destination request blocked: fleet is not Idle', { fleetId: fleet?.id, state: fleet?.state, sector: fleet?.sector, automationPostScanReady: auto.postScanReady });
       this.failAutomation(fleetId);
@@ -1715,7 +1733,7 @@ export class Hud extends Emitter {
       ?? this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value
       ?? 'subwarp';
     let operation = resolveScanOperation(fleet, auto.destination, movementMode);
-    console.debug('[SDU] runAutomationAction entry', { runId, fleetId: fleet.id, fleetState: fleet.state, destination: { x: auto.destination.x, y: auto.destination.y }, automationNeedsScanAfterMovement: auto.needsScanAfterMovement, automationResumeAfterExit: auto.resumeAfterExit, automationPreparedAction: auto.preparedAction, resolvedOperation: operation });
+    trace('action', fleet.id, { run: runId, state: fleet.state, dest: `${auto.destination.x},${auto.destination.y}`, action: operation?.action, prepared: auto.preparedAction, needsScan: auto.needsScanAfterMovement });
     // Se il movimento è già confermato su chain (exit o start), lo snapshot può
     // essere obsoleto (MoveSubwarp/MoveWarp): forziamo la scan per non attendere
     // invano l'aggiornamento chain o l'arrivo di un movimento già concluso.
@@ -1854,6 +1872,7 @@ export class Hud extends Emitter {
     auto.resupply = null;
     auto.resupplyRequested = false;
     auto.resupplyDoneAt = `${x},${y}`;
+    trace('resupply done', fleetId, { base: `${x},${y}` });
     auto.needsScanAfterMovement = false;
     auto.awaitingMovementExit = false;
     auto.resumeAfterExit = false;
@@ -1869,6 +1888,8 @@ export class Hud extends Emitter {
     if (!auto.running || runId !== auto.runId) return;
     console.info('[SDU] resupply completed; scanning at starbase', { fleetId });
     auto.initialScanPending = true;
+    // Il chiamante tiene actionPending: va rilasciato prima di riprendere con la scan
+    auto.actionPending = false;
     await this.beginInitialAutomationScan(runId, null, fleetId);
   }
 
@@ -2024,7 +2045,6 @@ export class Hud extends Emitter {
       }
       this.updateRecommendedRange();
       this.updateFeeControls();
-      console.debug('[SDU] fleet configuration loaded', { fleetId: fleet.id, savedFields: Object.keys(saved).length });
     } catch {
       console.error('[SDU] fleet configuration load failed', { fleetId: fleet.id });
       this.automationStatus.textContent = 'Configurazione salvata non valida';
