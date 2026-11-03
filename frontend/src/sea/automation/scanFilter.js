@@ -1,7 +1,7 @@
 function normalizeCoordPair(value) {
   const cleaned = Array.isArray(value) ? value.join(',') : String(value ?? '').replace(/\s/g, '');
   const parts = cleaned.split(',');
-  if (parts.length !== 2 || parts.some(part => part === '' || !Number.isFinite(Number(part)))) {
+  if (parts.length !== 2 || parts.some(part => part === '' || !Number.isSafeInteger(Number(part)))) {
     throw new Error(`Coordinate non valide: ${cleaned}`);
   }
   return `${parts[0]},${parts[1]}`;
@@ -114,7 +114,9 @@ export async function requestScanFilter({ host, port, timeoutSeconds = 10, paylo
     const result = await response.json();
     console.info('[SDU] scan-filter response', { status: response.status, ok: response.ok, result });
     if (!response.ok) throw new Error(result?.error || `API scan-filter: HTTP ${response.status}`);
-    if (result?.x == null || result?.y == null || !Number.isFinite(Number(result.x)) || !Number.isFinite(Number(result.y))) {
+    if (result?.x == null || result?.y == null
+      || !Number.isSafeInteger(Number(result.x))
+      || !Number.isSafeInteger(Number(result.y))) {
       throw new Error('Risposta scan-filter senza coordinate valide');
     }
     return result;

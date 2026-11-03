@@ -14,6 +14,9 @@ export class FleetFeed extends Emitter {
     this.wsIndex = 0;
     this.isConnecting = false;
     this.reconnectAttempts = 0;
+    this.wsSubscriptions = new Map();
+    this.wsSubscribeRequests = new Map();
+    this.wsRequestId = 0;
   }
 
   start() {
@@ -28,6 +31,8 @@ export class FleetFeed extends Emitter {
       try { this.ws.close(); } catch {}
       this.ws = null;
     }
+    this.wsSubscriptions.clear();
+    this.wsSubscribeRequests.clear();
   }
 
   async initWsAndFallback() {
@@ -82,6 +87,7 @@ export class FleetFeed extends Emitter {
         this.reconnectAttempts = 0;
         console.log(`[FleetFeed] WebSocket stabilito con successo su: ${ep.name || wsUrl}`);
         this.emit('status', 'connected');
+        this.refreshWsSubscriptions();
 
         // Refresh immediato dello snapshot alla (ri)connessione così
         // l'automazione in attesa riceve i dati chain aggiornati senza
@@ -95,7 +101,18 @@ export class FleetFeed extends Emitter {
       this.ws.onmessage = async (event) => {
         try {
           const msg = JSON.parse(event.data);
-          // Ignora slotNotification (ogni ~400ms) per evitare consumo RPC a valanga
+          if (Number.isInteger(msg.id) && this.wsSubscribeRequests.has(msg.id)) {
+            const fleetId = this.wsSubscribeRequests.get(msg.id);
+            this.wsSubscribeRequests.delete(msg.id);
+            if (Number.isInteger(msg.result)) {
+              if (this.lastSnapshot?.fleets?.some(fleet => fleet.id === fleetId)) {
+                this.wsSubscriptions.set(fleetId, msg.result);
+              } else {
+                this.sendWsRequest('accountUnsubscribe', [msg.result]);
+              }
+            }
+            return;
+          }
           if (msg.method === 'accountNotification') {
             const now = Date.now();
             if (!this.lastWsPoll || (now - this.lastWsPoll) > 20000) {
@@ -114,6 +131,8 @@ export class FleetFeed extends Emitter {
       this.ws.onclose = () => {
         clearTimeout(connTimeout);
         this.isConnecting = false;
+        this.wsSubscriptions.clear();
+        this.wsSubscribeRequests.clear();
         if (this.stopped) return;
 
         this.reconnectAttempts++;
@@ -143,6 +162,39 @@ export class FleetFeed extends Emitter {
     }, interval);
   }
 
+  refreshWsSubscriptions() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const fleetIds = new Set((this.lastSnapshot?.fleets ?? [])
+      .map(fleet => fleet.id)
+      .filter(fleetId => typeof fleetId === 'string'));
+    for (const [fleetId, subscriptionId] of this.wsSubscriptions) {
+      if (fleetIds.has(fleetId)) continue;
+      this.sendWsRequest('accountUnsubscribe', [subscriptionId]);
+      this.wsSubscriptions.delete(fleetId);
+    }
+    const pendingFleetIds = new Set(this.wsSubscribeRequests.values());
+    for (const fleetId of fleetIds) {
+      if (this.wsSubscriptions.has(fleetId) || pendingFleetIds.has(fleetId)) continue;
+      const requestId = this.sendWsRequest('accountSubscribe', [fleetId, { commitment: 'confirmed' }]);
+      if (requestId !== null) {
+        this.wsSubscribeRequests.set(requestId, fleetId);
+        pendingFleetIds.add(fleetId);
+      }
+    }
+  }
+
+  sendWsRequest(method, params) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return null;
+    const id = ++this.wsRequestId;
+    try {
+      this.ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
+      return id;
+    } catch (error) {
+      console.warn(`[FleetFeed] Richiesta WebSocket ${method} non inviata`, error);
+      return null;
+    }
+  }
+
   async pollOnce() {
     try {
       const query = new URLSearchParams({ profileId: this.profileId });
@@ -150,6 +202,7 @@ export class FleetFeed extends Emitter {
       const snapshot = await response.json();
       if (!response.ok) throw new Error(snapshot.error);
       this.lastSnapshot = snapshot;
+      this.refreshWsSubscriptions();
       this.emit('status', 'connected');
       this.emit('snapshot', snapshot);
     } catch {

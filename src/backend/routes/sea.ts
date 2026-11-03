@@ -28,6 +28,7 @@ const coder = new BorshCoder(sageIdl);
 const ACCOUNT_FILTER = (name: string) => ({ memcmp: { offset: 0, bytes: bs58.encode(BorshAccountsCoder.accountDiscriminator(name)) } });
 const SNAPSHOT_TTL_MS = 15_000;
 const STARBASE_TTL_MS = 24 * 60 * 60 * 1000;
+const SCAN_PREPARATION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SIZE_KEYS = ['xx_small', 'x_small', 'small', 'medium', 'large', 'capital', 'commander', 'titan'];
 const SIZE_NAMES = ['xxSmall', 'xSmall', 'small', 'medium', 'large', 'capital', 'commander', 'titan'];
 const FACTIONS = ['Unaligned', 'MUD', 'ONI', 'Ustur'];
@@ -164,6 +165,7 @@ const scanPreparations = new Map<string, ScanPreparation>();
 const scanPreparationDirectory = path.join(process.cwd(), 'cache', 'sea-preparations');
 
 function scanPreparationPath(prepareId: string): string {
+  if (!SCAN_PREPARATION_ID_PATTERN.test(prepareId)) throw new Error('INVALID_SCAN_PREPARATION_ID');
   return path.join(scanPreparationDirectory, `${prepareId}.json`);
 }
 
@@ -478,9 +480,8 @@ async function withRpc<T>(profileId: string, action: (connection: any) => Promis
       const value = await action(pick.connection);
       released = true;
       pick.release({ success: true, latencyMs: Date.now() - startedAt });
-      return value;
-      onRpc?.(pick.endpoint);
       await logRpcAttempt(profileId, pick.endpoint?.name ?? 'unknown', pick.endpoint?.url ?? 'unknown', attempt, maxAttempts);
+      return value;
     } catch (error) {
       const errorType = rpcErrorType(error);
       if (pick) {
@@ -1676,6 +1677,9 @@ router.post('/sea/scan/submit', async (req, res) => {
   const profileInput = typeof req.body?.profileId === 'string' ? req.body.profileId : '';
   const walletInput = typeof req.body?.wallet === 'string' ? req.body.wallet : '';
   const transactionInput = typeof req.body?.transaction === 'string' ? req.body.transaction : '';
+  if (!SCAN_PREPARATION_ID_PATTERN.test(prepareId)) {
+    return res.status(400).json({ error: 'INVALID_SCAN_PREPARATION_ID' });
+  }
   let preparation: ScanPreparation | undefined;
   try {
     preparation = await getScanPreparation(prepareId);
@@ -1686,16 +1690,6 @@ router.post('/sea/scan/submit', async (req, res) => {
   if (!preparation) {
     console.warn('[sea] transaction preparation not found', { pid: process.pid, prepareId });
     return res.status(410).json({ error: 'SCAN_PREPARATION_NOT_FOUND' });
-  }
-  if (preparation.expiresAt <= Date.now()) {
-    console.warn('[sea] transaction preparation expired', {
-      pid: process.pid,
-      action: preparation.action,
-      prepareId,
-      expiredByMs: Date.now() - preparation.expiresAt,
-    });
-    await deleteScanPreparation(prepareId);
-    return res.status(410).json({ error: 'SCAN_PREPARATION_EXPIRED' });
   }
 
   let profileId: string;
@@ -1712,6 +1706,16 @@ router.post('/sea/scan/submit', async (req, res) => {
 
   if (profileId !== preparation.profileId || walletAddress.toBase58() !== preparation.wallet) {
     return res.status(403).json({ error: 'SCAN_PREPARATION_CONTEXT_MISMATCH' });
+  }
+  if (preparation.expiresAt <= Date.now()) {
+    console.warn('[sea] transaction preparation expired', {
+      pid: process.pid,
+      action: preparation.action,
+      prepareId,
+      expiredByMs: Date.now() - preparation.expiresAt,
+    });
+    await deleteScanPreparation(prepareId);
+    return res.status(410).json({ error: 'SCAN_PREPARATION_EXPIRED' });
   }
   if (!signedTransaction.message.staticAccountKeys[0]?.equals(walletAddress)) {
     return res.status(403).json({ error: 'SCAN_FEE_PAYER_MISMATCH' });

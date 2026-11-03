@@ -34,31 +34,46 @@ async function startMap(profileId: string) {
   if (!form) return;
   if (loader) loader.hidden = false;
   form.hidden = true;
-  const starbases = classifyStarbases(await fetch('/api/sea/starbases').then(response => {
-    if (!response.ok) throw new Error('starbases unavailable');
-    return response.json();
-  }).catch(() => []));
-  setRotation(Number(new URLSearchParams(location.search).get('rot')) || 0);
-  const feed = new FleetFeed({ profileId, pollMs: 15000 });
-  const hud = new Hud(document.querySelector<HTMLElement>('#hud'), starbases, wallet);
-  feed.on('snapshot', snapshot => hud.setSnapshot(snapshot));
-  feed.on('status', status => hud.setConnection(status));
-  let resolveMapReady: () => void = () => {};
-  const mapReady = new Promise<void>(resolve => { resolveMapReady = resolve; });
-  const game = new Phaser.Game({
-    type: Phaser.AUTO,
-    parent: 'game',
-    scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
-    scene: [BootScene, MapScene],
-  });
-  game.registry.set('services', { feed, hud, starbases, onMapReady: resolveMapReady });
-  await Promise.all([feed.start(), mapReady]);
-  if (loader) loader.hidden = true;
-  window.addEventListener('pagehide', () => {
-    feed.stop();
-    hud.destroy();
-    game.destroy(true);
-  }, { once: true });
+  let feed: FleetFeed | null = null;
+  let hud: Hud | null = null;
+  let game: Phaser.Game | null = null;
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    feed?.stop();
+    hud?.destroy();
+    game?.destroy(true);
+  };
+  try {
+    const starbases = classifyStarbases(await fetch('/api/sea/starbases').then(response => {
+      if (!response.ok) throw new Error('starbases unavailable');
+      return response.json();
+    }).catch(() => []));
+    setRotation(Number(new URLSearchParams(location.search).get('rot')) || 0);
+    feed = new FleetFeed({ profileId, pollMs: 15000 });
+    hud = new Hud(document.querySelector<HTMLElement>('#hud'), starbases, wallet);
+    feed.on('snapshot', snapshot => hud?.setSnapshot(snapshot));
+    feed.on('status', status => hud?.setConnection(status));
+    let resolveMapReady: () => void = () => {};
+    const mapReady = new Promise<void>(resolve => { resolveMapReady = resolve; });
+    game = new Phaser.Game({
+      type: Phaser.AUTO,
+      parent: 'game',
+      scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
+      scene: [BootScene, MapScene],
+    });
+    game.registry.set('services', { feed, hud, starbases, onMapReady: resolveMapReady });
+    window.addEventListener('pagehide', cleanup, { once: true });
+    await Promise.all([feed.start(), mapReady]);
+    if (loader) loader.hidden = true;
+  } catch (error) {
+    cleanup();
+    if (loader) loader.hidden = true;
+    form.hidden = false;
+    if (profileError) profileError.textContent = 'Impossibile avviare la mappa Sea';
+    console.error('[Sea] map startup failed', error);
+  }
 }
 
 form?.addEventListener('submit', event => {
