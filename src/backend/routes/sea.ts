@@ -648,9 +648,9 @@ async function createSnapshot(profileId: string) {
   };
 }
 
-async function getSnapshot(profileId: string) {
+async function getSnapshot(profileId: string, force = false) {
   const cached = snapshotCache.get(profileId);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (!force && cached && cached.expiresAt > Date.now()) return cached.value;
   const pending = snapshotPending.get(profileId);
   if (pending) return pending;
   const request = createSnapshot(profileId).then(value => {
@@ -752,7 +752,7 @@ router.get('/sea/snapshot', async (req, res) => {
     return res.status(400).json({ error: 'INVALID_PROFILE_ID' });
   }
   try {
-    return res.json(await getSnapshot(profileId));
+    return res.json(await getSnapshot(profileId, req.query.force === '1'));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
     console.error('[sea] snapshot creation failed', {

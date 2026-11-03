@@ -195,9 +195,10 @@ export class FleetFeed extends Emitter {
     }
   }
 
-  async pollOnce() {
+  async pollOnce(force = false) {
     try {
       const query = new URLSearchParams({ profileId: this.profileId });
+      if (force) query.set('force', '1');
       const response = await fetch(`/api/sea/snapshot?${query}`);
       const snapshot = await response.json();
       if (!response.ok) throw new Error(snapshot.error);
@@ -211,7 +212,7 @@ export class FleetFeed extends Emitter {
     }
   }
 
-  async poll() {
-    return this.pollOnce();
+  async poll(force = false) {
+    return this.pollOnce(force);
   }
 }

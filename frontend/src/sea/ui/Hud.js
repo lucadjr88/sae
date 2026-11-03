@@ -19,7 +19,8 @@ function fmtEta(ms) {
 function describe(fleet, now, nameAt, scanSummary) {
   if (fleet.state === 'MoveWarp' || fleet.state === 'MoveSubwarp') {
     const kind = fleet.state === 'MoveWarp' ? 'warp' : 'subwarp';
-    return `${kind} → ${nameAt(fleet.to)} · arrivo ${fmtEta(fleet.arrival - now)}`;
+    const movementStatus = `${kind} → ${nameAt(fleet.to)} · arrivo ${fmtEta(fleet.arrival - now)}`;
+    return scanSummary ? `${movementStatus} · ${scanSummary}` : movementStatus;
   }
   if (fleet.state === 'Idle' && scanSummary) return scanSummary;
   if (fleet.sector) return `${fleet.state} · ${nameAt(fleet.sector)}${fleet.state === 'Idle' && fleet.scanCooldownEnd > now ? ' · scanning SDU' : ''}`;
@@ -1043,7 +1044,7 @@ export class Hud extends Emitter {
         auto.scanPolicy.observeScanResult(result.scanResult?.probabilityPct);
         auto.lastScanSummary = this.formatScanResult(result.scanResult);
         const fleetScanSummary = this.formatFleetScanStatus(result.scanResult);
-        if (fleetScanSummary) this.fleetScanSummaries.set(fleetId, fleetScanSummary);
+        this.fleetScanSummaries.set(fleetId, fleetScanSummary);
         if (this.isAutomationFleetSelected(fleetId)) this.automationResult.textContent = auto.lastScanSummary;
         console.info('[SDU] scan result', { fleetId, ...result.scanResult });
         this.render();
@@ -1208,8 +1209,11 @@ export class Hud extends Emitter {
   }
 
   formatFleetScanStatus(scanResult) {
-    if (!scanResult || !Number.isFinite(scanResult.probabilityPct) || !Number.isFinite(scanResult.sduFound)) return null;
-    return `Scanned: ${Math.round(scanResult.probabilityPct)}% +${Number(scanResult.sduFound).toFixed(0)}SDU`;
+    if (!scanResult) return 'Scan confermata';
+    const details = [];
+    if (Number.isFinite(scanResult.probabilityPct)) details.push(`${Math.round(scanResult.probabilityPct)}%`);
+    if (Number.isFinite(scanResult.sduFound)) details.push(`+${Number(scanResult.sduFound).toFixed(0)}SDU`);
+    return `Scan confermata${details.length ? ` · ${details.join(' ')}` : ''}`;
   }
 
   populateAutomationForm(fleet) {
@@ -1929,10 +1933,17 @@ export class Hud extends Emitter {
     const { fleetId, runId } = auto;
     const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
     if (!fleet) {
+      auto.missingSnapshots = (auto.missingSnapshots ?? 0) + 1;
+      if (auto.missingSnapshots < 3) {
+        console.warn('[SDU] fleet missing from snapshot · forcing refresh', { fleetId, attempt: auto.missingSnapshots });
+        this.emit('refresh');
+        return;
+      }
       console.error('[SDU] automation stopped: fleet missing from snapshot', { fleetId });
       this.failAutomation(fleetId);
       return;
     }
+    auto.missingSnapshots = 0;
     const expectedMovement = (auto.preparedAction === 'subwarp_start' && fleet.state === 'MoveSubwarp')
       || (auto.preparedAction === 'warp_start' && fleet.state === 'MoveWarp');
     if (auto.awaitingMovementStart) {

@@ -54,6 +54,7 @@ async function startMap(profileId: string) {
     feed = new FleetFeed({ profileId, pollMs: 15000 });
     hud = new Hud(document.querySelector<HTMLElement>('#hud'), starbases, wallet);
     feed.on('snapshot', snapshot => hud?.setSnapshot(snapshot));
+    hud.on('refresh', () => void feed?.poll(true));
     feed.on('status', status => hud?.setConnection(status));
     let resolveMapReady: () => void = () => {};
     const mapReady = new Promise<void>(resolve => { resolveMapReady = resolve; });
