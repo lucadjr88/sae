@@ -1562,6 +1562,20 @@ export class Hud extends Emitter {
         return;
       }
     }
+    const docked = fleet.state === 'StarbaseLoadingBay' && fleet.sector;
+    if (docked || (fleet.state === 'Idle' && fleet.sector && this.isStarbaseCoord(`${fleet.sector[0]},${fleet.sector[1]}`, auto)
+      && auto.resupplyDoneAt !== `${fleet.sector[0]},${fleet.sector[1]}`)) {
+      // Flotta su una SB (docked o idle): rifornimento completo prima della scan
+      auto.resupply = { base: [fleet.sector[0], fleet.sector[1]] };
+      auto.destination = { x: fleet.sector[0], y: fleet.sector[1], sb: null };
+      auto.initialScanPending = true;
+      if (this.isAutomationFleetSelected(fleetId)) this.automationStatus.textContent = `Flotta alla SB ${fleet.sector[0]},${fleet.sector[1]} · rifornimento`;
+      if (!auto.actionPending) {
+        auto.actionPending = true;
+        try { await this.performResupply(runId, fleetId); } finally { auto.actionPending = false; }
+      }
+      return;
+    }
     if (fleet.state !== 'Idle' || !fleet.sector) {
       console.error('[SDU] initial scan stopped: unsupported fleet state', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector });
       this.failAutomation(fleetId);
@@ -1727,9 +1741,11 @@ export class Hud extends Emitter {
       this.failAutomation(fleetId);
       return;
     }
-    // Arrivati alla base con rifornimento attivo: niente scan, si rifornisce
-    if (operation.action === 'scan' && auto.resupply) {
+    // Flotta sulle coordinate di una SB (arrivo casuale, avvio, o rifornimento richiesto): dock, scarico, refuel, undock, poi scan
+    const destinationKey = `${auto.destination.x},${auto.destination.y}`;
+    if (operation.action === 'scan' && (auto.resupply || (this.isStarbaseCoord(destinationKey, auto) && auto.resupplyDoneAt !== destinationKey))) {
       if (auto.actionPending) return;
+      auto.resupply ??= { base: [auto.destination.x, auto.destination.y] };
       auto.actionPending = true;
       try { await this.performResupply(runId, fleetId); } finally { auto.actionPending = false; }
       return;
@@ -1767,6 +1783,7 @@ export class Hud extends Emitter {
     if (!auto.running || runId !== auto.runId) return;
     if (operation.action === 'subwarp_start' || operation.action === 'warp_start') {
       auto.preparedAction = operation.action;
+      auto.resupplyDoneAt = null;
       auto.awaitingMovementStart = true;
       auto.needsScanAfterMovement = true;
       console.debug('[SDU] runAutomationAction: awaiting movement start', { fleetId: fleet.id, action: operation.action, expectedState: operation.action === 'warp_start' ? 'MoveWarp' : 'MoveSubwarp' });
@@ -1790,12 +1807,17 @@ export class Hud extends Emitter {
     return true;
   }
 
+  isStarbaseCoord(key, auto) {
+    return resolveStarbaseList(this.automationForm, auto.config).split(';').includes(key);
+  }
+
   // Sequenza di handleResupply (Sly): dock → scarico SDU → carico fuel → undock
   async performResupply(runId, fleetId) {
     const auto = this.getFleetAutomation(fleetId);
     const [x, y] = auto.resupply.base;
+    const alreadyDocked = this.snapshot.fleets.find(item => item.id === fleetId)?.state === 'StarbaseLoadingBay';
     try {
-      for (const step of ['dock', 'unload_sdu', 'load_fuel', 'undock']) {
+      for (const step of alreadyDocked ? ['unload_sdu', 'load_fuel', 'undock'] : ['dock', 'unload_sdu', 'load_fuel', 'undock']) {
         if (!auto.running || runId !== auto.runId) return;
         if (this.isAutomationFleetSelected(fleetId)) this.automationStatus.textContent = `Rifornimento ${x},${y} · ${step}`;
         for (let attempt = 0; ; attempt += 1) {
@@ -1831,13 +1853,13 @@ export class Hud extends Emitter {
     }
     auto.resupply = null;
     auto.resupplyRequested = false;
+    auto.resupplyDoneAt = `${x},${y}`;
     auto.needsScanAfterMovement = false;
     auto.awaitingMovementExit = false;
     auto.resumeAfterExit = false;
     auto.preparedAction = null;
     auto.fuelCurrent = null;
-    auto.postScanReady = true;
-    // Attende lo snapshot aggiornato (Idle al settore della base) prima di riprendere
+    // Attende lo snapshot aggiornato (Idle al settore della base) prima della scan
     for (let i = 0; i < 15 && auto.running && runId === auto.runId; i += 1) {
       this.emit('refresh');
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1845,8 +1867,9 @@ export class Hud extends Emitter {
       if (fleet?.state === 'Idle' && fleet.sector) break;
     }
     if (!auto.running || runId !== auto.runId) return;
-    console.info('[SDU] resupply completed; resuming automation', { fleetId });
-    await this.continueAutomationAfterInitialScan(runId, fleetId);
+    console.info('[SDU] resupply completed; scanning at starbase', { fleetId });
+    auto.initialScanPending = true;
+    await this.beginInitialAutomationScan(runId, null, fleetId);
   }
 
   observeAutomationFuel(resources, fleetId) {
@@ -1885,6 +1908,7 @@ export class Hud extends Emitter {
     auto.actionPending = false;
     auto.postScanReady = false;
     auto.resupply = null;
+    auto.resupplyDoneAt = null;
     auto.resupplyRequested = false;
     auto.lastKnownSector = null;
     const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
@@ -1947,7 +1971,7 @@ export class Hud extends Emitter {
 
   canFleetAutomationProceed(fleet) {
     const canResumeMovement = (fleet?.state === 'MoveSubwarp' || fleet?.state === 'MoveWarp') && Boolean(fleet.to);
-    return Boolean(fleet?.sector) && fleet.state === 'Idle' || canResumeMovement;
+    return Boolean(fleet?.sector) && (fleet.state === 'Idle' || fleet.state === 'StarbaseLoadingBay') || canResumeMovement;
   }
 
   refreshAutomationState(fleetId = this.automationFleet?.id) {
@@ -2123,9 +2147,12 @@ export class Hud extends Emitter {
         });
         this.failAutomation(fleetId);
       }
-    } else if (expectedMovement) {
+        } else if (expectedMovement) {
       auto.resumeAfterExit = true;
       this.waitForMovementArrival(fleet, runId);
+    } else if (auto.resupply && fleet.state === 'StarbaseLoadingBay') {
+      // Durante il rifornimento la flotta è legittimamente nella loading bay della base
+      this.refreshAutomationState(fleetId);
     } else if (!this.canFleetAutomationProceed(fleet)) {
       console.error('[SDU] automation stopped: fleet preconditions no longer hold', { fleetId });
       this.failAutomation(fleetId);
