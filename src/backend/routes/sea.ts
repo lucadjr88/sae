@@ -894,7 +894,12 @@ router.post('/sea/scan/prepare', async (req, res) => {
   }
 
   try {
-    const { fleet } = await loadFleetSnapshot(profileId, fleetId);
+    let { fleet } = await loadFleetSnapshot(profileId, fleetId);
+    if (fleet.state !== 'Idle' || !fleet.sector || fleet.sector[0] !== x || fleet.sector[1] !== y) {
+      const snapshot = await createSnapshot(profileId);
+      snapshotCache.set(profileId, { expiresAt: Date.now() + SNAPSHOT_TTL_MS, value: snapshot });
+      fleet = snapshot.fleets.find((item: SeaFleet) => item.id === fleetId) ?? fleet;
+    }
     if (fleet.state !== 'Idle' || !fleet.sector || fleet.sector[0] !== x || fleet.sector[1] !== y) {
       return res.status(409).json({ error: 'FLEET_NOT_AT_SCAN_COORDINATE', fleetState: fleet.state, current: fleet.sector, target: [x, y] });
     }
