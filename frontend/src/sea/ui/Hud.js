@@ -1448,10 +1448,11 @@ export class Hud extends Emitter {
     if (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp') {
       if (this.automationNeedsScanAfterMovement && !this.automationResumeAfterExit) {
         // Il movimento è già confermato su chain (exit o timeout): ignoriamo lo snapshot obsoleto e procediamo con lo scan
+        // Coerente con il modello Sly: stato reale prima di operare, nessun attesa di aggiornamenti chain obsoleti.
         this.automationAwaitingMovementExit = false;
         this.automationNeedsScanAfterMovement = true;
         this.automationInitialScanPending = true;
-        this.automationInitialScanReady = false;
+        this.automationInitialScanReady = true;
         const coords = preparedResult?.coordinates ?? preparedResult?.sector ?? fleet.sector ?? this.automationLastKnownSector;
         console.debug('[SDU] beginInitialAutomationScan: movement stale, forcing scan after exit', { fleetId: fleet.id, state: fleet.state, coordsSource: preparedResult?.coordinates ? 'preparedResult' : preparedResult?.sector ? 'preparedResult.sector' : fleet.sector ? 'fleet.sector' : 'automationLastKnownSector', coords });
         if (!coords) {
