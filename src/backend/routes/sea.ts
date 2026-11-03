@@ -1,7 +1,7 @@
 import express from 'express';
 import anchor from '@coral-xyz/anchor';
 import { ComputeBudgetInstruction, ComputeBudgetProgram, PublicKey, SYSVAR_INSTRUCTIONS_PUBKEY, SYSVAR_SLOT_HASHES_PUBKEY, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
-import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { CargoType, CARGO_IDL } from '@staratlas/cargo';
 import { isIP } from 'node:net';
 import { request as httpRequest } from 'node:http';
@@ -144,7 +144,7 @@ type SeaFleet = {
 const snapshotCache = new Map<string, { expiresAt: number; value: any }>();
 const snapshotPending = new Map<string, Promise<any>>();
 type ScanPreparation = {
-  action: 'scan' | 'subwarp_start' | 'warp_start' | 'subwarp_exit' | 'warp_exit';
+  action: 'scan' | 'subwarp_start' | 'warp_start' | 'subwarp_exit' | 'warp_exit' | 'dock' | 'unload_sdu' | 'load_fuel' | 'undock';
   profileId: string;
   fleetId: string;
   wallet: string;
@@ -1201,7 +1201,7 @@ router.post('/sea/subwarp/prepare', async (req, res) => {
       const fuelInfo = await connection.getAccountInfo(fuelToken, 'confirmed');
       if (!fuelInfo || !fuelInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('FLEET_FUEL_ACCOUNT_NOT_FOUND');
       const fuelCurrent = decodeSplTokenBalance(fuelInfo.data);
-      if (fuelCurrent < fuelRequiredRoundTrip) {
+      if (fuelCurrent <= fuelRequiredRoundTrip) {
         throw new Error(`SUBWARP_FUEL_INSUFFICIENT:${fuelCurrent.toFixed(2)}:${fuelRequiredRoundTrip.toFixed(2)}`);
       }
 
@@ -1397,7 +1397,7 @@ router.post('/sea/warp/prepare', async (req, res) => {
       const fuelInfo = await connection.getAccountInfo(fuelToken, 'confirmed');
       if (!fuelInfo || !fuelInfo.owner.equals(TOKEN_PROGRAM_ID)) throw new Error('FLEET_FUEL_ACCOUNT_NOT_FOUND');
       const fuelCurrent = decodeSplTokenBalance(fuelInfo.data);
-      if (fuelCurrent < fuelRequiredRoundTrip) {
+      if (fuelCurrent <= fuelRequiredRoundTrip) {
         throw new Error(`WARP_FUEL_INSUFFICIENT:${fuelCurrent.toFixed(2)}:${fuelRequiredRoundTrip.toFixed(2)}`);
       }
       const owningProfileFactionPubkey = await getCachedProfileFaction(connection, profileId);
@@ -1679,6 +1679,245 @@ router.post('/sea/movement/exit/prepare', async (req, res) => {
       error: message.replace(/https?:\/\/\S+/g, '<rpc-url>'),
     });
     return res.status(503).json({ error: 'SEA_SUBWARP_EXIT_PREPARATION_FAILED', detail: message.split(':')[0] });
+  }
+});
+
+// Rifornimento (modello Sly handleResupply): dock → scarico SDU → carico fuel → undock, una istruzione per transazione.
+const RESUPPLY_STEPS = ['dock', 'unload_sdu', 'load_fuel', 'undock'] as const;
+router.post('/sea/resupply/prepare', async (req, res) => {
+  const { profileId: profileInput, fleetId: fleetInput, wallet: walletInput, starbase: starbaseInput, step } = req.body ?? {};
+  if (typeof profileInput !== 'string' || typeof fleetInput !== 'string' || typeof walletInput !== 'string'
+    || typeof starbaseInput !== 'string' || !RESUPPLY_STEPS.includes(step)) {
+    return res.status(400).json({ error: 'INVALID_RESUPPLY_INPUT' });
+  }
+  let profileId: string;
+  let fleetId: string;
+  let walletAddress: PublicKey;
+  let sbX: number;
+  let sbY: number;
+  try {
+    profileId = new PublicKey(profileInput).toBase58();
+    fleetId = new PublicKey(fleetInput).toBase58();
+    walletAddress = new PublicKey(walletInput);
+    [sbX, sbY] = starbaseInput.split(',').map(value => Number(value.trim()));
+    if (!Number.isSafeInteger(sbX) || !Number.isSafeInteger(sbY)) throw new Error('INVALID_COORDINATES');
+  } catch {
+    return res.status(400).json({ error: 'INVALID_RESUPPLY_INPUT' });
+  }
+  const action = step as typeof RESUPPLY_STEPS[number];
+  const expectedState = action === 'dock' ? 'Idle' : 'StarbaseLoadingBay';
+  let prepareRpc = { name: 'unknown', host: 'unknown' };
+  try {
+    let { fleet } = await loadFleetSnapshot(profileId, fleetId);
+    if (fleet.state !== expectedState) {
+      const { fleets } = await getSnapshot(profileId, true);
+      fleet = fleets.find((item: any) => item.id === fleetId) ?? fleet;
+    }
+    if (fleet.state !== expectedState || !fleet.sector || fleet.sector[0] !== sbX || fleet.sector[1] !== sbY) {
+      return res.status(409).json({ error: 'RESUPPLY_FLEET_STATE_MISMATCH', fleetState: fleet.state, current: fleet.sector, expected: expectedState });
+    }
+    const starbaseEntry = (await getStarbases()).find((item: any) => item.sector[0] === sbX && item.sector[1] === sbY);
+    if (!starbaseEntry) return res.status(404).json({ error: 'RESUPPLY_STARBASE_NOT_FOUND' });
+    const { allowedWallets } = await getWalletAuthorityUtil(profileId);
+    const profileKey = allowedWallets.find(key => key.pubkey === walletAddress.toBase58() && key.scope === SAGE_PROGRAM_ID.toBase58());
+    if (!profileKey) return res.status(403).json({ error: 'WALLET_HAS_NO_SAGE_PROFILE_KEY' });
+    const feePolicy = makePriorityFeePolicy(req.body?.feeMode, req.body?.priorityFeeLamports, 100);
+    const chainData = fleet.chainData as any;
+    const gameId = new PublicKey(chainData.game_id);
+    const cargoHold = new PublicKey(chainData.cargo_hold);
+    const fuelTank = new PublicKey(chainData.fuel_tank);
+    const fuelCapacity = Number(chainData.stats?.cargo_stats?.fuel_capacity ?? 0);
+    const starbaseKey = new PublicKey(starbaseEntry.id);
+
+    const prepared = await withRpc(profileId, async connection => {
+      const readOnlyWallet = {
+        publicKey: walletAddress,
+        signTransaction: async (transaction: any) => transaction,
+        signAllTransactions: async (transactions: any[]) => transactions,
+      };
+      const provider = new AnchorProvider(connection, readOnlyWallet as any, { commitment: 'confirmed', preflightCommitment: 'confirmed' });
+      const sageProgram = new Program(sageIdl as any, SAGE_PROGRAM_ID, provider);
+      const cargoProgram = new Program(CARGO_IDL as any, CARGO_PROGRAM_ID, provider);
+      const game: any = await getCachedGame(sageProgram, gameId);
+      const statsDefinition = game.cargo.statsDefinition;
+      const owningProfileFaction = await getCachedProfileFaction(connection, profileId);
+      const starbaseInfo = await connection.getAccountInfo(starbaseKey, 'confirmed');
+      if (!starbaseInfo) throw new Error('RESUPPLY_STARBASE_NOT_FOUND');
+      const seqId = Number(coder.accounts.decode('Starbase', starbaseInfo.data).seqId);
+      const sagePlayerProfile = PublicKey.findProgramAddressSync([
+        Buffer.from('sage_player_profile'), new PublicKey(profileId).toBuffer(), gameId.toBuffer(),
+      ], SAGE_PROGRAM_ID)[0];
+      const seqBuffer = Buffer.alloc(2);
+      seqBuffer.writeUInt16LE(seqId);
+      const starbasePlayer = PublicKey.findProgramAddressSync([
+        Buffer.from('starbase_player'), starbaseKey.toBuffer(), sagePlayerProfile.toBuffer(), seqBuffer,
+      ], SAGE_PROGRAM_ID)[0];
+      const fleetAndOwner = {
+        fleet: new PublicKey(fleetId),
+        owningProfile: new PublicKey(profileId),
+        owningProfileFaction,
+        key: walletAddress,
+      };
+      const gameAccountsFleetAndOwner = {
+        gameFleetAndOwner: { fleetAndOwner, gameId },
+        gameState: game.gameState,
+      };
+      const starbaseAndStarbasePlayer = { starbase: starbaseKey, starbasePlayer };
+      const keyIndex = new BN(profileKey.index);
+      const ata = (mint: PublicKey, owner: PublicKey) =>
+        getAssociatedTokenAddressSync(mint, owner, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+      const tokenBalance = async (address: PublicKey) => {
+        const info = await connection.getAccountInfo(address, 'confirmed');
+        return info ? decodeSplTokenBalance(info.data) : 0;
+      };
+      const instructions: TransactionInstruction[] = [];
+      let instructionName = '';
+      let amount = 0;
+      let fuelAfter: number | null = null;
+
+      if (action === 'dock') {
+        if (!await connection.getAccountInfo(starbasePlayer, 'confirmed')) {
+          instructions.push(await sageProgram.methods.registerStarbasePlayer().accountsStrict({
+            funder: walletAddress,
+            gameAccounts: { gameId, gameState: game.gameState },
+            sagePlayerProfile,
+            profileFaction: owningProfileFaction,
+            starbase: starbaseKey,
+            starbasePlayer,
+            systemProgram: PublicKey.default,
+          }).instruction());
+        }
+        instructions.push(await sageProgram.methods.idleToLoadingBay(keyIndex).accountsStrict({
+          gameAccountsFleetAndOwner, starbaseAndStarbasePlayer,
+        }).instruction());
+        instructionName = 'idleToLoadingBay';
+      } else if (action === 'undock') {
+        instructions.push(await sageProgram.methods.loadingBayToIdle(keyIndex).accountsStrict({
+          gameAccountsFleetAndOwner, starbaseAndStarbasePlayer,
+        }).remainingAccounts([{ pubkey: starbaseKey, isSigner: false, isWritable: false }]).instruction());
+        instructionName = 'loadingBayToIdle';
+      } else {
+        const unload = action === 'unload_sdu';
+        const mint: PublicKey = unload ? ((await getCachedSduTracker(sageProgram, gameId)).account as any).sduMint : game.mints.fuel;
+        const fleetPod = unload ? cargoHold : fuelTank;
+        const fleetToken = ata(mint, fleetPod);
+        const fleetBalance = await tokenBalance(fleetToken);
+        const sbHolds = await (cargoProgram.account as any).cargoPod.all([
+          { memcmp: { offset: 41, bytes: starbasePlayer.toBase58() } },
+        ]);
+        if (sbHolds.length === 0) throw new Error('RESUPPLY_STARBASE_CARGO_HOLD_MISSING');
+        let hold = sbHolds[0].publicKey as PublicKey;
+        let holdBalance = 0;
+        if (unload) {
+          amount = fleetBalance - 1;
+        } else {
+          // Come Sly: hold con più fuel disponibile
+          for (const candidate of sbHolds) {
+            const balance = await tokenBalance(ata(mint, candidate.publicKey));
+            if (balance > holdBalance) { hold = candidate.publicKey; holdBalance = balance; }
+          }
+          if (fuelCapacity <= 0) throw new Error('RESUPPLY_FUEL_CAPACITY_UNKNOWN');
+          amount = Math.min(Math.max(0, fuelCapacity - fleetBalance), holdBalance);
+          if (holdBalance <= 0) throw new Error('RESUPPLY_STARBASE_FUEL_UNAVAILABLE');
+          fuelAfter = fleetBalance + amount;
+        }
+        if (amount <= 0) return { skip: true as const, fuelAfter: fleetBalance };
+        const holdToken = ata(mint, hold);
+        const seq = Number((await getCachedCargoStatsDef(cargoProgram, statsDefinition) as any).seqId.toString());
+        const cargoType = getCachedCargoType(cargoProgram as any, statsDefinition, mint, seq);
+        // Il token account di destinazione deve esistere
+        const destinationOwner = unload ? hold : fleetPod;
+        const destinationToken = unload ? holdToken : fleetToken;
+        instructions.push(createAssociatedTokenAccountIdempotentInstruction(walletAddress, destinationToken, destinationOwner, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID));
+        const common = {
+          gameAccountsFleetAndOwner,
+          fundsTo: walletAddress,
+          starbaseAndStarbasePlayer,
+          cargoPodFrom: unload ? fleetPod : hold,
+          cargoPodTo: unload ? hold : fleetPod,
+          cargoType,
+          cargoStatsDefinition: statsDefinition,
+          tokenFrom: unload ? fleetToken : holdToken,
+          tokenTo: destinationToken,
+          tokenMint: mint,
+          cargoProgram: CARGO_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        };
+        const input = { amount: new BN(amount), keyIndex };
+        const method = unload
+          ? sageProgram.methods.withdrawCargoFromFleet(input)
+          : sageProgram.methods.depositCargoToFleet(input);
+        instructions.push(await method.accountsStrict(common)
+          .remainingAccounts([{ pubkey: starbaseKey, isSigner: false, isWritable: false }]).instruction());
+        instructionName = unload ? 'withdrawCargoFromFleet' : 'depositCargoToFleet';
+      }
+
+      const latest = await connection.getLatestBlockhash('confirmed');
+      const transaction = new VersionedTransaction(new TransactionMessage({
+        payerKey: walletAddress,
+        recentBlockhash: latest.blockhash,
+        instructions: [...(feePolicy.instruction ? [feePolicy.instruction] : []), ...instructions],
+      }).compileToV0Message());
+      const simulation = await connection.simulateTransaction(transaction, {
+        commitment: 'confirmed', sigVerify: false, replaceRecentBlockhash: true,
+      });
+      return {
+        skip: false as const,
+        instructions: [instructionName],
+        amount,
+        fuelAfter,
+        transaction: Buffer.from(transaction.serialize()).toString('base64'),
+        transactionObject: transaction,
+        feePolicy: {
+          mode: feePolicy.mode,
+          baseLamports: feePolicy.baseLamports,
+          microLamportsPerCu: feePolicy.microLamportsPerCu,
+          estimatedPriorityFeeLamports: feePolicy.estimatedPriorityFeeLamports,
+        },
+        blockhash: latest.blockhash,
+        lastValidBlockHeight: latest.lastValidBlockHeight,
+        simulation: {
+          err: simulation.value.err,
+          logs: simulation.value.logs ?? [],
+          unitsConsumed: simulation.value.unitsConsumed ?? null,
+        },
+      };
+    }, endpoint => { prepareRpc = seaRpc(endpoint); });
+    if (prepared.skip) return res.json({ status: 'SKIP', action, fuelAfter: prepared.fuelAfter });
+    let prepareId: string | null = null;
+    if (!prepared.simulation.err) {
+      const now = Date.now();
+      await pruneScanPreparations(now);
+      prepareId = randomUUID();
+      await storeScanPreparation(prepareId, {
+        action,
+        profileId,
+        fleetId,
+        wallet: walletAddress.toBase58(),
+        transaction: prepared.transactionObject,
+        feePolicy: prepared.feePolicy,
+        blockhash: prepared.blockhash,
+        lastValidBlockHeight: prepared.lastValidBlockHeight,
+        expiresAt: now + 90_000,
+      });
+      console.info('[sea] transaction prepared', { pid: process.pid, action, prepareId, rpc: prepareRpc, amount: prepared.amount });
+    }
+    return res.json({
+      fleetId,
+      instructions: prepared.instructions,
+      transaction: prepared.transaction,
+      feePolicy: prepared.feePolicy,
+      lastValidBlockHeight: prepared.lastValidBlockHeight,
+      simulation: prepared.simulation,
+      prepareId,
+      action,
+      amount: prepared.amount,
+      fuelAfter: prepared.fuelAfter,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+    console.error('[sea] resupply preparation failed', { profileId, fleetId, action, error: message.replace(/https?:\/\/\S+/g, '<rpc-url>') });
+    return res.status(503).json({ error: 'SEA_RESUPPLY_PREPARATION_FAILED', detail: message.split(':')[0] });
   }
 });
 

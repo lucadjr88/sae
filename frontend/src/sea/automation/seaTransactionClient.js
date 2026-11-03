@@ -45,6 +45,17 @@ export class SeaTransactionClient {
     return { ...result, action: result.action ?? action };
   }
 
+  async prepareResupply({ profileId, fleetId, step, starbase, feeMode = 'sly', priorityFeeLamports = 1 }) {
+    const response = await this.fetch('/api/sea/resupply/prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profileId, fleetId, step, starbase, wallet: await this.walletAddress(), feeMode, priorityFeeLamports }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || result.error || `HTTP ${response.status}`);
+    return result;
+  }
+
   async signAndSubmit({ prepareId, profileId, transaction, action }) {
     const wallet = await this.walletAddress();
     const { VersionedTransaction } = await import('@solana/web3.js');

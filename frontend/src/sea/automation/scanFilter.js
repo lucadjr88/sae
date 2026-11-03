@@ -31,7 +31,25 @@ function formatNumericForPayload(value) {
   return numeric.toFixed(2).replace(/\.?0+$/, '');
 }
 
-export function buildScanFilterPayload({ form, config, fleet, currentCoords, resources, requestType = 'cell', resetCounts = false, lastScanOutcome = null }) {
+// Raggio massimo di destinazione raggiungibile con il fuel attuale (andata + ritorno alla SB più vicina).
+// Stessa formula del guard backend: (andata + ritorno) * rate/100 <= fuel.
+export function fuelReachableRadius({ fuelCurrent, fleet, movementMode, currentCoords, sbCoords, rangeSB }) {
+  const stats = fleet?.chainData?.stats?.movement_stats ?? {};
+  const rate = Number(movementMode === 'warp' ? stats.warp_fuel_consumption_rate : stats.subwarp_fuel_consumption_rate);
+  const fuel = Number(fuelCurrent);
+  if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(fuel)) return Infinity;
+  const budget = fuel / (rate / 100);
+  const current = normalizeCoordPair(currentCoords);
+  const nearestSB = String(sbCoords).split(';').filter(Boolean).map(normalizeCoordPair)
+    .reduce((best, base) => Math.min(best, distance(current, base)), Infinity);
+  // Con destinazione entro R dalla flotta: ritorno <= distanza flotta-SB + R; oppure entro rangeSB dalla SB.
+  const viaFleet = (budget - nearestSB) / 2;
+  const sbRange = Number(rangeSB);
+  const viaSB = Number.isFinite(sbRange) && sbRange > 0 ? budget - sbRange : -Infinity;
+  return Math.max(0, Math.floor(Math.max(viaFleet, viaSB)));
+}
+
+export function buildScanFilterPayload({ form, config, fleet, currentCoords, resources, requestType = 'cell', resetCounts = false, lastScanOutcome = null, movementMode = 'subwarp' }) {
   if (!fleet?.name || !fleet?.id) throw new Error('Nome e ID flotta sono obbligatori');
   if (!resources || !Number.isFinite(Number(resources.fuelCurrentPct))) throw new Error('Fuel on-chain non disponibile');
   if (!Number.isFinite(Number(resources.foodCurrent))) throw new Error('Food on-chain non disponibile');
@@ -74,6 +92,14 @@ export function buildScanFilterPayload({ form, config, fleet, currentCoords, res
     reset_counts: resetCounts,
     requestType,
   };
+  // I range inviati al server (unico filtro) non devono superare ciò che il fuel permette
+  const maxRadius = fuelReachableRadius({
+    fuelCurrent: resources.fuelCurrent, fleet, movementMode, currentCoords: current, sbCoords: payload.sbCoords, rangeSB: payload.rangeSB,
+  });
+  for (const key of ['maxareaFromFleet', 'maxdistanceFromFleet1']) {
+    const configured = Number(payload[key]);
+    if (Number.isFinite(maxRadius) && Number.isFinite(configured) && configured > maxRadius) payload[key] = String(maxRadius);
+  }
   // Guida v14: esito_ultimo_scan omesso al primo ciclo e inviato una sola volta
   if (lastScanOutcome && Number.isFinite(Number(lastScanOutcome.scanPercent))) {
     payload.esito_ultimo_scan = {

@@ -434,6 +434,8 @@ export class Hud extends Emitter {
         submissionPending: false,
         actionPending: false,
         postScanReady: false,
+        resupply: null,
+        resupplyRequested: false,
         lastKnownSector: null,
         fuelCurrent: null,
         fuelCapacity: null,
@@ -705,6 +707,9 @@ export class Hud extends Emitter {
         fleet,
         currentCoords: previousCell,
         resources: auto.resources,
+        movementMode: auto.config?.movementMode
+          ?? this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value
+          ?? 'subwarp',
         requestType,
         resetCounts,
         lastScanOutcome: auto.pendingScanOutcome ? {
@@ -960,6 +965,11 @@ export class Hud extends Emitter {
           message: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
         },
       });
+      // Fuel insufficiente per il movimento: rifornimento alla base (modello Sly handleResupply)
+      if (/^(SUBWARP|WARP)_FUEL_INSUFFICIENT$/.test(message) && (action === 'subwarp_start' || action === 'warp_start') && !auto.resupply && auto.running) {
+        auto.resupplyRequested = true;
+        return false;
+      }
       if (auto.initialScanPending && auto.running) this.failAutomation(fleetId);
       return false;
     } finally {
@@ -1657,6 +1667,19 @@ export class Hud extends Emitter {
       return;
     }
     if (!auto.running || runId !== auto.runId) return;
+    // Se il fuel non permette nemmeno un salto di 1 settore con ritorno alla base, si rifornisce prima della richiesta
+    const radius = fuelReachableRadius({
+      fuelCurrent: auto.resources?.fuelCurrent,
+      fleet,
+      movementMode: auto.config?.movementMode ?? this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp',
+      currentCoords: fleet.sector,
+      sbCoords: auto.config?.sbCoords ?? this.automationForm.querySelector('[data-scan-param="sbCoords"]')?.value,
+      rangeSB: auto.config?.rangeSB ?? this.automationForm.querySelector('[data-scan-param="rangeSB"]')?.value,
+    });
+    if (!auto.resupply && radius < 1) {
+      console.info('[SDU] fuel cannot cover any destination with return: resupply', { fleetId, fuel: auto.resources?.fuelCurrent, radius });
+      if (await this.startResupply(runId, fleetId)) return;
+    }
     if (!await this.requestAutomationDestination(fleetId)) {
       console.error('[SDU] continueAutomationAfterInitialScan: requestAutomationDestination failed', { fleetId: fleet.id });
       if (auto.running && runId === auto.runId) this.failAutomation(fleetId);
@@ -1704,6 +1727,13 @@ export class Hud extends Emitter {
       this.failAutomation(fleetId);
       return;
     }
+    // Arrivati alla base con rifornimento attivo: niente scan, si rifornisce
+    if (operation.action === 'scan' && auto.resupply) {
+      if (auto.actionPending) return;
+      auto.actionPending = true;
+      try { await this.performResupply(runId, fleetId); } finally { auto.actionPending = false; }
+      return;
+    }
     if (operation.action === 'scan') {
       const remaining = Math.max(0, Number(fleet.scanCooldownEnd ?? 0) - Date.now());
       if (remaining > 0) {
@@ -1727,6 +1757,10 @@ export class Hud extends Emitter {
       auto.actionPending = false;
     }
     if (!prepared) {
+      if (auto.resupplyRequested) {
+        auto.resupplyRequested = false;
+        if (auto.running && runId === auto.runId && await this.startResupply(runId, fleetId)) return;
+      }
       if (auto.running && runId === auto.runId) this.failAutomation(fleetId);
       return;
     }
@@ -1739,6 +1773,81 @@ export class Hud extends Emitter {
     }
     if (operation.action === 'subwarp_exit' || operation.action === 'warp_exit') auto.awaitingMovementExit = true;
     await this.submitPreparedScan(true, fleetId);
+  }
+
+  async startResupply(runId, fleetId) {
+    const auto = this.getFleetAutomation(fleetId);
+    const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+    const sbCoords = auto.config?.sbCoords
+      ?? this.automationForm.querySelector('[data-scan-param="sbCoords"]')?.value ?? '';
+    const bases = String(sbCoords).split(';').map(item => item.split(',').map(Number)).filter(pair => pair.length === 2 && pair.every(Number.isFinite));
+    if (!fleet?.sector || !bases.length) return false;
+    const [x, y] = bases.sort((a, b) => Math.hypot(a[0] - fleet.sector[0], a[1] - fleet.sector[1]) - Math.hypot(b[0] - fleet.sector[0], b[1] - fleet.sector[1]))[0];
+    auto.resupply = { base: [x, y] };
+    auto.destination = { x, y, sb: `${x},${y}` };
+    console.info('[SDU] fuel insufficient: resupply at nearest starbase', { fleetId, base: [x, y] });
+    if (this.isAutomationFleetSelected(fleetId)) this.automationStatus.textContent = `Fuel insufficiente · rifornimento alla base ${x},${y}`;
+    await this.runAutomationAction(runId, fleetId);
+    return true;
+  }
+
+  // Sequenza di handleResupply (Sly): dock → scarico SDU → carico fuel → undock
+  async performResupply(runId, fleetId) {
+    const auto = this.getFleetAutomation(fleetId);
+    const [x, y] = auto.resupply.base;
+    try {
+      for (const step of ['dock', 'unload_sdu', 'load_fuel', 'undock']) {
+        if (!auto.running || runId !== auto.runId) return;
+        if (this.isAutomationFleetSelected(fleetId)) this.automationStatus.textContent = `Rifornimento ${x},${y} · ${step}`;
+        for (let attempt = 0; ; attempt += 1) {
+          const result = await this.transactionClient.prepareResupply({
+            profileId: this.snapshot.profileId,
+            fleetId,
+            step,
+            starbase: `${x},${y}`,
+            feeMode: this.settingsUseSlyFee?.checked ? 'sly' : 'wallet',
+            priorityFeeLamports: this.settingsPriorityFeeInput?.value ?? '1',
+          });
+          if (result.status === 'SKIP') break;
+          if (!result.prepareId || result.simulation?.err) throw new Error(`RESUPPLY_${step.toUpperCase()}_SIMULATION_FAILED`);
+          try {
+            const submitted = await this.transactionClient.signAndSubmit({
+              prepareId: result.prepareId,
+              profileId: this.snapshot.profileId,
+              transaction: result.transaction,
+              action: step,
+            });
+            console.info('[SDU] resupply step confirmed', { fleetId, step, amount: result.amount, signature: submitted.signature });
+            break;
+          } catch (error) {
+            if (attempt >= 1 || error?.message !== 'SCAN_TRANSACTION_BLOCKHASH_EXPIRED') throw error;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[SDU] resupply failed', { fleetId, name: error?.name, message: error?.message ?? String(error) });
+      if (this.isAutomationFleetSelected(fleetId)) this.automationStatus.textContent = `Rifornimento non riuscito: ${error?.message ?? error}`;
+      if (auto.running && runId === auto.runId) this.failAutomation(fleetId);
+      return;
+    }
+    auto.resupply = null;
+    auto.resupplyRequested = false;
+    auto.needsScanAfterMovement = false;
+    auto.awaitingMovementExit = false;
+    auto.resumeAfterExit = false;
+    auto.preparedAction = null;
+    auto.fuelCurrent = null;
+    auto.postScanReady = true;
+    // Attende lo snapshot aggiornato (Idle al settore della base) prima di riprendere
+    for (let i = 0; i < 15 && auto.running && runId === auto.runId; i += 1) {
+      this.emit('refresh');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
+      if (fleet?.state === 'Idle' && fleet.sector) break;
+    }
+    if (!auto.running || runId !== auto.runId) return;
+    console.info('[SDU] resupply completed; resuming automation', { fleetId });
+    await this.continueAutomationAfterInitialScan(runId, fleetId);
   }
 
   observeAutomationFuel(resources, fleetId) {
@@ -1776,6 +1885,8 @@ export class Hud extends Emitter {
     auto.submissionPending = false;
     auto.actionPending = false;
     auto.postScanReady = false;
+    auto.resupply = null;
+    auto.resupplyRequested = false;
     auto.lastKnownSector = null;
     const fleet = this.snapshot.fleets.find(item => item.id === fleetId);
     this.setAutomationFleetState(
