@@ -1047,13 +1047,17 @@ export class Hud extends Emitter {
         this.automationRunTimer = null;
         this.automationAwaitingMovementStart = false;
         this.automationAwaitingMovementExit = false;
+        this.automationResumeAfterExit = false;
         this.automationNeedsScanAfterMovement = true;
+        this.automationWaitingForEta = false;
+        clearTimeout(this.automationRunTimer);
+        this.automationRunTimer = null;
         if (!fleet) {
           console.error('[SDU] movement start confirmed but fleet missing from snapshot', { fleetId: this.automationFleet.id, action: result.action });
           this.failAutomation();
           return;
         }
-        console.info('[SDU] movement start confirmed on-chain · waiting for movement arrival', { fleetId: fleet.id, action: result.action });
+        console.info('[SDU] movement start confirmed on-chain · waiting for movement arrival', { fleetId: fleet.id, action: result.action, hasPreparedResult: Boolean(preparedResult), arrivalSeconds: preparedResult?.arrivalSeconds });
         this.waitForMovementArrival(fleet, runId, preparedResult);
       } else {
         this.stopAutomation();
@@ -1501,6 +1505,7 @@ export class Hud extends Emitter {
   }
 
   async waitForMovementArrival(fleet, runId, preparedResult = null) {
+    console.debug('[SDU] waitForMovementArrival entry', { runId, fleetId: fleet.id, fleetState: fleet.state, hasPreparedResult: Boolean(preparedResult), arrivalSeconds: preparedResult?.arrivalSeconds, fleetArrival: fleet.arrival, automationWaitingForEta: this.automationWaitingForEta });
     if (!preparedResult && !fleet.to) {
       console.error('[SDU] movement recovery stopped: on-chain target missing', { fleetId: fleet.id, state: fleet.state });
       this.failAutomation();
@@ -1515,21 +1520,27 @@ export class Hud extends Emitter {
       : Number(fleet.arrival ?? 0);
     const remaining = Math.max(0, arrivalMs - Date.now());
     const movementName = fleet.state === 'MoveWarp' ? 'Warp' : 'Subwarp';
+    console.debug('[SDU] waitForMovementArrival calculated', { fleetId: fleet.id, arrivalMs, remaining, remainingSec: Math.ceil(remaining / 1000), movementName });
     if (remaining === 0) {
       clearTimeout(this.automationRunTimer);
       this.automationRunTimer = null;
       this.automationWaitingForEta = false;
       this.automationStatus.textContent = `${movementName} arrivato · prepara uscita`;
+      console.debug('[SDU] waitForMovementArrival: remaining === 0, launching runAutomationAction', { fleetId: fleet.id, runId });
       if (this.automationRunning && runId === this.automationRunId) await this.runAutomationAction(runId);
       return;
     }
     this.automationStatus.textContent = `${movementName} in corso · attendo ETA chain`;
-    if (this.automationWaitingForEta) return;
+    if (this.automationWaitingForEta) {
+      console.debug('[SDU] waitForMovementArrival: already waiting for ETA, skipping', { fleetId: fleet.id, remaining });
+      return;
+    }
     clearTimeout(this.automationRunTimer);
     this.automationWaitingForEta = true;
     this.automationRunTimer = setTimeout(() => {
       this.automationRunTimer = null;
       this.automationWaitingForEta = false;
+      console.debug('[SDU] waitForMovementArrival: ETA timer expired, starting initial scan', { fleetId: fleet.id, runId });
       if (this.automationRunning && runId === this.automationRunId) this.beginInitialAutomationScan(runId);
     }, remaining);
   }
@@ -1820,6 +1831,7 @@ export class Hud extends Emitter {
     const expectedMovement = (this.automationPreparedAction === 'subwarp_start' && updatedAutomationFleet?.state === 'MoveSubwarp')
       || (this.automationPreparedAction === 'warp_start' && updatedAutomationFleet?.state === 'MoveWarp');
     if (this.automationRunning && this.automationAwaitingMovementStart) {
+      console.debug('[SDU] setSnapshot: automationAwaitingMovementStart active', { fleetId: this.automationFleet?.id, updatedState: updatedAutomationFleet?.state, expectedMovement, automationPreparedAction: this.automationPreparedAction });
       if (expectedMovement) {
         this.automationAwaitingMovementStart = false;
         this.automationResumeAfterExit = true;
