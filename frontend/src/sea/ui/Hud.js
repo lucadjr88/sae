@@ -1007,6 +1007,7 @@ export class Hud extends Emitter {
     const movementStart = submittedAction === 'subwarp_start' || submittedAction === 'warp_start';
     const movementExit = submittedAction === 'subwarp_exit' || submittedAction === 'warp_exit';
     const runId = auto.runId;
+    let submitTimeout = null;
     auto.submissionPending = true;
     if (this.isAutomationFleetSelected(fleetId)) this.automationScanSubmitButton.disabled = true;
     try {
@@ -1017,9 +1018,11 @@ export class Hud extends Emitter {
         action: submittedAction,
       });
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('TRANSACTION_SUBMIT_TIMEOUT')), 60_000)
+        submitTimeout = setTimeout(() => reject(new Error('TRANSACTION_SUBMIT_TIMEOUT')), 120_000)
       );
       const result = await Promise.race([submitPromise, timeoutPromise]);
+      clearTimeout(submitTimeout);
+      submitTimeout = null;
       auto.submissionPending = false;
       auto.scanPrepareId = null;
       auto.scanTransaction = null;
@@ -1125,12 +1128,8 @@ export class Hud extends Emitter {
         cause: error?.cause?.message ?? error?.cause,
       });
       const expiredBeforeSend = error instanceof Error && error.message === 'SCAN_TRANSACTION_BLOCKHASH_EXPIRED';
-      const isSubmitTimeoutOrNetwork =
-        error instanceof Error &&
-        (error.message === 'TRANSACTION_SUBMIT_TIMEOUT' ||
-         /503|Service Unavailable|429|Too Many Requests|fetch failed|socket hang up|ECONNREFUSED|ENOTFOUND|getaddrinfo|timeout|timed out/i.test(error.message));
       if (
-        (expiredBeforeSend || isSubmitTimeoutOrNetwork) &&
+        expiredBeforeSend &&
         retryExpiredPreparation &&
         auto.running &&
         runId === auto.runId
@@ -1186,6 +1185,7 @@ export class Hud extends Emitter {
       }
       if ((scanAction || movementStart || movementExit) && auto.running && runId === auto.runId) this.failAutomation(fleetId);
     } finally {
+      if (submitTimeout) clearTimeout(submitTimeout);
       auto.submissionPending = false;
       if (this.isAutomationFleetSelected(fleetId)) this.automationScanSubmitButton.disabled = false;
     }
