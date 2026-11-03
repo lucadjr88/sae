@@ -745,10 +745,27 @@ export class Hud extends Emitter {
   async prepareAutomationScan() {
     const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
     const destination = this.automationDestination;
-    if (!fleet || !destination) return false;
+    if (!fleet || !destination) {
+      console.debug('[SDU] prepareAutomationScan: missing fleet or destination', { fleetId: this.automationFleet?.id, hasDestination: Boolean(destination) });
+      return false;
+    }
     this.automationFleet = fleet;
     const movementMode = this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp';
     let operation = resolveScanOperation(fleet, destination, movementMode);
+    console.debug('[SDU] prepareAutomationScan entry', { fleetId: fleet.id, fleetState: fleet.state, destination: { x: destination.x, y: destination.y }, automationNeedsScanAfterMovement: this.automationNeedsScanAfterMovement, automationResumeAfterExit: this.automationResumeAfterExit, operation });
+    // Dopo una movement exit già confermata su chain, lo snapshot può essere obsoleto (MoveSubwarp).
+    // Forziamo la scan invece di preparare una exit ridondante.
+    if (this.automationNeedsScanAfterMovement && !this.automationResumeAfterExit) {
+      const lastAction = this.automationPreparedAction;
+      if (lastAction === 'subwarp_start' || lastAction === 'warp_start') {
+        operation = { status: 'ready', action: lastAction === 'subwarp_start' ? 'subwarp_exit' : 'warp_exit' };
+        console.debug('[SDU] prepareAutomationScan: forced exit after movement start', { fleetId: fleet.id, lastAction, action: operation.action });
+      } else {
+        // Movimento già completato su chain o exit già fatta: procediamo con lo scan.
+        operation = { status: 'ready', action: 'scan' };
+        console.debug('[SDU] prepareAutomationScan: forced scan after movement exit (snapshot stale)', { fleetId: fleet.id, lastAction });
+      }
+    }
     if (operation.status === 'waiting') {
       this.automationScanResult.hidden = false;
       this.automationScanResult.textContent = 'Movimento in corso; attendere l’arrivo chain.';
@@ -868,7 +885,8 @@ export class Hud extends Emitter {
         this.automationInitialScanPending = true;
         this.automationInitialScanReady = false;
         this.automationScanResult.textContent = 'Movimento già completato su chain · avvio scansione';
-        await this.beginInitialAutomationScan(this.automationRunId);
+        console.debug('[SDU] prepareAutomationScan: FLEET_NOT_IN_MOVEMENT, retrying initial scan with preparedResult', { fleetId: fleet.id, action, hasPreparedResult: Boolean(auto3?.preparedResult), coordinates: auto3?.preparedResult?.coordinates });
+        await this.beginInitialAutomationScan(this.automationRunId, auto3?.preparedResult ?? null);
         return false;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -998,7 +1016,7 @@ export class Hud extends Emitter {
         this.automationInitialScanPending = true;
         this.automationInitialScanReady = false;
         this.automationDestination = null;
-        console.info('[SDU] movement exit confirmed on-chain · starting local scan', { fleetId: this.automationFleet.id, action: result.action });
+        console.info('[SDU] movement exit confirmed on-chain · starting local scan', { fleetId: this.automationFleet.id, action: result.action, signature: result.signature, hasPreparedResult: Boolean(preparedResult), coordinates: preparedResult?.coordinates });
         await this.beginInitialAutomationScan(runId, preparedResult);
       } else if (movementStart && this.automationRunning && runId === this.automationRunId) {
         const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet.id);
@@ -1096,6 +1114,10 @@ export class Hud extends Emitter {
         this.automationRunning &&
         runId === this.automationRunId
       ) {
+        console.debug(
+          '[SDU] submitPreparedScan: FLEET_NOT_IN_MOVEMENT, retrying initial scan with preparedResult',
+          { fleetId: this.automationFleet.id, action: submittedAction, hasPreparedResult: Boolean(preparedResult), coordinates: preparedResult?.coordinates }
+        );
         console.warn(
           '[SDU] movement exit rejected: fleet already Idle on chain; proceeding to scan',
           { fleetId: this.automationFleet.id, action: submittedAction }
@@ -1106,7 +1128,7 @@ export class Hud extends Emitter {
         this.automationInitialScanReady = false;
         this.automationStatus.textContent =
           'Movimento già completato su chain · avvio scansione';
-        await this.beginInitialAutomationScan(runId);
+        await this.beginInitialAutomationScan(runId, preparedResult);
         return;
       }
       if ((scanAction || movementStart || movementExit) && this.automationRunning && runId === this.automationRunId) this.failAutomation();
@@ -1418,6 +1440,7 @@ export class Hud extends Emitter {
       return;
     }
     this.automationFleet = fleet;
+    console.debug('[SDU] beginInitialAutomationScan entry', { runId, fleetId: fleet.id, fleetState: fleet.state, sector: fleet.sector, automationNeedsScanAfterMovement: this.automationNeedsScanAfterMovement, automationResumeAfterExit: this.automationResumeAfterExit, automationLastKnownSector: this.automationLastKnownSector, hasPreparedResult: Boolean(preparedResult), preparedCoords: preparedResult?.coordinates });
     if (fleet.state === 'MoveSubwarp' || fleet.state === 'MoveWarp') {
       if (this.automationNeedsScanAfterMovement && !this.automationResumeAfterExit) {
         // Il movimento è già confermato su chain (exit o timeout): ignoriamo lo snapshot obsoleto e procediamo con lo scan
@@ -1426,8 +1449,9 @@ export class Hud extends Emitter {
         this.automationInitialScanPending = true;
         this.automationInitialScanReady = false;
         const coords = preparedResult?.coordinates ?? preparedResult?.sector ?? fleet.sector ?? this.automationLastKnownSector;
+        console.debug('[SDU] beginInitialAutomationScan: movement stale, forcing scan after exit', { fleetId: fleet.id, state: fleet.state, coordsSource: preparedResult?.coordinates ? 'preparedResult' : preparedResult?.sector ? 'preparedResult.sector' : fleet.sector ? 'fleet.sector' : 'automationLastKnownSector', coords });
         if (!coords) {
-          console.error('[SDU] initial scan stopped: no coordinates available', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector });
+          console.error('[SDU] initial scan stopped: no coordinates available', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector, automationLastKnownSector: this.automationLastKnownSector });
           this.failAutomation();
           return;
         }
@@ -1443,7 +1467,7 @@ export class Hud extends Emitter {
       }
     }
     if (fleet.state !== 'Idle' || !fleet.sector) {
-      console.error('[SDU] initial scan stopped: unsupported fleet state', { fleetId: fleet.id, state: fleet.state });
+      console.error('[SDU] initial scan stopped: unsupported fleet state', { fleetId: fleet.id, state: fleet.state, sector: fleet.sector });
       this.failAutomation();
       return;
     }
@@ -1452,6 +1476,7 @@ export class Hud extends Emitter {
     const cooldownRemaining = Math.max(0, Number(fleet.scanCooldownEnd ?? 0) - Date.now());
     if (cooldownRemaining > 0) {
       if (this.automationNeedsScanAfterMovement) {
+        console.debug('[SDU] beginInitialAutomationScan: scan cooldown active, waiting before scan', { fleetId: fleet.id, cooldownRemainingMs: cooldownRemaining, cooldownRemainingSec: Math.ceil(cooldownRemaining / 1000) });
         this.automationStatus.textContent = `Scan cooldown chain · attendo ${Math.ceil(cooldownRemaining / 1000)}s`;
         clearTimeout(this.automationRunTimer);
         this.automationRunTimer = setTimeout(() => {
@@ -1512,19 +1537,22 @@ export class Hud extends Emitter {
   async continueAutomationAfterInitialScan(runId) {
     if (!this.automationRunning || runId !== this.automationRunId) return;
     const fleet = this.snapshot.fleets.find(item => item.id === this.automationFleet?.id);
+    console.debug('[SDU] continueAutomationAfterInitialScan entry', { runId, fleetId: this.automationFleet?.id, fleetState: fleet?.state, sector: fleet?.sector, automationPostScanReady: this.automationPostScanReady });
     if (!fleet || (!this.automationPostScanReady && fleet.state !== 'Idle') || !fleet.sector) {
-      console.error('[SDU] post-scan destination request blocked: fleet is not Idle', { fleetId: fleet?.id, state: fleet?.state });
+      console.error('[SDU] post-scan destination request blocked: fleet is not Idle', { fleetId: fleet?.id, state: fleet?.state, sector: fleet?.sector, automationPostScanReady: this.automationPostScanReady });
       this.failAutomation();
       return;
     }
     this.automationFleet = fleet;
     this.automationPostScanReady = false;
     if (!await this.loadAutomationResources(fleet, this.automationRequestId)) {
+      console.error('[SDU] continueAutomationAfterInitialScan: loadAutomationResources failed', { fleetId: fleet.id });
       if (this.automationRunning && runId === this.automationRunId) this.failAutomation();
       return;
     }
     if (!this.automationRunning || runId !== this.automationRunId) return;
     if (!await this.requestAutomationDestination()) {
+      console.error('[SDU] continueAutomationAfterInitialScan: requestAutomationDestination failed', { fleetId: fleet.id });
       if (this.automationRunning && runId === this.automationRunId) this.failAutomation();
       return;
     }
@@ -1542,6 +1570,7 @@ export class Hud extends Emitter {
     this.automationFleet = fleet;
     const movementMode = this.automationForm.querySelector('input[name="sea-movementMode"]:checked')?.value ?? 'subwarp';
     let operation = resolveScanOperation(fleet, this.automationDestination, movementMode);
+    console.debug('[SDU] runAutomationAction entry', { runId, fleetId: fleet.id, fleetState: fleet.state, destination: { x: this.automationDestination.x, y: this.automationDestination.y }, automationNeedsScanAfterMovement: this.automationNeedsScanAfterMovement, automationResumeAfterExit: this.automationResumeAfterExit, automationPreparedAction: this.automationPreparedAction, resolvedOperation: operation });
     // Se il movimento è già confermato su chain (exit o start), lo snapshot può
     // essere obsoleto (MoveSubwarp/MoveWarp): forziamo la scan per non attendere
     // invano l'aggiornamento chain o l'arrivo di un movimento già concluso.
@@ -1551,9 +1580,11 @@ export class Hud extends Emitter {
       const lastAction = this.automationPreparedAction;
       if (lastAction === 'subwarp_start' || lastAction === 'warp_start') {
         operation = { status: 'ready', action: lastAction === 'subwarp_start' ? 'subwarp_exit' : 'warp_exit' };
+        console.debug('[SDU] runAutomationAction: forced exit after movement start', { fleetId: fleet.id, lastAction, action: operation.action });
       } else {
         // Movimento già completato su chain o exit già fatta: procediamo con lo scan.
         operation = { status: 'ready', action: 'scan' };
+        console.debug('[SDU] runAutomationAction: forced scan after movement exit (needsScanAfterMovement)', { fleetId: fleet.id, lastAction });
       }
     }
     if (operation.status === 'waiting') {
