@@ -894,19 +894,18 @@ export class Hud extends Emitter {
       if (
         isRpcTemporary &&
         attempt + 1 < maxRetries &&
-        this.automationRunning &&
-        this.automationInitialScanPending
+        this.automationRunning
       ) {
         console.warn(
-          '[SDU] RPC temporary error during scan preparation, retrying',
-          { attempt: attempt + 1, maxRetries, fleetId: fleet.id, message }
+          '[SDU] RPC temporary error during action preparation, retrying',
+          { attempt: attempt + 1, maxRetries, fleetId: fleet.id, action, message }
         );
         this.automationScanResult.textContent = `Errore RPC temporaneo, riprovo (${attempt + 1}/${maxRetries})…`;
         await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
         continue;
       }
-      this.automationScanResult.textContent = error instanceof Error ? error.message : 'Preparazione scan non riuscita';
-      console.error('[SDU] scan preparation failed', { fleetId: fleet.id, coordinates: [destination.x, destination.y], error });
+      this.automationScanResult.textContent = error instanceof Error ? error.message : 'Preparazione azione non riuscita';
+      console.error('[SDU] action preparation failed', { fleetId: fleet.id, coordinates: [destination.x, destination.y], action, error });
       if (this.automationInitialScanPending && this.automationRunning) this.failAutomation();
       return false;
     } finally {
