@@ -27,6 +27,11 @@ returnLink?.addEventListener('click', event => {
   }
 });
 
+// bfcache restore after pagehide cleanup leaves a destroyed game: reload to rebuild map and HUD
+window.addEventListener('pageshow', event => {
+  if (event.persisted) location.reload();
+});
+
 if (profileInput) profileInput.value = initialProfileId;
 if (!initialProfileId && loader) loader.hidden = true;
 
