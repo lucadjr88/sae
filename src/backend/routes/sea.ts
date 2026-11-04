@@ -463,6 +463,21 @@ async function logRpcAttempt(profileId: string, endpointName: string, url: strin
   console.debug(line);
 }
 
+// Polling HTTP (niente WebSocket): confirmTransaction può restare appeso se la subscription non risponde.
+// Alla scadenza lancia 'block height exceeded' così parte il controllo di stato su un altro RPC.
+async function pollSignatureConfirmation(connection: any, signature: string, lastValidBlockHeight: number, timeoutMs = 75_000) {
+  const deadline = Date.now() + timeoutMs;
+  for (let i = 0; Date.now() < deadline; i += 1) {
+    try {
+      const status = (await connection.getSignatureStatuses([signature])).value[0];
+      if (status?.err) return status;
+      if (status && (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized')) return status;
+      if (i % 5 === 4 && await connection.getBlockHeight('confirmed') > lastValidBlockHeight) break;
+    } catch {}
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error('block height exceeded');
+}
 
 async function withRpc<T>(profileId: string, action: (connection: any) => Promise<T>, onRpc?: (endpoint: any) => void): Promise<T> {
   const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
@@ -2046,13 +2061,9 @@ router.post('/sea/scan/submit', async (req, res) => {
       let confirmationStatus = 'confirmed';
       let scanResult: Record<string, unknown> | null = null;
       try {
-        const confirmation = await connection.confirmTransaction({
-          signature,
-          blockhash: preparation.blockhash,
-          lastValidBlockHeight: preparation.lastValidBlockHeight,
-        }, 'confirmed');
-        if (confirmation.value.err) throw new Error(`SCAN_TRANSACTION_FAILED:${JSON.stringify(confirmation.value.err)}`);
-        confirmationStatus = confirmation.value.confirmationStatus ?? 'confirmed';
+        const confirmation = await pollSignatureConfirmation(connection, signature, preparation.lastValidBlockHeight);
+        if (confirmation.err) throw new Error(`SCAN_TRANSACTION_FAILED:${JSON.stringify(confirmation.err)}`);
+        confirmationStatus = confirmation.confirmationStatus ?? 'confirmed';
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
         if (!/block height exceeded|signature has expired/i.test(message)) throw error;
