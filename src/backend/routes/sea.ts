@@ -2059,7 +2059,9 @@ router.post('/sea/scan/submit', async (req, res) => {
       }
       console.info('[sea] transaction submitted', { pid: process.pid, action: preparation.action, prepareId, signature, rpc: submitRpc });
       let confirmationStatus = 'confirmed';
-      let scanResult: Record<string, unknown> | null = null;
+      let scanResult: Record<string, unknown> | null = preparation.action === 'scan'
+        ? { sduFound: 0, probabilityPct: 0 }
+        : null;
       try {
         const confirmation = await pollSignatureConfirmation(connection, signature, preparation.lastValidBlockHeight);
         if (confirmation.err) throw new Error(`SCAN_TRANSACTION_FAILED:${JSON.stringify(confirmation.err)}`);
@@ -2133,17 +2135,22 @@ router.post('/sea/scan/submit', async (req, res) => {
             sduFound: Number(postAmount - preAmount) / (10 ** decimals),
             sduBalanceBefore: Number(preAmount) / (10 ** decimals),
             sduBalanceAfter: Number(postAmount) / (10 ** decimals),
-            probabilityPct: probabilityMatch ? Number(probabilityMatch[1]) * 100 : null,
+            probabilityPct: probabilityMatch ? Number(probabilityMatch[1]) * 100 : 0,
           };
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
-        console.warn('[sea] transaction fee/result metadata unavailable', {
+        const details = {
           profileId,
           fleetId: preparation.fleetId,
           signature,
           error: message.replace(/https?:\/\/\S+/g, '<rpc-url>'),
-        });
+        };
+        if (/Expected the value to satisfy a union|StructError/i.test(message)) {
+          console.error('[sea] transaction metadata decode failed', details);
+        } else {
+          console.warn('[sea] transaction fee/result metadata unavailable', details);
+        }
       }
       const fee = {
         mode: preparation.feePolicy?.mode ?? 'wallet',
