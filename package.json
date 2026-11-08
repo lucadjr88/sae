@@ -24,14 +24,13 @@
     "@vitejs/plugin-react": "^5.1.4",
     "jest": "^30.2.0",
     "supertest": "^7.2.2",
-    "ts-jest": "^29.4.6",
-    "vite-plugin-static-copy": "^4.0.1"
+    "ts-jest": "^29.4.6"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.26.0",
     "@sly-rentals/core": "^6.1.0",
+    "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
-    "@staratlas/cargo": "1.1.0",
     "@staratlas/sage": "^1.9.0-alpha.12",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.0",

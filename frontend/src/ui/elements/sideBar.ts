@@ -7,6 +7,7 @@ import { toggleSwitchHTML } from "@/ui/elements/toggleSwitch";
 import { applyProfileFactionIcon, getCachedProfileFaction } from "@/utils/faction";
 import { currentProfileId } from "@/utils/state";
 import playstoreIcona from "@/assets/icons/playstore.png";
+import seaAtlasIcon from "@/assets/icons/sea-atlas.png";
 
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
   let suppressScrollHideUntil = 0;
@@ -169,15 +170,17 @@ sidebar.appendChild(toggleSwitchContainer);
 
 const seaMapLink = document.createElement('a');
 seaMapLink.className = 'selector-item sea-map-link';
-seaMapLink.title = 'Mappa SEA';
-seaMapLink.setAttribute('aria-label', 'Mappa SEA');
+seaMapLink.title = 'Sea Atlas';
+seaMapLink.setAttribute('aria-label', 'Sea Atlas');
 const seaMapIcon = document.createElement('img');
-seaMapIcon.src = '/sea/assets/Gemini_Generated_Image_8x1fni8x1fni8x1f%20(1).png';
-seaMapIcon.alt = 'Mappa SEA';
+seaMapIcon.src = seaAtlasIcon;
+seaMapIcon.alt = 'Sea Atlas';
 seaMapLink.appendChild(seaMapIcon);
 seaMapLink.href = currentProfileId
-  ? `/pages/sea.html?${new URLSearchParams({ profileId: currentProfileId })}`
-  : '/pages/sea.html';
+  ? `https://seaatlas.it/pages/sea.html?${new URLSearchParams({ profileId: currentProfileId })}`
+  : 'https://seaatlas.it';
+seaMapLink.target = '_blank';
+seaMapLink.rel = 'noopener noreferrer';
 toggleSwitchContainer.querySelector('.vertical-selector')?.appendChild(seaMapLink);
 
 const playstoreIcon = document.createElement('div');
@@ -214,4 +217,3 @@ document.body.appendChild(sidebar);
 
 return sidebar;
 }
-

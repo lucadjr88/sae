@@ -1,5 +1,8 @@
 ## README
 
+SEA è un'applicazione separata: la sidebar apre https://seaatlas.it.
+Il build frontend non svuota `dist/`: per il deploy eseguire il build in una copia pulita, senza un `dist/` preesistente.
+
 # INSTALL DEPENDENCIES IN BACKEND AND FRONTEND
 cd ~/sae && npm install && cd frontend && npm install
 
