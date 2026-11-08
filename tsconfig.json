@@ -15,7 +15,6 @@
     "sourceMap": true,
     "allowJs": true,
     "moduleDetection": "force",
-    //"baseUrl": "./src",
     "paths": {
       "@app/*": ["./src/app/*"],
       "@services/*": ["./src/services/*"],
@@ -24,6 +23,6 @@
       "@types/*": ["./src/types/*"]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/app.ts", "src/backend/**/*", "src/decoders/**/*", "src/analysis/**/*", "src/utils/**/*"],
+  "exclude": ["node_modules", "dist", "frontend"]
 }

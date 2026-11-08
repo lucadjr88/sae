@@ -2,6 +2,6 @@ sudo pkill -9 -x node || true; cd ~/sae && rm -rf dist log && npm install --no-a
 
 git remote set-url origin https://github.com/lucadjr88/sae.git
 cd ~/sae
-git add -A && git commit -m "export sea da sae" && git push origin sae_standalone    
+git add -A && git commit -m "export sea da sae" && git push origin sae_standalone    1
 
 git add -A && git commit -m "prepare multi flotta" && git push origin sea-studio --force  
