@@ -1,0 +1,5 @@
+# Account personale utilizzato per i test:
+
+playerprofileid: 4PsiXxqZZkRynC96UMZDQ6yDuMTWB1zmn4hr84vQwaz8
+walletpubkey proprietario: GeUiZvjERgN95MFxU5wogLWPRUUpMgzQzdQnvyBkQHxv
+walletpubkey authority: 9ynTDJrA8EHqmSskLdooeptY7z4U4qrDUT1uQjEqKVJY

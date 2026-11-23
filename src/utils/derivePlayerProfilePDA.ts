@@ -8,6 +8,10 @@ import { getRpcConnectionWithUrl } from './rpc/connection.js';
 const PLAYER_PROFILE_PROGRAM_ID = 'pprofELXjL5Kck7Jn5hCpwAL82DpTkSYBENzahVtbc9';
 const RPC_POOL_COMPLETE = path.join(process.cwd(), 'utility', 'rpc-pool-complete.json');
 
+function errorMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).replace(/https?:\/\/\S+/g, '<rpc-url>');
+}
+
 type ProfilePDAVariant = {
   label: string;
   description: string;
@@ -20,7 +24,10 @@ async function findCachedProfileMatches(wallet: PublicKey): Promise<ProfilePDAVa
   let entries: Dirent[];
   try {
     entries = await fs.readdir(cacheRoot, { withFileTypes: true });
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('[findPlayerProfilesForWalletWithRpc] Cannot read profile cache:', errorMessage(error));
+    }
     return [];
   }
 
@@ -30,7 +37,10 @@ async function findCachedProfileMatches(wallet: PublicKey): Promise<ProfilePDAVa
     let profileId: string;
     try {
       profileId = new PublicKey(entry.name).toBase58();
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn(`[findPlayerProfilesForWalletWithRpc] Cannot read cached profile ${profileId}:`, errorMessage(error));
+      }
       continue;
     }
     try {
@@ -51,23 +61,11 @@ async function findCachedProfileMatches(wallet: PublicKey): Promise<ProfilePDAVa
   return matches;
 }
 
-// Find player profile by searching on-chain for accounts containing wallet as owner/authority
-  const variants: ProfilePDAVariant[] = [];
-  //return await findPlayerProfilesForWalletWithRpc(wallet, undefined, undefined);
-//}
-
-// Best practice: pass rpcUrl as parameter
 export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcUrl?: string, profileId?: string): Promise<ProfilePDAVariant[]> {
   const variants: ProfilePDAVariant[] = [];
-  let lastError: unknown = null;
+  let searchError: string | null = null;
   try {
     console.log('[findPlayerProfilesForWalletWithRpc] Start for wallet:', wallet.toBase58());
-    const cachedProfiles = await findCachedProfileMatches(wallet);
-    if (cachedProfiles.length) {
-      console.log('[findPlayerProfilesForWalletWithRpc] Matched cached profile authorities:', cachedProfiles.map(profile => profile.profileId));
-      return cachedProfiles;
-    }
-
     let endpointsRaw: any = [];
     try {
       const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
@@ -104,82 +102,90 @@ export async function findPlayerProfilesForWalletWithRpc(wallet: PublicKey, rpcU
       throw new Error('No RPC endpoints configured in utility/rpc-pool-complete.json');
     }
 
-    const startIndex = 0;
+    let searchSucceeded = false;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const index = (startIndex + attempt) % effectiveCandidates.length;
-      const selectedUrl = effectiveCandidates[index];
-      const { connection } = await getRpcConnectionWithUrl({
-  rpcUrl: selectedUrl,
-  commitment: 'confirmed'
-});
+      const selectedUrl = effectiveCandidates[attempt];
       try {
-        console.log('[findPlayerProfilesForWalletWithRpc] Selected RPC:', selectedUrl);
+        const endpoint = endpointObjs.find((ep: any) => ep.url === selectedUrl);
+        const { connection } = await getRpcConnectionWithUrl({
+          rpcUrl: selectedUrl,
+          commitment: 'confirmed',
+          headers: endpoint?.headers,
+        });
+        console.log('[findPlayerProfilesForWalletWithRpc] Selected RPC host:', new URL(selectedUrl).host);
         console.log('[findPlayerProfilesForWalletWithRpc] Scanning profile key entries:', {
           programId: programPubkey.toBase58(),
           wallet: wallet.toBase58(),
         });
-        let accountsWithWallet: Awaited<ReturnType<typeof connection.getProgramAccounts>> = [];
-        let respondedInTime = true;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        let accountsWithWallet: Awaited<ReturnType<typeof connection.getProgramAccounts>>;
         try {
           accountsWithWallet = await Promise.race([
             connection.getProgramAccounts(programPubkey, { commitment: 'confirmed' }),
-            new Promise((_, reject) => setTimeout(() => {
-              respondedInTime = false;
-              reject(new Error('getProgramAccounts timeout'));
-            }, 5000))
-          ]) as Awaited<ReturnType<typeof connection.getProgramAccounts>>;
-        } catch (timeoutErr) {
-          respondedInTime = false;
-          accountsWithWallet = [];
+            new Promise<never>((_, reject) => {
+              timeout = setTimeout(() => reject(new Error('getProgramAccounts timeout')), 5000);
+            })
+          ]);
+        } finally {
+          if (timeout) clearTimeout(timeout);
         }
-        // Aggiorna solo le stats, la logica di retry rimane invariata
-        await updatePlayerProfileRpcStats(selectedUrl, respondedInTime);
-        if (respondedInTime) {
-          for (const account of accountsWithWallet) {
-            const data = Buffer.from(account.account.data);
-            if (data.length < 30) continue;
-            const keyCount = data.readUInt16LE(28);
-            const availableKeyCount = Math.min(keyCount, Math.floor((data.length - 30) / 80));
-            let foundWallet = false;
-            for (let keyIndex = 0; keyIndex < availableKeyCount; keyIndex += 1) {
-              const keyOffset = 30 + keyIndex * 80;
-              if (data.subarray(keyOffset, keyOffset + 32).equals(wallet.toBuffer())) {
-                foundWallet = true;
-                break;
-              }
-            }
-            if (foundWallet) {
-              const profileId = account.pubkey.toBase58();
-              console.log('[findPlayerProfilesForWalletWithRpc] Found profile:', profileId);
-              variants.push({
-                label: `profile_found_${variants.length + 1}`,
-                description: `Profile account contains wallet ${wallet.toBase58()} in its ProfileKey entries`,
-                profileId,
-                source: 'on-chain ProfileKey scan',
-              });
+        await updatePlayerProfileRpcStats(selectedUrl, true);
+        for (const account of accountsWithWallet) {
+          const data = Buffer.from(account.account.data);
+          if (data.length < 30) continue;
+          const keyCount = data.readUInt16LE(28);
+          const availableKeyCount = Math.min(keyCount, Math.floor((data.length - 30) / 80));
+          let foundWallet = false;
+          for (let keyIndex = 0; keyIndex < availableKeyCount; keyIndex += 1) {
+            const keyOffset = 30 + keyIndex * 80;
+            if (data.subarray(keyOffset, keyOffset + 32).equals(wallet.toBuffer())) {
+              foundWallet = true;
+              break;
             }
           }
-          console.log('[findPlayerProfilesForWalletWithRpc] Matching profiles:', variants.length);
-          if (variants.length > 0) {
-            return variants;
+          if (foundWallet) {
+            const profileId = account.pubkey.toBase58();
+            console.log('[findPlayerProfilesForWalletWithRpc] Found profile:', profileId);
+            variants.push({
+              label: `profile_found_${variants.length + 1}`,
+              description: `Profile account contains wallet ${wallet.toBase58()} in its ProfileKey entries`,
+              profileId,
+              source: 'on-chain ProfileKey scan',
+            });
           }
         }
-        // Se non trovato o timeout, continua con il prossimo endpoint
+        console.log('[findPlayerProfilesForWalletWithRpc] Matching profiles:', variants.length);
+        if (variants.length > 0) {
+          return variants;
+        }
+        searchSucceeded = true;
+        break;
       } catch (e) {
         await updatePlayerProfileRpcStats(selectedUrl, false);
-        lastError = e;
-        console.log(`[findPlayerProfilesForWalletWithRpc] Attempt ${attempt + 1}/${maxAttempts} failed on ${selectedUrl}:`, (e as any)?.message || e);
+        console.warn(`[findPlayerProfilesForWalletWithRpc] Attempt ${attempt + 1}/${maxAttempts} failed:`, errorMessage(e));
       }
     }
 
-    throw lastError ?? new Error('All RPC endpoints failed for player profile search');
+    if (!searchSucceeded) throw new Error('All RPC endpoints failed for player profile search');
+    console.log('[findPlayerProfilesForWalletWithRpc] On-chain search returned no profiles');
   } catch (e) {
-    console.log('[findPlayerProfilesForWalletWithRpc] Error:', (e as any)?.message || e);
+    searchError = errorMessage(e);
+    console.warn('[findPlayerProfilesForWalletWithRpc] On-chain search failed:', searchError);
+  }
+
+  const cachedProfiles = await findCachedProfileMatches(wallet);
+  if (cachedProfiles.length) {
+    console.log('[findPlayerProfilesForWalletWithRpc] Using cached profiles:', cachedProfiles.map(profile => profile.profileId));
+    return cachedProfiles;
+  }
+  console.log('[findPlayerProfilesForWalletWithRpc] No cached profiles found');
+  if (searchError) {
     return [{
       label: 'error',
-      description: `Error searching for profiles: ${(e as any)?.message || 'Unknown error'}`,
+      description: `Error searching for profiles: ${searchError}`,
       profileId: '',
       source: 'search failed'
     }];
   }
+  return [];
 }

@@ -7,35 +7,17 @@ import buildFeesDetailed from '../utils/buildFeesDetailed.js';
 import { decodeResources } from '../utils/resources_analyses.js';
 import { deriveStarbaseCargoIdsForProfile } from '../utils/deriveStarbaseCargoIdsForProfile.js';
 import { getWalletAuthorityUtil } from '../utils/getWalletAuthority.js';
-import { getWalletTxsUtil } from '../utils/getWalletTxs.js';
 import { getProfileFactionUtil } from '../utils/getProfileFaction.js';
+import { isUsableCachedPlayload, shouldServeCachedPlayloadAfterLockWait } from './cachedPayload.js';
+import { appendIdHistory } from './profileHistory.js';
+import { fetchProfileWalletTransactions } from './fetchProfileWalletTransactions.js';
+import { decodeCachedSageOps } from './decodeCachedSageOps.js';
+import { associateSageOpsToFleetsUtil } from '../utils/associateSageOpsToFleets.js';
+import { buildCachedPayload } from './buildCachedPayload.js';
+
+export { shouldServeCachedPlayloadAfterLockWait } from './cachedPayload.js';
 
 const router = Router();
-
-const ID_HISTORY_LOG_PATH = path.join(process.cwd(), 'IdHistory.log');
-const ID_HISTORY_HEADER = 'timestamp\tprofileId\twalletPubKey\n';
-
-async function appendIdHistory(profileId: string, walletPubKey?: string | null) {
-    const timestamp = new Date().toISOString();
-    const wallet = typeof walletPubKey === 'string' && walletPubKey.trim().length > 0
-        ? walletPubKey.trim()
-        : '-';
-    const line = `${timestamp}\t${profileId}\t${wallet}\n`;
-
-    let prependHeader = false;
-    try {
-        const stats = await fs.stat(ID_HISTORY_LOG_PATH);
-        prependHeader = !stats || stats.size === 0;
-    } catch {
-        prependHeader = true;
-    }
-
-    await fs.appendFile(
-        ID_HISTORY_LOG_PATH,
-        prependHeader ? `${ID_HISTORY_HEADER}${line}` : line,
-        'utf8'
-    );
-}
 
 async function clearNamespaces(profileId: string) {
     const toClear = ['sage-ops', 'unknown', 'fleet-breakdowns', 'player-ops', 'reports', 'playload'];
@@ -49,25 +31,7 @@ async function clearNamespaces(profileId: string) {
     }
 }
 
-function isUsableCachedPlayload(payloadData: any) {
-    if (!payloadData || typeof payloadData !== 'object') return false;
-    return !(
-        Object.keys(payloadData.feesByFleet || {}).length === 0
-        && Number(payloadData.transactionCount24h || 0) === 0
-        && Number(payloadData.sageFees24h || 0) === 0
-    );
-}
-
-export function shouldServeCachedPlayloadAfterLockWait(wipeCache: unknown, payloadData: any) {
-    return !Boolean(wipeCache) && isUsableCachedPlayload(payloadData);
-}
-
 // Importa i 7 handler debug
-import { getWalletAuthorityHandler } from './debug/getWalletAuthority.js';
-import { getWalletTxsHandler } from './debug/getWalletTxs.js';
-import { decodeSageOpsFullHandler } from './debug/decodeSageOpsFull.js';
-import { associateSageOpsToFleetsHandler } from './debug/associateSageOpsToFleets.js';
-import playloadHandler from './debug/playload.js';
 import { fetchProfileFleets } from '../utils/fetchProfileFleets.js';
 import { fetchProfileRentedFleets } from '../utils/fetchProfileRentedFleets.js';
 import { resetPoolCache } from '../utils/rpc/rpc-pool-manager.js';
@@ -234,7 +198,7 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
             }
 
             resetPoolCache(profileId);
-            resetHealthMap();
+            resetHealthMap(true);
             resetConcurrencyMap();
             resetMetricsMap();
 
@@ -246,9 +210,11 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
 
         // FASE 1: GET WALLET AUTHORITY
         console.log("###################### INIZIO FASE 1: GET WALLET AUTHORITY #########################");
-        const req1: any = { query: { profileId } };
-        const res1: any = { json: (data: any) => data, status: () => res1, send: () => { } };
-        const walletAuthority = await getWalletAuthorityHandler(req1, res1);
+        console.log(`[get-wallet-authority] profileId=${profileId}`);
+        const walletAuthority = await getWalletAuthorityUtil(profileId).catch((error: any) => {
+            console.warn('[analyze-profile] get-wallet-authority failed:', error);
+            return { error: error?.message || 'getWalletAuthority failed' };
+        });
 
         // FASE 1B: GET PROFILE FACTION
         console.log("###################### FASE 1B: GET PROFILE FACTION #########################");
@@ -260,15 +226,19 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         console.log("###################### FINE FASE 1B, INIZIO FASE 2: GET WALLET TXS #########################");
 
         // FASE 2: GET WALLET TXS
-        const req2: any = { query: { profileId, cutoffH: lats || 24 } };
-        const res2: any = { json: (data: any) => data, status: () => res2, send: () => { } };
-        const walletTxs = await getWalletTxsHandler(req2, res2);
+        const cutoffH = lats || 24;
+        let walletTxResult: Awaited<ReturnType<typeof fetchProfileWalletTransactions>>;
+        try {
+            walletTxResult = await fetchProfileWalletTransactions(profileId, cutoffH ? Number(cutoffH) : 24);
+        } catch (error: any) {
+            throw new Error(`get-wallet-txs failed: ${error?.message || 'getWalletTxs failed'}`);
+        }
+        if (walletTxResult.ok === false) throw new Error(`get-wallet-txs failed: ${walletTxResult.error}`);
+        const walletTxs = { profileId: walletTxResult.profileId, cutoffH: walletTxResult.cutoffH, results: walletTxResult.results };
         console.log("###################### FINE FASE 2, INIZIO FASE 3: DECODE SAGE OPS #########################");
 
         // FASE 3: DECODE SAGE OPS
-        const req3: any = { query: { profileId } };
-        const res3: any = { json: (data: any) => data, status: () => res3, send: () => { } };
-        const sageOps = await decodeSageOpsFullHandler(req3, res3);
+        const sageOps = await decodeCachedSageOps(profileId, walletTxResult.walletSignatures);
         console.log("###################### FINE FASE 3, INIZIO FASE 4: GET FLEETS #########################");
 
         // FASE 4: GET FLEETS
@@ -280,9 +250,10 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         console.log("###################### FINE FASE 5, INIZIO FASE 6: ASSOCIATE SAGE OPS TO FLEETS #########################");
 
         // FASE 6: ASSOCIATE SAGE OPS TO FLEETS
-        const req6: any = { query: { profileId } };
-        const res6: any = { json: (data: any) => data, status: () => res6, send: () => { } };
-        const breakdown = await associateSageOpsToFleetsHandler(req6, res6);
+        const breakdown = await associateSageOpsToFleetsUtil(profileId).catch((error: any) => {
+            console.warn('[analyze-profile] associate-sage-ops-to-fleets failed:', error);
+            return { error: error?.message || 'associateSageOpsToFleets failed' };
+        });
 
         // FASE 6B: DERIVE STARBASE CARGO IDS
         try {
@@ -296,9 +267,10 @@ router.post('/analyze-profile', async (req: Request, res: Response) => {
         console.log("###################### FINE FASE 6, INIZIO FASE 7: PLAYLOAD #########################");
 
         // FASE 7: PLAYLOAD (aggregazione finale, identica a GET /api/debug/playload)
-        const req7: any = { query: { profileId, wipeCache } };
-        const res7: any = { json: (data: any) => data, status: () => res7, send: () => { } };
-        const playload: any = await playloadHandler(req7, res7);
+        const playload: any = await buildCachedPayload(profileId).catch((error: any) => {
+            console.log('[playload] error', error);
+            return { error: error?.message || 'playload failed' };
+        });
         // Ensure frontend receives the aggregated fees/breakdown used for displays
         try {
             const fees = await buildFeesDetailed(profileId as string);

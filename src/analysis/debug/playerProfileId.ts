@@ -47,7 +47,11 @@ export async function playerProfileIdHandler(req: Request, res: Response) {
 
     return res.json({
       wallet,
-      message: 'Player Profile account(s) found on-chain for wallet',
+      message: variants.some(variant => variant.source === 'search failed')
+        ? 'Player Profile search failed'
+        : variants.length
+          ? 'Player Profile account(s) found for wallet'
+          : 'No Player Profile accounts found for wallet',
       variants,
     });
   } catch (e: any) {

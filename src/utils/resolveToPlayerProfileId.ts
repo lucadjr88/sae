@@ -3,15 +3,7 @@ import path from 'path';
 import { PublicKey } from '@solana/web3.js';
 import { getCache } from './cache.js';
 import { findPlayerProfilesForWalletWithRpc } from './derivePlayerProfilePDA.js';
-
-function isUsableCachedPlayload(payloadData: any) {
-    if (!payloadData || typeof payloadData !== 'object') return false;
-    return !(
-        Object.keys(payloadData.feesByFleet || {}).length === 0
-        && Number(payloadData.transactionCount24h || 0) === 0
-        && Number(payloadData.sageFees24h || 0) === 0
-    );
-}
+import { isUsableCachedPlayload } from '../analysis/cachedPayload.js';
 
 export async function resolveToPlayerProfileId(rawInput: string, wipeCache: boolean = false): Promise<string> {
     const input = rawInput.trim();

@@ -1,13 +1,15 @@
-import { ComputeBudgetProgram, Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import BN from "bn.js";
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { createRequire } from "node:module";
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
 import { RentalService } from "./rentalService.js";
 import { decodeRentalState } from "./decode.js";
-import { pickOptimisticRentalRate } from "./rentalCacheUtils.js";
-import { RpcPoolManager } from "../../utils/rpc/rpc-pool-manager.js";
+import { buildListedFleetPreview, matchesFleetByTxMeta, pickOptimisticRentalRate } from "./rentalCacheUtils.js";
+import { waitForRentalConfirmation } from "./confirmTransaction.js";
+import { executeRentalRpc as executeRpcWithPool } from "./rentalRpc.js";
+import { acceptRentalTx, SRSLY_PROGRAM_ID } from "./acceptRentalTx.js";
+import { convertDurationToContractUnits, DURATION_SECONDS_BY_UNIT, normalizeDurationUnit } from "./rentalDuration.js";
 import { getVerifiedSignedTxFromLocals, prepareTxForWalletSignature, requireVerifiedTxSignature } from "../security/txSigningMiddleware.js";
 
 // PATCH: Express endpoint minimale per orchestrare la rental tx
@@ -15,114 +17,7 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 const router = express.Router();
-const require = createRequire(import.meta.url);
-const { acceptRental, createBorrower, setSdkConfig } = require("@sly-rentals/core/legacy") as typeof import("@sly-rentals/core/legacy");
-
-const DURATION_SECONDS_BY_UNIT: Record<string, number> = {
-  decasecond: 10,
-  minute: 60,
-  hourly: 3600,
-  hour: 3600,
-  daily: 86400,
-  day: 86400,
-  weekly: 604800,
-  week: 604800,
-  monthly: 2592000,
-  month: 2592000,
-};
-
-function normalizeDurationUnit(value: unknown): string {
-  const normalized = String(value ?? '').trim().toLowerCase();
-  if (normalized === 'decaseconds') return 'decasecond';
-  if (normalized.startsWith('min')) return 'minute';
-  if (normalized.startsWith('hour')) return 'hourly';
-  if (normalized.startsWith('day')) return 'daily';
-  if (normalized.startsWith('week')) return 'weekly';
-  if (normalized.startsWith('month')) return 'monthly';
-  return normalized;
-}
-
-function convertDurationToContractUnits(duration: number, requestedUnit: unknown, paymentFrequency: unknown): number {
-  const sourceUnit = normalizeDurationUnit(requestedUnit || 'day');
-  const targetUnit = normalizeDurationUnit(paymentFrequency);
-  const sourceSeconds = DURATION_SECONDS_BY_UNIT[sourceUnit];
-  const targetSeconds = DURATION_SECONDS_BY_UNIT[targetUnit];
-
-  if (!sourceSeconds) {
-    throw new Error(`Unsupported duration unit: ${requestedUnit}`);
-  }
-
-  if (!targetSeconds) {
-    return duration;
-  }
-
-  const convertedDuration = (duration * sourceSeconds) / targetSeconds;
-  if (!Number.isInteger(convertedDuration) || convertedDuration <= 0) {
-    throw new Error(`Duration ${duration} ${sourceUnit} is not compatible with payment frequency ${paymentFrequency}`);
-  }
-
-  return convertedDuration;
-}
-
-function matchesFleetByTxMeta(fleet: any, txMeta: any): boolean {
-  const sameFleet = typeof txMeta?.fleet_id === 'string' && (
-    fleet?.fleet_id === txMeta.fleet_id
-    || fleet?.fleet === txMeta.fleet_id
-    || fleet?.pubkey === txMeta.fleet_id
-    || fleet?.key === txMeta.fleet_id
-    || fleet?.data?.fleetShips === txMeta.fleet_id
-  );
-  const sameContract = typeof txMeta?.contract === 'string' && (
-    fleet?.contractPubkey === txMeta.contract
-    || fleet?.contract === txMeta.contract
-    || fleet?.address === txMeta.contract
-  );
-  const sameRentalState = typeof txMeta?.rentalState === 'string' && (
-    fleet?.rental_state_pubkey === txMeta.rentalState
-    || fleet?.current_rental_state === txMeta.rentalState
-    || fleet?.rentalState === txMeta.rentalState
-  );
-  return sameFleet || sameContract || sameRentalState;
-}
-
-function buildListedFleetPreview(currentData: any, txMeta: any): any {
-  const fleets = Array.isArray(currentData?.fleets) ? currentData.fleets : [];
-  const sourceFleet = fleets.find((fleet: any) => matchesFleetByTxMeta(fleet, txMeta)) ?? null;
-  const fleetId = sourceFleet?.key || sourceFleet?.pubkey || sourceFleet?.fleet || txMeta?.fleet_id || null;
-  const fleetLabel = sourceFleet?.callsign || sourceFleet?.fleet_label || sourceFleet?.fleet_name || txMeta?.fleet_label || fleetId || 'Unknown';
-  const rateRaw = txMeta?.rate ?? sourceFleet?.rate ?? null;
-  const parsedRate = rateRaw === null || rateRaw === undefined || rateRaw === '' ? null : Number(rateRaw);
-  const durationMinRaw = txMeta?.durationMin ?? sourceFleet?.duration_min ?? 1;
-  const durationMaxRaw = txMeta?.durationMax ?? sourceFleet?.duration_max ?? 24;
-
-  return {
-    ...(sourceFleet && typeof sourceFleet === 'object' ? sourceFleet : {}),
-    fleet: fleetId,
-    fleet_id: fleetId,
-    key: sourceFleet?.key ?? fleetId,
-    pubkey: fleetId,
-    fleet_label: fleetLabel,
-    callsign: sourceFleet?.callsign ?? fleetLabel,
-    isListed: true,
-    isLoaned: false,
-    isRented: false,
-    contractPubkey: typeof txMeta?.contract === 'string' ? txMeta.contract : sourceFleet?.contractPubkey ?? null,
-    contract: typeof txMeta?.contract === 'string' ? txMeta.contract : sourceFleet?.contract ?? null,
-    address: typeof txMeta?.contract === 'string' ? txMeta.contract : sourceFleet?.address ?? null,
-    owner_profile: typeof txMeta?.ownerProfile === 'string' ? txMeta.ownerProfile : sourceFleet?.owner_profile ?? null,
-    current_rental_state: null,
-    rental_state_pubkey: null,
-    rate: Number.isFinite(parsedRate as number) ? parsedRate : rateRaw,
-    duration_min: Number(durationMinRaw) || 1,
-    duration_max: Number(durationMaxRaw) || 24,
-    payment_frequency: typeof txMeta?.paymentFrequency === 'string'
-      ? String(txMeta.paymentFrequency).replace(/^@/, '')
-      : sourceFleet?.payment_frequency ?? 'daily',
-    rental_start_time: null,
-    rental_end_time: null,
-    rental_cancelled: false,
-  };
-}
+export { acceptRentalTx } from "./acceptRentalTx.js";
 
 function normalizeInstructionAccounts(accounts: any[]): any[] {
   return accounts.map((acc) => {
@@ -257,115 +152,6 @@ const profileFactionCache = new Map<string, PublicKey>();
 function normalizeRpcProfileId(value?: string | null): string {
   const cleaned = typeof value === 'string' ? value.trim() : '';
   return cleaned.length > 0 ? cleaned : 'default';
-}
-
-function getRpcErrorType(error: unknown): '429' | '503' | 'error' {
-  const status = typeof (error as { status?: unknown })?.status === 'number'
-    ? Number((error as { status?: number }).status)
-    : undefined;
-  const message = error instanceof Error ? error.message : String(error ?? '');
-
-  if (status === 429 || /429|Too Many Requests/i.test(message)) return '429';
-  if (status === 503 || /503|Service Unavailable/i.test(message)) return '503';
-  return 'error';
-}
-
-async function executeRpcWithPool<T>(profileId: string, operation: (connection: Connection) => Promise<T>): Promise<T> {
-  const normalizedProfileId = normalizeRpcProfileId(profileId);
-  const pool = await RpcPoolManager.loadOrCreateRpcPool(normalizedProfileId);
-  const maxAttempts = Math.max(4, Math.round(pool.length * 1.5));
-  let lastError: unknown = null;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | null = null;
-    const startedAt = Date.now();
-
-    try {
-      pick = await RpcPoolManager.pickRpcConnection(normalizedProfileId, {
-        waitForMs: 3000,
-        allowStale: attempt > 2,
-      });
-      const result = await operation(pick.connection as Connection);
-      pick.release({ success: true, latencyMs: Date.now() - startedAt });
-      return result;
-    } catch (error) {
-      if (pick) {
-        pick.release({
-          success: false,
-          latencyMs: Date.now() - startedAt,
-          errorType: getRpcErrorType(error),
-        });
-      }
-      lastError = error;
-      console.error(`[rent-rpc] attempt ${attempt + 1}/${maxAttempts} failed for profile ${normalizedProfileId}:`, error);
-    }
-  }
-
-  if (lastError instanceof Error) throw lastError;
-  throw new Error('RPC request failed');
-}
-
-function isConfirmedSignatureStatus(status: any): boolean {
-  if (!status || status.err) return false;
-  const confirmationStatus = String(status.confirmationStatus || '').toLowerCase();
-  return confirmationStatus === 'confirmed' || confirmationStatus === 'finalized';
-}
-
-async function waitForSignatureConfirmation(
-  profileId: string,
-  signature: string,
-  opts?: { rentalState?: string | null; timeoutMs?: number; pollIntervalMs?: number }
-): Promise<'signature-status' | 'rental-state'> {
-  const timeoutMs = opts?.timeoutMs ?? 45_000;
-  const pollIntervalMs = opts?.pollIntervalMs ?? 1_200;
-  const startedAt = Date.now();
-  const rentalStateKey = typeof opts?.rentalState === 'string' && opts.rentalState.trim().length > 0
-    ? new PublicKey(opts.rentalState)
-    : null;
-  let lastTransientError: unknown = null;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const result = await executeRpcWithPool(profileId, async (connection) => {
-        const response = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
-        const status = response?.value?.[0];
-
-        if (status?.err) {
-          throw new Error(`Transaction ${signature} failed on chain: ${JSON.stringify(status.err)}`);
-        }
-
-        if (isConfirmedSignatureStatus(status)) {
-          return 'signature-status' as const;
-        }
-
-        if (rentalStateKey) {
-          const accountInfo = await connection.getAccountInfo(rentalStateKey, 'confirmed');
-          if (accountInfo?.data && accountInfo.data.length > 0) {
-            return 'rental-state' as const;
-          }
-        }
-
-        return null;
-      });
-
-      if (result) {
-        return result;
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error ?? '');
-      if (/failed on chain/i.test(message)) {
-        throw error;
-      }
-      lastTransientError = error;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-  }
-
-  const lastErrorMessage = lastTransientError instanceof Error
-    ? ` Last RPC error: ${lastTransientError.message}`
-    : '';
-  throw new Error(`Timed out waiting for on-chain confirmation for ${signature}.${lastErrorMessage}`);
 }
 
 async function getProfileFactionAccount(profilePk: PublicKey, profileId?: string): Promise<PublicKey> {
@@ -723,7 +509,7 @@ router.post('/send-tx', requireVerifiedTxSignature(), async (req, res) => {
     console.log(`[SEND-TX] TX inviata con successo. Signature: ${signature}`);
 
     try {
-      const confirmationSource = await waitForSignatureConfirmation(rpcProfileId, signature, {
+      const confirmationSource = await waitForRentalConfirmation(executeRpcWithPool, rpcProfileId, signature, {
         rentalState: !isRemovalOp ? effectiveRentalState : null,
       });
       console.log(`[SEND-TX] conferma on-chain rilevata via ${confirmationSource}: ${signature}`);
@@ -945,78 +731,3 @@ router.post('/send-tx', requireVerifiedTxSignature(), async (req, res) => {
 });
 
 export default router;
-
-// Parametri principali
-const SRSLY_PROGRAM_ID = new PublicKey("SRSLYxcFnjd5jG2DpJw4as6UEyjwJQK1U4J1TD1hvZH");
-
-// PATCH: wallet va gestito in modo sicuro, qui placeholder
-const wallet = "";//Keypair.fromSecretKey(/* ... */);
-
-
-
-// PATCH: funzione riutilizzabile per orchestrare la tx AcceptRental
-// Costruisce la transazione rental senza firmarla e la restituisce
-
-export async function acceptRentalTx(params: any) {
-  const profileId = normalizeRpcProfileId(params.rpcProfileId || params.borrowerProfile.toBase58());
-  const pool = await RpcPoolManager.loadOrCreateRpcPool(profileId);
-  const attemptedUrls = new Set<string>();
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < Math.max(1, pool.length); attempt += 1) {
-    let pick: Awaited<ReturnType<typeof RpcPoolManager.pickRpcConnection>> | null = null;
-    try {
-      pick = await RpcPoolManager.pickRpcConnection(profileId, {
-        waitForMs: 3000,
-        allowStale: attempt > 2,
-        excludeUrls: attemptedUrls,
-      });
-      attemptedUrls.add(pick.endpoint.url);
-      setSdkConfig({ programs: "mainnet", rpcUrl: pick.endpoint.url, PublicKey });
-      const [borrowerState] = await PublicKey.findProgramAddress([
-        Buffer.from("borrower_state"), params.borrower.toBuffer(),
-      ], SRSLY_PROGRAM_ID);
-      const borrowerStateInfo = await (pick.connection as Connection).getAccountInfo(borrowerState);
-      const borrowerInstructions = borrowerStateInfo
-        ? []
-        : await createBorrower({ borrower: params.borrower.toBase58() });
-      const instructions = await acceptRental({
-        borrower: params.borrower.toBase58(),
-        borrowerProfile: params.borrowerProfile.toBase58(),
-        contract: params.contract.toBase58(),
-        rate: params.rate,
-        duration: params.durationSeconds,
-        computeUnits: 400_000,
-      });
-      const computeBudgetInstructions = instructions.filter(
-        (instruction) => String(instruction.programId) === "ComputeBudget111111111111111111111111111111",
-      );
-      const rentalInstructions = instructions.filter(
-        (instruction) => String(instruction.programId) !== "ComputeBudget111111111111111111111111111111",
-      );
-      const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10_000 });
-      const tx = new Transaction().add(...[...computeBudgetInstructions, priorityFeeInstruction, ...borrowerInstructions, ...rentalInstructions].map((instruction) => new TransactionInstruction({
-        programId: new PublicKey(instruction.programId),
-        keys: instruction.keys.map((key) => ({
-          pubkey: new PublicKey(key.pubkey),
-          isSigner: key.isSigner,
-          isWritable: key.isWritable,
-        })),
-        data: Buffer.from(instruction.data),
-      })));
-      pick.release({ success: true });
-      console.log("[acceptRentalTx] Instruction data (hex):", tx.instructions[0].data?.toString('hex') || "N/A");
-      console.log("[acceptRentalTx] SDK arguments:", { rate: params.rate.toString(), durationSeconds: params.durationSeconds });
-      console.log("[acceptRentalTx] TX oggetto:", tx);
-      return tx;
-    } catch (error) {
-      const errorType = getRpcErrorType(error);
-      if (pick) pick.release({ success: false, errorType });
-      lastError = error;
-      if (errorType !== '429' && errorType !== '503') throw error;
-      console.warn("[acceptRentalTx] RPC failed; trying next endpoint", { attempt: attempt + 1, errorType });
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "All RPC endpoints failed"));
-}

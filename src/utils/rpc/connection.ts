@@ -1,10 +1,11 @@
 import { Connection, type Commitment } from '@solana/web3.js';
-import nodeFetch from 'node-fetch';
+import nodeFetch, { Headers } from 'node-fetch';
 import { getSingleHealthyRpc } from './prune.js';
 
 type RpcConnectionOptions = {
   rpcUrl?: string;
   commitment?: Commitment;
+  disableRetryOnRateLimit?: boolean;
 };
 
 export async function getHealthyRpcUrlOrThrow(): Promise<string> {
@@ -34,19 +35,9 @@ export async function getRpcConnectionWithUrl(options: RpcConnectionOptions & { 
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
     
-    const mergedHeaders: Record<string, string> = {};
-    if (init?.headers) {
-      if (typeof (init.headers as any).forEach === 'function') {
-        (init.headers as any).forEach((v: string, k: string) => {
-          mergedHeaders[k] = v;
-        });
-      } else if (typeof init.headers === 'object') {
-        Object.assign(mergedHeaders, init.headers);
-      }
-    }
-    if (customHeaders) {
-      Object.assign(mergedHeaders, customHeaders);
-    }
+    const mergedHeaders = new Headers(init?.headers);
+    for (const [name, value] of Object.entries(customHeaders || {})) mergedHeaders.set(name, value);
+    if (!mergedHeaders.has('accept-encoding')) mergedHeaders.set('accept-encoding', 'identity');
     
     return nodeFetch(resource as any, {
       ...init,
@@ -57,7 +48,7 @@ export async function getRpcConnectionWithUrl(options: RpcConnectionOptions & { 
 
   return {
     rpcUrl,
-    connection: new Connection(rpcUrl, { commitment, fetch: customFetch as any }),
+    connection: new Connection(rpcUrl, { commitment, fetch: customFetch as any, disableRetryOnRateLimit: options.disableRetryOnRateLimit }),
   };
 }
 

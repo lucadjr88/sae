@@ -3,6 +3,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import nodeFetch from 'node-fetch';
 
 const RPC_POOL_COMPLETE = path.join(process.cwd(), 'utility', 'rpc-pool-complete.json');
 
@@ -21,7 +22,7 @@ async function postGetSlot(url: string, timeout: number, headers?: Record<string
 
   try {
     const hdrs: Record<string, string> = { 'Content-Type': 'application/json', ...(headers || {}) };
-    const response = await fetch(url, {
+    const response = await nodeFetch(url, {
       method: 'POST',
       headers: hdrs,
       body: JSON.stringify({
@@ -49,7 +50,7 @@ async function postGetLatestBlockhash(url: string, timeout: number, headers?: Re
 
   try {
     const hdrs: Record<string, string> = { 'Content-Type': 'application/json', ...(headers || {}) };
-    const response = await fetch(url, {
+    const response = await nodeFetch(url, {
       method: 'POST',
       headers: hdrs,
       body: JSON.stringify({

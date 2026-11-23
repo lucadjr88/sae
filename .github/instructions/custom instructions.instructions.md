@@ -8,7 +8,8 @@ applyTo: "**"
 ## 0) Default Execution Style
 - Minimalism first: smallest correct diff, fewest touched files, zero speculative refactors.
 - Keep code, comments, and explanations terse; use as few tokens as practical.
-- Never run `build`, `test`, or verification commands unless explicitly requested; ask first if needed.
+- Never create new test scripts or run tests; the user performs any requested tests.
+- Never run `build` or verification commands unless explicitly requested; ask first if needed.
 
 ## 1) Project Domain and SSOT
 - Domain: Star Atlas SAGE, rental/crafting backend decoding, transaction orchestration, cache-aware analysis (no speculative UI rewrites).
@@ -32,6 +33,12 @@ applyTo: "**"
 - Allowed: read, fast search, compare, extract APIs/contracts.
 - Forbidden: create, edit, rename, move, or delete anywhere inside read-only roots.
 - Write boundary: target `/home/luca/sae/**` only, unless explicitly authorized. Validate destination path before every write.
+
+## 4a) Network Filesystem and Permissions
+- The project is under `/home/luca/condivisione/sae`, on the SSHFS mount `transfer@100.89.146.62:/miei_file` at `/home/luca/condivisione`.
+- Mount configuration: `fuse.sshfs _netdev,user,port=2222,IdentityFile=/home/luca/.ssh/condivisioneKey,allow_other,x-systemd.automount,x-systemd.idle-timeout=60,x-systemd.mount-timeout=10,nofail`.
+- The remote account `transfer` differs from the local user `luca`; account for SSHFS ownership and permissions when accessing files or executing programs.
+- Do not assume programs are executable or change permissions, ownership, or mount settings without user approval. Report permission errors explicitly.
 
 ## 5) Coding Conventions
 - Short, focused functions; explicit data flow; compact vertical spacing.

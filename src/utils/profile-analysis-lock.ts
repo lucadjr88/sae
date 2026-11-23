@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 export type ProfileAnalysisLockRelease = () => Promise<void>;
 
@@ -8,19 +9,31 @@ function getLockFile(profileId: string) {
   return path.join(process.cwd(), 'cache', '_profile_locks', `${safeKey}.analyze-profile.lock`);
 }
 
-function buildLockPayload(staleMs: number) {
+function buildLockPayload(staleMs: number, owner: string) {
   const now = Date.now();
   return JSON.stringify({
     pid: process.pid,
+    owner,
     updatedAt: now,
     expiresAt: now + staleMs,
   });
 }
 
-function isLockStale(rawLock: string | null, staleMs: number) {
-  if (!rawLock) return true;
+function isLockStale(rawLock: string, staleMs: number, modifiedAt: number) {
+  if (!rawLock) return Date.now() >= modifiedAt + staleMs;
   try {
     const parsed = JSON.parse(rawLock);
+    const pid = Number(parsed?.pid);
+    if (Number.isInteger(pid) && pid > 0) {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'EPERM') return false;
+        if (code !== 'ESRCH') throw error;
+      }
+    }
     const expiresAt = Number(parsed?.expiresAt);
     const updatedAt = Number(parsed?.updatedAt);
 
@@ -31,8 +44,9 @@ function isLockStale(rawLock: string | null, staleMs: number) {
       return Date.now() >= (updatedAt + staleMs);
     }
     return true;
-  } catch {
-    return true;
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    return Date.now() >= modifiedAt + staleMs;
   }
 }
 
@@ -46,12 +60,15 @@ export async function acquireProfileAnalysisLock(
   await fs.mkdir(path.dirname(lockFile), { recursive: true });
 
   const tryCreate = async () => {
-    await fs.writeFile(lockFile, buildLockPayload(staleMs), { encoding: 'utf8', flag: 'wx' });
+    const owner = randomUUID();
+    await fs.writeFile(lockFile, buildLockPayload(staleMs, owner), { encoding: 'utf8', flag: 'wx' });
     return async () => {
       try {
-        await fs.rm(lockFile, { force: true });
-      } catch {
-        // ignore release errors
+        const lock = JSON.parse(await fs.readFile(lockFile, 'utf8'));
+        if (lock.owner === owner) await fs.rm(lockFile, { force: true });
+        else console.warn(`[profile-analysis-lock] Lock ownership changed for profile=${profileId}`);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
     };
   };
@@ -66,12 +83,13 @@ export async function acquireProfileAnalysisLock(
 
   try {
     const rawLock = await fs.readFile(lockFile, 'utf8');
-    if (!isLockStale(rawLock, staleMs)) {
+    const stat = await fs.stat(lockFile);
+    if (!isLockStale(rawLock, staleMs, stat.mtimeMs)) {
       return null;
     }
     await fs.rm(lockFile, { force: true });
-  } catch {
-    // another worker may have released or recreated the lock; retry once below
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 
   try {

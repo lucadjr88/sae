@@ -11,11 +11,29 @@ interface HealthMeta {
 }
 
 const healthMap: Record<string, HealthMeta> = {};
+const forbiddenUntil: Record<string, number> = {};
 
-export function resetHealthMap() {
+export function resetHealthMap(preserveForbidden = false) {
   for (const key of Object.keys(healthMap)) {
     delete healthMap[key];
   }
+  if (!preserveForbidden) {
+    for (const key of Object.keys(forbiddenUntil)) {
+      delete forbiddenUntil[key];
+    }
+  }
+}
+
+export function recordForbidden(url: string, durationMs = 60000) {
+  forbiddenUntil[url] = Math.max(forbiddenUntil[url] || 0, Date.now() + durationMs);
+}
+
+export function isForbidden(url: string) {
+  const until = forbiddenUntil[url];
+  if (!until) return false;
+  if (Date.now() < until) return true;
+  delete forbiddenUntil[url];
+  return false;
 }
 
 export function recordFailure(url: string) {
@@ -27,7 +45,7 @@ export function recordFailure(url: string) {
   healthMap[url].lastFailure = now;
   healthMap[url].score = Math.max(0, healthMap[url].score - 15);
   // Backoff esponenziale
-  healthMap[url].backoffUntil = now + Math.min(60000, 1000 * Math.pow(2, healthMap[url].failures));
+  healthMap[url].backoffUntil = Math.max(healthMap[url].backoffUntil, now + Math.min(60000, 1000 * Math.pow(2, healthMap[url].failures)));
 }
 
 export function recordSuccess(url: string) {
@@ -38,7 +56,7 @@ export function recordSuccess(url: string) {
   healthMap[url].successes++;
   healthMap[url].lastSuccess = now;
   healthMap[url].failures = 0;
-  healthMap[url].backoffUntil = 0;
+  if (healthMap[url].backoffUntil <= now) healthMap[url].backoffUntil = 0;
   healthMap[url].score = Math.min(1000, healthMap[url].score + 10);
 }
 
@@ -48,17 +66,14 @@ export function getScore(url: string): number {
 
 export function isHealthy(url: string) {
   const meta = healthMap[url];
-  if (!meta) return true;
-  return Date.now() > meta.backoffUntil;
+  return !isForbidden(url) && (!meta || Date.now() > meta.backoffUntil);
 }
 
 export function isInBackoff(url: string) {
   const meta = healthMap[url];
-  if (!meta) return false;
-  return Date.now() < meta.backoffUntil;
+  return isForbidden(url) || (!!meta && Date.now() < meta.backoffUntil);
 }
 
 export function getHealthMeta(url: string): HealthMeta | undefined {
   return healthMap[url];
 }
-

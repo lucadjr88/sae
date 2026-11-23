@@ -1,19 +1,18 @@
-import { PublicKey, Transaction } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 import express from "express";
-import { createRequire } from "node:module";
 
 import srslyIdl from "../idl/srsly_idl.json" with { type: "json" };
-import { getHealthyRpcUrlOrThrow, getRpcConnection } from "../../utils/rpc/connection.js";
+import { getRpcConnection } from "../../utils/rpc/connection.js";
 import { prepareTxForWalletSignature } from "../security/txSigningMiddleware.js";
+import { cancelRentalTx } from "./cancelRentalTx.js";
+
+export { cancelRentalTx } from "./cancelRentalTx.js";
 
 const router = express.Router();
 
 const SRSLY_PROGRAM_ID = new PublicKey("SRSLYxcFnjd5jG2DpJw4as6UEyjwJQK1U4J1TD1hvZH");
 const ANTIGEN_PROGRAM_ID = new PublicKey("AgThdyi1P5RkVeZD2rQahTvs8HePJoGFFxKtvok5s2J1");
-const SRSLY_V2_PROGRAM_ID = SRSLY_PROGRAM_ID;
-const require = createRequire(import.meta.url);
-const srslyV2 = require("@sly-rentals/core/legacy") as typeof import("@sly-rentals/core/legacy");
 
 function normalizeInstructionAccounts(accounts: any[]): any[] {
 	return accounts.map((acc) => {
@@ -141,10 +140,6 @@ function toLegacyAnchorIdl(rawIdl: any): anchor.Idl {
 
 const srslyLegacyIdl = toLegacyAnchorIdl(srslyIdl);
 
-function toPk(value: string | PublicKey): PublicKey {
-	return typeof value === "string" ? new PublicKey(value) : value;
-}
-
 async function deriveContractPda(fleet: PublicKey): Promise<PublicKey> {
 	console.log("[CANCEL-RENT][deriveContractPda] Deriving contract PDA for fleet:", fleet.toBase58());
 	const [contractPda] = await PublicKey.findProgramAddress([
@@ -190,49 +185,6 @@ async function deriveRentalThreadPda(rentalAuthority: PublicKey, rentalState: Pu
 	], ANTIGEN_PROGRAM_ID);
 	console.log("[CANCEL-RENT][deriveRentalThreadPda] Derived rental thread PDA:", rentalThread.toBase58());
 	return rentalThread;
-}
-
-export async function cancelRentalTx(params: {
-	borrower: string | PublicKey;
-	contract: string | PublicKey;
-	rental_state: string | PublicKey;
-	rental_thread: string | PublicKey;
-}) {
-	const borrower = toPk(params.borrower);
-	const contract = toPk(params.contract);
-	const rpcUrl = await getHealthyRpcUrlOrThrow();
-	srslyV2.setSdkConfig({ programs: "mainnet", rpcUrl, commitment: "confirmed", PublicKey });
-	console.log("[cancelRentalTx] Building SRSLY v2 cancelRental instruction", {
-		borrower: borrower.toBase58(),
-		contract: contract.toBase58(),
-	});
-	const instructions = await srslyV2.cancelRental({
-		borrower: borrower.toBase58(),
-		contract: contract.toBase58(),
-		cancelDelay: 0,
-	}, { rpcUrl, programs: "mainnet", PublicKey });
-
-	const tx = new Transaction();
-	tx.add(...instructions.map((instruction) => ({
-		...instruction,
-		programId: new PublicKey(instruction.programId),
-		data: Buffer.from(instruction.data),
-		keys: instruction.keys.map((key) => ({
-			...key,
-			pubkey: new PublicKey(key.pubkey),
-		})),
-	})));
-
-	const srslyInstructions = tx.instructions.filter((ix) => ix.programId.equals(SRSLY_V2_PROGRAM_ID));
-	tx.instructions = srslyInstructions;
-
-	console.log("[cancelRentalTx] Transaction built. Instruction count:", tx.instructions.length);
-	console.log("[cancelRentalTx] Instruction data (hex):", tx.instructions[0]?.data?.toString("hex") || "N/A");
-	console.log("[cancelRentalTx] TX oggetto:", tx);
-	if (tx.instructions.length !== 1) {
-		throw new Error(`[cancelRentalTx] Expected 1 SRSLY instruction, found ${tx.instructions.length}`);
-	}
-	return tx;
 }
 
 router.post("/cancel-rent", async (req, res) => {

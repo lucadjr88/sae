@@ -4,8 +4,8 @@ import fs from 'fs/promises';
 import * as fsSync from 'fs';
 import path from 'path';
 import express from 'express';
-import { backOff } from 'exponential-backoff';
 import { fileURLToPath } from 'url';
+import nodeFetch from 'node-fetch';
 
 const CACHE_FILE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../interna_cache/tickers-prices.json');
 const router = express.Router();
@@ -48,9 +48,9 @@ async function ensureCacheFileExists() {
 }
 
 
-const COINGECKO_IDS = ['bitcoin', 'solana', 'star-atlas', 'star-atlas-dao'];
-const GECKOTERMINAL_BASE = 'https://api.geckoterminal.com/api/v2';
-const DEFAULT_GECKOTERMINAL_NETWORK = 'bsc';
+const COINGECKO_IDS = ['bitcoin', 'solana', 'star-atlas', 'star-atlas-dao', 'pactus'];
+const PRICE_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
+const PRICE_ATTEMPT_PREFIX = 'tickers-prices.attempt-';
 
 // --- CACHE ---
 
@@ -61,32 +61,37 @@ let cacheUpdating = false;
 
 async function fetchCoinGeckoPrices() {
   const ids = COINGECKO_IDS.join(',');
-  // Retry con backoff esponenziale, max 5 tentativi
-  return await backOff(async () => {
-    const cgRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_last_updated_at=true`);
-    if (!cgRes.ok) throw new Error('CoinGecko fetch failed');
-    return cgRes.json();
-  }, {numOfAttempts: 5, startingDelay: 500, timeMultiple: 2});
+  const cgRes = await nodeFetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_last_updated_at=true`);
+  if (!cgRes.ok) throw new Error(`CoinGecko fetch failed: ${cgRes.status} ${cgRes.statusText}`);
+  return cgRes.json();
 }
 
-async function fetchGeckoTerminalTokenPrice(network: string, tokenAddress: string) {
-  // Nota: l'endpoint /simple/ token_price restituisce i prezzi mappati sull'indirizzo
-  const url = `${GECKOTERMINAL_BASE}/simple/networks/${network}/token_price/${tokenAddress}`;
-  // Retry con backoff esponenziale, max 5 tentativi
-  try {
-    const json = await backOff(async () => {
-      const gtRes = await fetch(url);
-      if (!gtRes.ok) throw new Error(`[GeckoTerminal] Request failed: ${gtRes.status} ${gtRes.statusText}`);
-      return gtRes.json();
-    }, {numOfAttempts: 5, startingDelay: 500, timeMultiple: 2});
-    const prices = json?.data?.attributes?.token_prices;
-    const addr = tokenAddress.toLowerCase();
-    const price = prices?.[addr];
-    return price ? parseFloat(price) : null;
-  } catch (e) {
-    console.warn('[GeckoTerminal] Retry failed:', e);
-    return null;
+async function reservePriceAttempt(): Promise<boolean> {
+  const dir = path.dirname(CACHE_FILE);
+  const window = Math.floor(Date.now() / PRICE_ATTEMPT_WINDOW_MS);
+  const files = await fs.readdir(dir);
+  for (const file of files) {
+    if (!file.startsWith(PRICE_ATTEMPT_PREFIX)) continue;
+    const suffix = file.slice(PRICE_ATTEMPT_PREFIX.length);
+    if (!/^\d+$/.test(suffix) || Number(suffix) >= window - 1) continue;
+    try {
+      await fs.unlink(path.join(dir, file));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    }
   }
+
+  // Reserving both windows prevents attempts less than ten minutes apart across workers.
+  for (const slot of [window, window + 1]) {
+    try {
+      const handle = await fs.open(path.join(dir, `${PRICE_ATTEMPT_PREFIX}${slot}`), 'wx');
+      await handle.close();
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw e;
+    }
+  }
+  return Math.floor(Date.now() / PRICE_ATTEMPT_WINDOW_MS) === window;
 }
 
 async function updatePricesCache() {
@@ -94,28 +99,16 @@ async function updatePricesCache() {
   if (cacheUpdating) return;
   cacheUpdating = true;
   try {
-    let data;
-    try {
-      data = await fetchCoinGeckoPrices();
-    } catch (e) {
-      // fallback: prova a caricare da disco se fetch fallisce
-      console.log('[pricesCache] CoinGecko fetch failed, fallback to disk:', e);
-      data = await loadPricesFromDisk() || {};
+    if (!await reservePriceAttempt()) return;
+    const data = await fetchCoinGeckoPrices();
+    if (Number.isFinite(data?.pactus?.usd) && data.pactus.usd > 0) {
+      data['wpac'] = data.pactus;
+    } else {
+      console.warn('[pricesCache] CoinGecko returned no valid Pactus price');
+      const cached = await loadPricesFromDisk();
+      if (cached?.wpac) data['wpac'] = cached.wpac;
     }
-    const tokenAddress = process.env.GECKOTERMINAL_WPAC_TOKEN || '0x10004a9A742ec135c686C9aCed00FA3C93D66866';
-    const network = process.env.GECKOTERMINAL_NETWORK || DEFAULT_GECKOTERMINAL_NETWORK;
-    let wpacUsd = null;
-    try {
-      wpacUsd = await fetchGeckoTerminalTokenPrice(network, tokenAddress);
-    } catch (e) {
-      console.warn('[pricesCache] GeckoTerminal fetch failed:', e);
-    }
-    if (wpacUsd !== null) {
-      data['wpac'] = {
-        usd: wpacUsd,
-        last_updated_at: Math.floor(Date.now() / 1000)
-      };
-    }
+    delete data.pactus;
     pricesCache = data;
     pricesCacheTimestamp = Date.now();
     await savePricesToDisk(data);
@@ -274,4 +267,3 @@ router.get('/prices', async (req, res) => {
 });
 
 export { router as pricesRouter };
-

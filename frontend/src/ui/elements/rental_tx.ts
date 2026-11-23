@@ -1,4 +1,5 @@
 import { setActiveViewPreference } from "./toggleSwitch";
+import { decodeRentalTransaction, encodeRentalTransaction, resolveTransactionSigner, sendSignedRentalTransaction } from "@/services/rental-transactions";
 
 export async function rentTx({
   contractAddress,
@@ -50,36 +51,20 @@ export async function rentTx({
     }
 
     try {
-      const { Transaction } = await import("@solana/web3.js");
-      function base64ToUint8Array(base64: string) {
-        const binary = atob(base64);
-        const len = binary.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-        return bytes;
-      }
-
-      const tx = Transaction.from(base64ToUint8Array(data.transaction));
-      if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
-        await window.wallet?.connect?.();
-      }
-      if (!window.wallet?.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
+      const tx = await decodeRentalTransaction(data.transaction);
+      const signer = await resolveTransactionSigner(() => window.wallet, true);
+      if (!signer) {
         return "Wallet desktop not connected or unsupported!";
       }
 
-      const signedTx = await window.wallet.adapter.signTransaction(tx);
-      const rawTx = signedTx.serialize();
-      const base64Tx = btoa(String.fromCharCode(...rawTx));
-      const sendResp = await fetch("/api/send-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transaction: base64Tx,
-          signingRequestId: data.signingRequestId,
-          contractAddress,
-          rentalState: data.rentalState,
-          rentalCacheSeed: data.rentalCacheSeed,
-        })
+      const signedTx = await signer.signTransaction(tx);
+      const base64Tx = encodeRentalTransaction(signedTx);
+      const sendResp = await sendSignedRentalTransaction({
+        transaction: base64Tx,
+        signingRequestId: data.signingRequestId,
+        contractAddress,
+        rentalState: data.rentalState,
+        rentalCacheSeed: data.rentalCacheSeed,
       });
       const sendData = await sendResp.json();
       if (!sendResp.ok) throw new Error(sendData.error || "Errore broadcast tx");
@@ -156,16 +141,7 @@ export async function cancelRentTx({
 
     try {
       console.log("[DEBUG][cancel-rent] Decoding unsigned transaction from backend response");
-      const { Transaction } = await import("@solana/web3.js");
-      function base64ToUint8Array(base64: string) {
-        const binary = atob(base64);
-        const len = binary.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-        return bytes;
-      }
-
-      const tx = Transaction.from(base64ToUint8Array(data.transaction));
+      const tx = await decodeRentalTransaction(data.transaction);
       console.log("[DEBUG][cancel-rent] Transaction decoded:", {
         feePayer: tx.feePayer?.toBase58?.(),
         recentBlockhash: tx.recentBlockhash,
@@ -181,16 +157,15 @@ export async function cancelRentTx({
       console.log("[DEBUG][cancel-rent][COPY-FRONTEND-PRESIGN-TX-START]");
       console.log(unsignedSerialized);
       console.log("[DEBUG][cancel-rent][COPY-FRONTEND-PRESIGN-TX-END]");
-      if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
+      const signer = await resolveTransactionSigner(() => window.wallet, true, () => {
         console.error("[DEBUG][cancel-rent] Wallet adapter unavailable for signing");
-        await window.wallet?.connect?.();
-      }
-      if (!window.wallet?.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
+      });
+      if (!signer) {
         return "Wallet desktop not connected or unsupported!";
       }
 
       console.log("[DEBUG][cancel-rent] Requesting wallet signature");
-      const signedTx = await window.wallet.adapter.signTransaction(tx);
+      const signedTx = await signer.signTransaction(tx);
       console.log("[DEBUG][cancel-rent] Transaction signed. Serialized length preview pending");
       console.log("[DEBUG][cancel-rent] Post-sign instruction dump:", signedTx.instructions.map((ix, index) => ({
         index,
@@ -216,10 +191,8 @@ export async function cancelRentTx({
         meta: cancelTxMeta,
       });
       console.log("[DEBUG][cancel-rent] Sending signed transaction to /api/send-tx");
-      const sendResp = await fetch("/api/send-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transaction: base64Tx, signingRequestId: data.signingRequestId, txMeta: cancelTxMeta }),
+      const sendResp = await sendSignedRentalTransaction({
+        transaction: base64Tx, signingRequestId: data.signingRequestId, txMeta: cancelTxMeta,
       });
       const sendData = await sendResp.json();
       console.log("[DEBUG][cancel-rent] /api/send-tx response:", sendData);
@@ -308,31 +281,23 @@ export async function delistFleetTx({
     console.log("[DEBUG][delist][COPY-BACKEND-UNSIGNED-TX-END]");
 
     try {
-      const { Transaction } = await import("@solana/web3.js");
-      function base64ToUint8Array(base64: string) {
-        const binary = atob(base64);
-        const len = binary.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-        return bytes;
-      }
-
-      const tx = Transaction.from(base64ToUint8Array(data.transaction));
+      const tx = await decodeRentalTransaction(data.transaction);
       console.log("[DEBUG][delist] Transaction decoded:", {
         feePayer: tx.feePayer?.toBase58?.(),
         recentBlockhash: tx.recentBlockhash,
         instructionCount: tx.instructions.length,
       });
 
-      if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
+      const signer = await resolveTransactionSigner(() => window.wallet, false, () => {
         console.error("[DEBUG][delist] Wallet adapter unavailable for signing");
+      });
+      if (!signer) {
         //alert("Wallet desktop non connesso o non supportato!");
          return ("Wallet desktop not connected or unsupported!");
       }
 
-      const signedTx = await window.wallet.adapter.signTransaction(tx);
-      const rawTx = signedTx.serialize();
-      const base64Tx = btoa(String.fromCharCode(...rawTx));
+      const signedTx = await signer.signTransaction(tx);
+      const base64Tx = encodeRentalTransaction(signedTx);
       const { currentProfileId } = await import("@/utils/state");
       const delistTxMeta = {
         operation: "delist-fleet",
@@ -344,10 +309,8 @@ export async function delistFleetTx({
       };
 
       console.log("[DEBUG][delist] Sending signed transaction to /api/send-tx", delistTxMeta);
-      const sendResp = await fetch("/api/send-tx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transaction: base64Tx, signingRequestId: data.signingRequestId, txMeta: delistTxMeta }),
+      const sendResp = await sendSignedRentalTransaction({
+        transaction: base64Tx, signingRequestId: data.signingRequestId, txMeta: delistTxMeta,
       });
       const sendData = await sendResp.json();
       console.log("[DEBUG][delist] /api/send-tx response:", sendData);
@@ -440,17 +403,8 @@ export async function listFleetTx({
       return data.error || "Errore sconosciuto dal backend"; // Return error message for display if needed
     }
 
-    const { Transaction } = await import("@solana/web3.js");
-    function base64ToUint8Array(base64: string) {
-      const binary = atob(base64);
-      const len = binary.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-      return bytes;
-    }
-
     console.log("[DEBUG][list] Decoding unsigned transaction from backend response");
-    const tx = Transaction.from(base64ToUint8Array(data.transaction));
+    const tx = await decodeRentalTransaction(data.transaction);
     console.log("[DEBUG][list] Transaction decoded:", {
       feePayer: tx.feePayer?.toBase58?.(),
       recentBlockhash: tx.recentBlockhash,
@@ -458,14 +412,16 @@ export async function listFleetTx({
       derivedAccounts: data?.derivedAccounts,
     });
 
-    if (!window.wallet || !window.wallet.adapter || typeof window.wallet.adapter.signTransaction !== "function") {
+    const signer = await resolveTransactionSigner(() => window.wallet, false, () => {
       console.error("[DEBUG][list] Wallet adapter unavailable for signing");
+    });
+    if (!signer) {
       //alert("Wallet desktop non connesso o non supportato!");
       return false;
     }
 
     console.log("[DEBUG][list] Requesting wallet signature for list transaction");
-    const signedTx = await window.wallet.adapter.signTransaction(tx);
+    const signedTx = await signer.signTransaction(tx);
     const rawTx = signedTx.serialize();
     const base64Tx = btoa(String.fromCharCode(...rawTx));
     console.log("[DEBUG][list] Transaction signed and serialized:", {
@@ -489,10 +445,8 @@ export async function listFleetTx({
     };
 
     console.log("[DEBUG][list] Sending signed transaction to /api/send-tx", listTxMeta);
-    const sendResp = await fetch("/api/send-tx", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ transaction: base64Tx, signingRequestId: data.signingRequestId, txMeta: listTxMeta }),
+    const sendResp = await sendSignedRentalTransaction({
+      transaction: base64Tx, signingRequestId: data.signingRequestId, txMeta: listTxMeta,
     });
     const sendData = await sendResp.json();
     console.log("[DEBUG][list] /api/send-tx response:", sendData);

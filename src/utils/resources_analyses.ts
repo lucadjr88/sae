@@ -1,101 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { getCache, setCache } from './cache.js';
+import { getMaterialInfo, MATERIAL_REGISTRY, normalizeMaterialMint } from './resourceMaterials.js';
+import { extractTokenDeltas, type TokenDelta } from './resourceTokenDeltas.js';
 
 const ATLAS_MINT = 'ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx';
-const MATERIAL_MINT_ALIASES: Record<string, string> = {
-  EqXFCQHVoo89UjSUqPbLLt1T6zRKhT3E13AzF3unUs9G: 'ammoK8AkX2wnebQb35cDAZtTkvsXQbi82cGeTnUvvfK',
-  '8pbBwqniQv23ZC6UngxeZMiaAWiv9G2N8ydKJquNRZ8E': 'fueL3hBZjLLLJHiFH9cqZoozTG3XQZ53diwFPwbzNim'
-};
-
-const MATERIAL_REGISTRY: Record<string, MaterialInfo> = {
-  foodQJAztMzX1DKpLaiounNe2BDMds5RNuPC6jsNrDG: {
-    name: 'Food',
-    symbol: 'FOOD',
-    category: 'consumable',
-    decimals: 0
-  },
-  HYDR4EPHJcDPcaLYUcNCtrXUdt1PnaN4MvE655pevBYp: {
-    name: 'Hydrogen',
-    symbol: 'HYDR',
-    category: 'fuel',
-    decimals: 0
-  },
-  ammoK8AkX2wnebQb35cDAZtTkvsXQbi82cGeTnUvvfK: {
-    name: 'Ammo',
-    symbol: 'AMMO',
-    category: 'consumable',
-    decimals: 0
-  },
-  fueL3hBZjLLLJHiFH9cqZoozTG3XQZ53diwFPwbzNim: {
-    name: 'Fuel',
-    symbol: 'FUEL',
-    category: 'fuel',
-    decimals: 0
-  },
-  SDUsgfSZaDhhZ76U3ZgvtFiXsfnHbf2VrzYxjBZ5YbM: {
-    name: 'Survey Data Unit',
-    symbol: 'SDU',
-    category: 'resource',
-    decimals: 0
-  },
-};
-
-const MATERIAL_PREFIX_REGISTRY: Array<{ prefix: string; info: MaterialInfo }> = [
-  {
-    prefix: 'food',
-    info: { name: 'Food', symbol: 'FOOD', category: 'consumable', decimals: 0 }
-  },
-  {
-    prefix: 'ammo',
-    info: { name: 'Ammo', symbol: 'AMMO', category: 'consumable', decimals: 0 }
-  },
-  {
-    prefix: 'fuel',
-    info: { name: 'Fuel', symbol: 'FUEL', category: 'fuel', decimals: 0 }
-  },
-  {
-    prefix: 'hydr',
-    info: { name: 'Hydrogen', symbol: 'HYDR', category: 'fuel', decimals: 0 }
-  },
-  {
-    prefix: 'sdu',
-    info: { name: 'Survey Data Unit', symbol: 'SDU', category: 'resource', decimals: 0 }
-  },
-  {
-    prefix: 'atlas',
-    info: { name: 'Atlas', symbol: 'ATLAS', category: 'token', decimals: 0 }
-  },
-  {
-    prefix: 'polis',
-    info: { name: 'Polis', symbol: 'POLIS', category: 'token', decimals: 0 }
-  }
-];
-
-type MaterialInfo = {
-  name: string;
-  symbol: string;
-  category: string;
-  decimals: number;
-};
-
-type TokenDelta = {
-  accountIndex: number;
-  mint: string;
-  owner: string;
-  preAmount: number;
-  postAmount: number;
-  delta: number;
-  decimals: number;
-};
 
 type TokenFlowType = 'CARGO_IN' | 'CARGO_OUT' | 'AMMO_IN' | 'AMMO_OUT' | 'FUEL_IN' | 'FUEL_OUT' | 'WALLET_TRANSFER' | 'UNKNOWN';
-
-type TokenDeltaResult = {
-  deltas: TokenDelta[];
-  burned: Array<{ mint: string; amount: number; owner: string; decimals: number }>;
-  minted: Array<{ mint: string; amount: number; owner: string; decimals: number }>;
-};
 
 type FleetInfo = {
   key: string;
@@ -172,10 +83,6 @@ type ResourceFlowSummary = {
   byMaterial: Record<string, MaterialFlowAggregate>;
   byOperation: Record<string, OperationResourceFlow>;
 };
-
-function normalizeMaterialMint(mint: string): string {
-  return MATERIAL_MINT_ALIASES[mint] || mint;
-}
 
 function getTraderInfo(op: any): {
   assetMint?: string;
@@ -392,74 +299,6 @@ function normalizeTraderOwnedFlows(
   return normalizedFlows;
 }
 
-function toUiAmount(amountRaw: unknown, decimalsRaw: unknown): number {
-  const amount = Number(amountRaw);
-  const decimals = Number(decimalsRaw);
-
-  if (!Number.isFinite(amount)) {
-    return 0;
-  }
-
-  if (!Number.isFinite(decimals) || decimals <= 0) {
-    return amount;
-  }
-
-  return amount / Math.pow(10, decimals);
-}
-
-function extractTokenDeltas(op: any): TokenDeltaResult {
-  const pre = (op.txInfo?.preTokenBalances as any[]) || [];
-  const post = (op.txInfo?.postTokenBalances as any[]) || [];
-
-  const preMap = new Map(pre.map((p: any) => [p.accountIndex, p]));
-  const postMap = new Map(post.map((p: any) => [p.accountIndex, p]));
-
-  const allIndexes = new Set([...preMap.keys(), ...postMap.keys()]);
-
-  const deltas: TokenDelta[] = [];
-  const burned: Array<{ mint: string; amount: number; owner: string; decimals: number }> = [];
-  const minted: Array<{ mint: string; amount: number; owner: string; decimals: number }> = [];
-
-  for (const idx of allIndexes) {
-    const preBalance = preMap.get(idx);
-    const postBalance = postMap.get(idx);
-
-    if (preBalance && !postBalance) {
-      burned.push({
-        mint: normalizeMaterialMint(preBalance.mint),
-        amount: toUiAmount(preBalance.uiTokenAmount?.amount, preBalance.uiTokenAmount?.decimals),
-        owner: preBalance.owner || '',
-        decimals: preBalance.uiTokenAmount.decimals
-      });
-    } else if (!preBalance && postBalance) {
-      minted.push({
-        mint: normalizeMaterialMint(postBalance.mint),
-        amount: toUiAmount(postBalance.uiTokenAmount?.amount, postBalance.uiTokenAmount?.decimals),
-        owner: postBalance.owner || '',
-        decimals: postBalance.uiTokenAmount.decimals
-      });
-    } else if (preBalance && postBalance) {
-      const preAmount = parseFloat(preBalance.uiTokenAmount.amount);
-      const postAmount = parseFloat(postBalance.uiTokenAmount.amount);
-      const delta = postAmount - preAmount;
-
-      if (delta !== 0) {
-        deltas.push({
-          accountIndex: idx,
-          mint: normalizeMaterialMint(preBalance.mint),
-          owner: preBalance.owner,
-          preAmount,
-          postAmount,
-          delta: delta / Math.pow(10, preBalance.uiTokenAmount.decimals),
-          decimals: preBalance.uiTokenAmount.decimals
-        });
-      }
-    }
-  }
-
-  return { deltas, burned, minted };
-}
-
 function classifyTokenFlow(delta: TokenDelta, fleet: FleetInfo | null): TokenFlowType {
   if (!fleet) return 'WALLET_TRANSFER';
 
@@ -474,26 +313,6 @@ function classifyTokenFlow(delta: TokenDelta, fleet: FleetInfo | null): TokenFlo
   }
 
   return 'WALLET_TRANSFER';
-}
-
-function getMaterialInfo(mint: string): Partial<MaterialInfo> {
-  const normalizedMint = normalizeMaterialMint(mint);
-
-  if (MATERIAL_REGISTRY[normalizedMint]) {
-    return MATERIAL_REGISTRY[normalizedMint];
-  }
-
-  const mintLower = normalizedMint.toLowerCase();
-  const byPrefix = MATERIAL_PREFIX_REGISTRY.find((entry) => mintLower.startsWith(entry.prefix));
-  if (byPrefix) {
-    return byPrefix.info;
-  }
-
-  return {
-    name: `Token ${normalizedMint.substring(0, 8)}...`,
-    symbol: normalizedMint.substring(0, 4).toUpperCase(),
-    category: 'unknown'
-  };
 }
 
 async function loadFleets(profileId: string): Promise<Map<string, FleetInfo>> {
@@ -1170,4 +989,3 @@ async function decodeResources(profileId: string): Promise<ResourceFlowSummary> 
 }
 
 export { decodeResources, ResourceFlowSummary };
-

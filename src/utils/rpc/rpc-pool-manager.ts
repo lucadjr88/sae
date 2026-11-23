@@ -23,6 +23,23 @@ const poolCache: Record<string, any[]> = {};
 const rrCursorByProfile: Record<string, number> = {};
 let transientPool: any[] | null = null;
 
+function validEndpoints(endpoints: any[], source: string): any[] {
+  const valid = endpoints.filter(ep => {
+    if (typeof ep?.url !== 'string') return false;
+    try {
+      const url = new URL(ep.url);
+      return (url.protocol === 'http:' || url.protocol === 'https:') && ep.url === ep.url.trim();
+    } catch {
+      return false;
+    }
+  });
+  if (valid.length !== endpoints.length) {
+    console.warn(`[rpc-pool-manager] Ignorati ${endpoints.length - valid.length} endpoint non validi da ${source}`);
+  }
+  if (valid.length === 0) throw new Error(`No valid RPC endpoints in ${source}`);
+  return valid;
+}
+
 export function resetPoolCache(profileId?: string) {
   if (profileId) {
     delete poolCache[profileId];
@@ -41,13 +58,16 @@ export function resetPoolCache(profileId?: string) {
 export async function loadOrCreateRpcPool(profileId: string, persist = true): Promise<any[]> {
   if (!persist) {
     if (!transientPool) {
+      let endpoints: any[];
       try {
         const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
         const endpointsRaw = JSON.parse(raw);
-        transientPool = Array.isArray(endpointsRaw) ? endpointsRaw : Object.values(endpointsRaw);
-      } catch {
-        transientPool = [{ name: 'Default RPC', url: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', pruned: 1, total: 1 }];
+        endpoints = Array.isArray(endpointsRaw) ? endpointsRaw : Object.values(endpointsRaw);
+      } catch (error) {
+        console.warn('[rpc-pool-manager] Impossibile leggere il pool completo:', error);
+        endpoints = [{ name: 'Default RPC', url: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', pruned: 1, total: 1 }];
       }
+      transientPool = validEndpoints(endpoints, RPC_POOL_COMPLETE);
     }
     return transientPool;
   }
@@ -59,20 +79,22 @@ export async function loadOrCreateRpcPool(profileId: string, persist = true): Pr
   try {
     const raw = await fs.readFile(file, 'utf8');
     const parsed = JSON.parse(raw);
-    poolCache[profileId] = parsed;
-    console.log(`[rpc-pool-manager] Caricato pool da cache/${profileId}/rpc-pool.json (${parsed.length} endpoint)`);
-    return parsed;
-  } catch {
+    poolCache[profileId] = validEndpoints(parsed, file);
+    console.log(`[rpc-pool-manager] Caricato pool da cache/${profileId}/rpc-pool.json (${poolCache[profileId].length} endpoint)`);
+    return poolCache[profileId];
+  } catch (error) {
     // Non esiste: carica direttamente la lista completa senza test di prune bloccanti
-    console.log(`[rpc-pool-manager] Pool non trovato per ${profileId}, carico tutti gli endpoint configurati.`);
+    console.warn(`[rpc-pool-manager] Pool non disponibile per ${profileId}, carico gli endpoint configurati:`, error);
     let endpoints: any[] = [];
     try {
       const raw = await fs.readFile(RPC_POOL_COMPLETE, 'utf8');
       const endpointsRaw = JSON.parse(raw);
       endpoints = Array.isArray(endpointsRaw) ? endpointsRaw : Object.values(endpointsRaw);
-    } catch {
+    } catch (error) {
+      console.warn('[rpc-pool-manager] Impossibile leggere il pool completo:', error);
       endpoints = [{ name: 'Default RPC', url: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', pruned: 1, total: 1 }];
     }
+    endpoints = validEndpoints(endpoints, RPC_POOL_COMPLETE);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(file, JSON.stringify(endpoints, null, 2));
     poolCache[profileId] = endpoints;
@@ -89,7 +111,7 @@ export async function pruneRpcPool(profileId?: string, force?: boolean): Promise
   const dir = path.join(process.cwd(), 'cache', pid);
   const file = path.join(dir, RPC_POOL_FILENAME);
   console.log(`[rpc-pool-manager] Eseguo prune per ${profileId}...`);
-  const valid = await prune.pruneEndpoints();
+  const valid = validEndpoints(await prune.pruneEndpoints(), RPC_POOL_COMPLETE);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(file, JSON.stringify(valid, null, 2));
   poolCache[pid] = valid;
@@ -100,33 +122,27 @@ export async function pruneRpcPool(profileId?: string, force?: boolean): Promise
 
 
 // Acquisisce una connessione dal pool con logica health-aware, fallback e adaptive concurrency
-export async function pickRpcConnection(profileId: string, opts?: { allowStale?: boolean; waitForMs?: number; excludeUrls?: ReadonlySet<string>; persist?: boolean }): Promise<{ connection: any, endpoint: any, release: (opts?: { success?: boolean, latencyMs?: number, errorType?: string }) => void }> {
+export async function pickRpcConnection(profileId: string, opts?: { allowStale?: boolean; waitForMs?: number; excludeUrls?: ReadonlySet<string>; persist?: boolean; disableRetryOnRateLimit?: boolean }): Promise<{ connection: any, endpoint: any, release: (opts?: { success?: boolean, latencyMs?: number, errorType?: string, retryAfterMs?: number }) => void }> {
   const pool = await loadOrCreateRpcPool(profileId, opts?.persist);
-  // Ordina endpoint: healthy e non in backoff prima
-  const healthy = pool.filter(ep => health.isHealthy(ep.url) && !health.isInBackoff(ep.url));
-  const filteredHealthy = healthy.filter(ep => !metrics.shouldExcludeEndpoint(ep.url));
-  let candidates = filteredHealthy.length > 0 ? filteredHealthy : healthy.length > 0 ? healthy : pool;
   const excludedUrls = opts?.excludeUrls ?? new Set<string>();
-  const availableCandidates = candidates.filter(ep => !excludedUrls.has(ep.url));
-  if (availableCandidates.length > 0) candidates = availableCandidates;
-  // Ordina candidati per punteggio (score) decrescente: punteggio più alto = priorità massima
-  candidates = [...candidates].sort((a, b) => {
-    const scoreA = typeof (health as any).getScore === 'function' ? (health as any).getScore(a.url) : 100;
-    const scoreB = typeof (health as any).getScore === 'function' ? (health as any).getScore(b.url) : 100;
-    return scoreB - scoreA;
-  });
-  // Ordina candidati per tasso 429 crescente negli ultimi 2 min: meno 429 = priorità più alta
   const WINDOW_429_MS = 2 * 60 * 1000;
-  candidates = [...candidates].sort((a, b) =>
-    metrics.countStatusInWindow(a.url, 429, WINDOW_429_MS) - metrics.countStatusInWindow(b.url, 429, WINDOW_429_MS)
-  );
-
   const startTime = Date.now();
   const waitForMs = opts?.waitForMs ?? 0;
   const allowStale = !!opts?.allowStale;
 
   // Try to acquire within candidates; optionally wait a bit if all busy
   while (true) {
+    const permitted = pool.filter(ep => !health.isForbidden(ep.url));
+    const untried = permitted.filter(ep => !excludedUrls.has(ep.url));
+    const available = untried.length > 0 ? untried : permitted;
+    const untriedHealthy = available.filter(ep => health.isHealthy(ep.url));
+    const healthy = untriedHealthy.length > 0 ? untriedHealthy : permitted.filter(ep => health.isHealthy(ep.url));
+    const filteredHealthy = healthy.filter(ep => !metrics.shouldExcludeEndpoint(ep.url));
+    let candidates = filteredHealthy.length > 0 ? filteredHealthy : healthy.length > 0 ? healthy : available;
+    candidates = [...candidates].sort((a, b) =>
+      metrics.countStatusInWindow(a.url, 429, WINDOW_429_MS) - metrics.countStatusInWindow(b.url, 429, WINDOW_429_MS)
+      || health.getScore(b.url) - health.getScore(a.url)
+    );
     const startIndex = rrCursorByProfile[profileId] ?? 0;
     for (let offset = 0; offset < candidates.length; offset++) {
       const i = (startIndex + offset) % candidates.length;
@@ -137,12 +153,19 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
       const acquired = concurrency.acquire(ep.url, ep.maxConcurrent || 2);
       if (!acquired) continue;
       rrCursorByProfile[profileId] = (i + 1) % candidates.length;
-      const { connection } = await getRpcConnectionWithUrl({
-        rpcUrl: ep.url,
-        commitment: 'confirmed',
-        headers: ep.headers
-      });
-      const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string }) => {
+      let connection: Connection;
+      try {
+        ({ connection } = await getRpcConnectionWithUrl({
+          rpcUrl: ep.url,
+          commitment: 'confirmed',
+          headers: ep.headers,
+          disableRetryOnRateLimit: opts?.disableRetryOnRateLimit
+        }));
+      } catch (error) {
+        concurrency.release(ep.url);
+        throw error;
+      }
+      const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string, retryAfterMs?: number }) => {
         concurrency.release(ep.url);
         if (r?.success) {
           health.recordSuccess(ep.url);
@@ -154,6 +177,7 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
         } else {
           const is429 = r?.errorType === '429';
           const is503 = r?.errorType === '503';
+          if (r?.errorType === '403') health.recordForbidden(ep.url, 300000);
           health.recordFailure(ep.url);
           metrics.recordError(ep.url);
           concurrency.decreaseMaxConcurrent(ep.url);
@@ -162,7 +186,7 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
             if (meta) {
               const base = 60000; // 60s
               const jitter = Math.floor(Math.random() * 60000);
-              meta.backoffUntil = Date.now() + base + jitter;
+              meta.backoffUntil = Math.max(meta.backoffUntil, Date.now() + base + jitter, Date.now() + (r?.retryAfterMs || 0));
             }
             metrics.recordStatusCode(ep.url, 429);
           }
@@ -171,7 +195,7 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
             if (meta) {
               const base = 60000;
               const jitter = Math.floor(Math.random() * 60000);
-              meta.backoffUntil = Date.now() + base + jitter;
+              meta.backoffUntil = Math.max(meta.backoffUntil, Date.now() + base + jitter);
             }
             metrics.recordStatusCode(ep.url, 503);
           }
@@ -188,15 +212,10 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
       const { connection } = await getRpcConnectionWithUrl({
         rpcUrl: ep.url,
         commitment: 'confirmed',
-        headers: ep.headers
+        headers: ep.headers,
+        disableRetryOnRateLimit: opts?.disableRetryOnRateLimit
       });
-      const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string }) => {
-        // ensure release doesn't call release twice since we didn't acquire
-        if (concurrency.canAcquire(ep.url)) {
-          // nothing to release
-        } else {
-          concurrency.release(ep.url);
-        }
+      const release = (r?: { success?: boolean, latencyMs?: number, errorType?: string, retryAfterMs?: number }) => {
         if (r?.success) {
           health.recordSuccess(ep.url);
           metrics.recordProcessed(ep.url);
@@ -206,6 +225,7 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
           return;
         } else {
           const is429 = r?.errorType === '429';
+          if (r?.errorType === '403') health.recordForbidden(ep.url, 300000);
           health.recordFailure(ep.url);
           metrics.recordError(ep.url);
           concurrency.decreaseMaxConcurrent(ep.url);
@@ -215,7 +235,7 @@ export async function pickRpcConnection(profileId: string, opts?: { allowStale?:
             if (meta) {
               const base = 30000; // 30s
               const jitter = Math.floor(Math.random() * 30000); // up to +30s
-              meta.backoffUntil = Date.now() + base + jitter;
+              meta.backoffUntil = Math.max(meta.backoffUntil, Date.now() + base + jitter, Date.now() + (r?.retryAfterMs || 0));
             }
           }
         }
